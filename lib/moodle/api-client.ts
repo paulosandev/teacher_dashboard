@@ -211,10 +211,9 @@ class MoodleAPIClient {
    */
   async getForumDiscussions(forumId: number): Promise<MoodleDiscussion[]> {
     try {
+      // Usar solo el parámetro requerido, sin sortby/sortdirection que causan error
       const response = await this.callMoodleAPI('mod_forum_get_forum_discussions', {
-        forumid: forumId,
-        sortby: 'timemodified',
-        sortdirection: 'DESC',
+        forumid: forumId
       })
       
       return response.discussions || []
