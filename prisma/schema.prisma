@@ -1,0 +1,164 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modelo de Usuario (Profesor)
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  username    String   @unique
+  password    String
+  matricula   String   @unique
+  name        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relaciones
+  courses     Course[]
+  sessions    Session[]
+}
+
+// Modelo de Sesión para NextAuth
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+}
+
+// Modelo de Curso
+model Course {
+  id              String   @id @default(cuid())
+  moodleCourseId  String   @unique
+  name            String
+  shortName       String?
+  userId          String
+  isActive        Boolean  @default(true)
+  lastSync        DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relaciones
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groups          Group[]
+  activities      Activity[]
+  forums          Forum[]
+  
+  @@index([userId])
+  @@index([moodleCourseId])
+}
+
+// Modelo de Grupo dentro de un Curso
+model Group {
+  id              String   @id @default(cuid())
+  moodleGroupId   String   @unique
+  name            String
+  courseId        String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relaciones
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  analysisResults AnalysisResult[]
+  
+  @@index([courseId])
+}
+
+// Modelo de Actividad
+model Activity {
+  id                String   @id @default(cuid())
+  moodleActivityId  String   @unique
+  name              String
+  type              String   // 'assignment', 'quiz', etc.
+  courseId          String
+  dueDate           DateTime?
+  isOpen            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  // Relaciones
+  course            Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  analysisResults   AnalysisResult[]
+  
+  @@index([courseId])
+  @@index([isOpen])
+}
+
+// Modelo de Foro
+model Forum {
+  id              String   @id @default(cuid())
+  moodleForumId   String   @unique
+  name            String
+  courseId        String
+  isOpen          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relaciones
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  analysisResults AnalysisResult[]
+  
+  @@index([courseId])
+  @@index([isOpen])
+}
+
+// Modelo de Resultado de Análisis
+model AnalysisResult {
+  id              String   @id @default(cuid())
+  groupId         String?
+  activityId      String?
+  forumId         String?
+  analysisType    String   // 'activity' o 'forum'
+  
+  // Resultados del análisis
+  strengths       Json     // Array de fortalezas identificadas
+  alerts          Json     // Array de alertas o problemas
+  nextStep        String   // Sugerencia de próximo paso
+  rawData         Json?    // Datos crudos de Moodle (opcional)
+  llmResponse     Json?    // Respuesta completa del LLM (opcional)
+  
+  // Metadatos
+  processedAt     DateTime @default(now())
+  isLatest        Boolean  @default(true)
+  confidence      Float?   // Nivel de confianza del análisis (0-1)
+  
+  // Relaciones
+  group           Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  activity        Activity? @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  forum           Forum?   @relation(fields: [forumId], references: [id], onDelete: Cascade)
+  
+  @@index([groupId])
+  @@index([activityId])
+  @@index([forumId])
+  @@index([isLatest])
+  @@index([processedAt])
+}
+
+// Modelo de Jobs para el sistema de colas
+model JobLog {
+  id              String   @id @default(cuid())
+  jobId           String   @unique
+  jobType         String   // 'scheduled' o 'on-demand'
+  status          String   // 'pending', 'processing', 'completed', 'failed'
+  courseId        String?
+  groupId         String?
+  error           String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  
+  @@index([status])
+  @@index([createdAt])
+}
+}
