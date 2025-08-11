@@ -96,26 +96,46 @@ export default function DashboardContent({
         {/* Cards de actividades */}
         {analysisCards.length > 0 ? (
           <>
-            {/* Grid de 2 columnas para las primeras tarjetas */}
-            <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8" aria-label="Resumen de actividades">
-              {analysisCards.slice(0, 2).map((card) => (
-                <AnalysisCard 
-                  key={card.id}
-                  data={card}
-                  onViewMore={() => handleViewMore(card.id)}
-                />
-              ))}
-            </section>
-
-            {/* Tarjetas adicionales a ancho completo */}
-            {analysisCards.slice(2).map((card) => (
-              <section key={card.id} className="mb-6">
-                <AnalysisCard 
-                  data={card}
-                  onViewMore={() => handleViewMore(card.id)}
-                />
-              </section>
-            ))}
+            {/* Agrupar tarjetas de a pares para grid de 2 columnas */}
+            {(() => {
+              const cards = [...analysisCards]
+              const sections = []
+              
+              while (cards.length > 0) {
+                // Si quedan 2 o más tarjetas, tomar 2 para el grid
+                if (cards.length >= 2) {
+                  const pair = cards.splice(0, 2)
+                  sections.push(
+                    <section 
+                      key={`grid-${pair[0].id}`} 
+                      className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8" 
+                      aria-label="Resumen de actividades"
+                    >
+                      {pair.map((card) => (
+                        <AnalysisCard 
+                          key={card.id}
+                          data={card}
+                          onViewMore={() => handleViewMore(card.id)}
+                        />
+                      ))}
+                    </section>
+                  )
+                } else {
+                  // Si queda solo 1 tarjeta (impar), mostrarla a ancho completo
+                  const single = cards.splice(0, 1)[0]
+                  sections.push(
+                    <section key={`full-${single.id}`} className="mb-8">
+                      <AnalysisCard 
+                        data={single}
+                        onViewMore={() => handleViewMore(single.id)}
+                      />
+                    </section>
+                  )
+                }
+              }
+              
+              return sections
+            })()}
           </>
         ) : (
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
