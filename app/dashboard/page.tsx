@@ -1,6 +1,10 @@
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth/get-session'
-import LogoutButton from '@/components/ui/logout-button'
+import { prisma } from '@/lib/db/prisma'
+import DashboardHeader from '@/components/dashboard/header'
+import CourseSelector from '@/components/dashboard/course-selector'
+import AnalysisCard from '@/components/dashboard/analysis-card'
+import { AnalysisCardData, AnalysisStrength, AnalysisAlert } from '@/types'
 
 export default async function DashboardPage() {
   const session = await getSession()
@@ -8,49 +12,152 @@ export default async function DashboardPage() {
   if (!session) {
     redirect('/auth/login')
   }
-  
+
+  // Cargar datos del usuario y sus cursos
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    include: {
+      courses: {
+        where: { isActive: true },
+        include: {
+          groups: true,
+          activities: {
+            where: { isOpen: true },
+            take: 5
+          },
+          forums: {
+            where: { isOpen: true },
+            take: 5
+          }
+        }
+      }
+    }
+  })
+
+  // Cargar los últimos análisis
+  const latestAnalysis = await prisma.analysisResult.findMany({
+    where: {
+      isLatest: true,
+      OR: [
+        { activity: { courseId: { in: user?.courses.map(c => c.id) || [] } } },
+        { forum: { courseId: { in: user?.courses.map(c => c.id) || [] } } }
+      ]
+    },
+    include: {
+      activity: true,
+      forum: true,
+      group: true
+    },
+    take: 4,
+    orderBy: { processedAt: 'desc' }
+  })
+
+  // Transformar los datos para las tarjetas
+  const analysisCards: AnalysisCardData[] = latestAnalysis.map(result => ({
+    id: result.id,
+    title: result.activity?.name || result.forum?.name || 'Sin título',
+    type: result.analysisType as 'activity' | 'forum',
+    courseId: result.activity?.courseId || result.forum?.courseId || '',
+    groupId: result.groupId || undefined,
+    strengths: (result.strengths as unknown as AnalysisStrength[]) || [],
+    alerts: (result.alerts as unknown as AnalysisAlert[]) || [],
+    nextStep: {
+      action: result.nextStep,
+      priority: 'medium' as const,
+      rationale: (result.llmResponse as { rationale?: string } | null)?.rationale
+    },
+    lastUpdated: result.processedAt,
+    confidence: result.confidence || undefined
+  }))
+
+  // Preparar datos de cursos para el selector
+  const coursesWithGroups = user?.courses.map(course => ({
+    id: course.id,
+    name: course.name,
+    shortName: course.shortName || undefined,
+    groups: course.groups.map(group => ({
+      id: group.id,
+      name: group.name
+    }))
+  })) || []
+
+  const userName = user?.name || 'Profesor'
+  const userFirstName = userName.split(' ')[0]
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white shadow rounded-lg p-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
-            Dashboard - Sistema de Análisis Académico
+    <div className="bg-white min-h-screen">
+      <DashboardHeader 
+        userName={userName}
+        notificationCount={3}
+      />
+
+      {/* Main Content */}
+      <main className="max-w-[1132px] mx-auto px-4 sm:px-6 lg:px-3">
+        {/* Saludo */}
+        <section className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            ¡Hola, {userFirstName}!
           </h1>
-          
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <h2 className="text-lg font-semibold text-blue-900 mb-2">
-              Bienvenido, {session.user.name || session.user.email}!
+          <p className="text-gray-600">
+            Te mostramos un resumen de las actividades de tu grupo
+          </p>
+        </section>
+
+        {/* Selector de grupo */}
+        <section className="mb-8">
+          <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <h2 className="text-xl font-semibold text-gray-900">
+              Resumen de las actividades
             </h2>
-            <div className="text-sm text-blue-700 space-y-1">
-              <p>Email: {session.user.email}</p>
-              <p>Matrícula: {session.user.matricula}</p>
-              <p>Usuario: {session.user.username}</p>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <h3 className="font-semibold text-green-900">Cursos Activos</h3>
-              <p className="text-2xl font-bold text-green-700">2</p>
-            </div>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <h3 className="font-semibold text-yellow-900">Actividades Pendientes</h3>
-              <p className="text-2xl font-bold text-yellow-700">4</p>
-            </div>
-            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-              <h3 className="font-semibold text-purple-900">Análisis Disponibles</h3>
-              <p className="text-2xl font-bold text-purple-700">2</p>
-            </div>
-          </div>
-          
-          <div className="flex justify-between items-center">
-            <p className="text-sm text-gray-500">
-              Esta es una versión de prueba del dashboard. Las funcionalidades completas se añadirán próximamente.
+            <CourseSelector 
+              courses={coursesWithGroups}
+              onSelectionChange={(courseId, groupId) => {
+                // Aquí puedes manejar el cambio de selección
+                console.log('Curso seleccionado:', courseId, 'Grupo:', groupId)
+              }}
+            />
+          </header>
+        </section>
+
+        {/* Cards de actividades */}
+        {analysisCards.length > 0 ? (
+          <>
+            {/* Grid de 2 columnas para las primeras tarjetas */}
+            <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8" aria-label="Resumen de actividades">
+              {analysisCards.slice(0, 2).map((card) => (
+                <AnalysisCard 
+                  key={card.id}
+                  data={card}
+                  onViewMore={() => {
+                    console.log('Ver más:', card.id)
+                  }}
+                />
+              ))}
+            </section>
+
+            {/* Tarjetas adicionales a ancho completo */}
+            {analysisCards.slice(2).map((card) => (
+              <section key={card.id} className="mb-6">
+                <AnalysisCard 
+                  data={card}
+                  onViewMore={() => {
+                    console.log('Ver más:', card.id)
+                  }}
+                />
+              </section>
+            ))}
+          </>
+        ) : (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
+            <p className="text-gray-600">
+              No hay análisis disponibles en este momento. Los análisis se generarán automáticamente cada 4 horas.
             </p>
-            <LogoutButton />
           </div>
-        </div>
-      </div>
+        )}
+      </main>
+
+      {/* Espaciado al final */}
+      <div className="h-16"></div>
     </div>
   )
 }

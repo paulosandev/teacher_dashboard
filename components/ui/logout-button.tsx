@@ -4,9 +4,26 @@ import { signOut } from 'next-auth/react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faSignOutAlt } from '@fortawesome/free-solid-svg-icons'
 
-export default function LogoutButton() {
+interface LogoutButtonProps {
+  compact?: boolean
+}
+
+export default function LogoutButton({ compact = true }: LogoutButtonProps) {
   const handleLogout = () => {
     signOut({ callbackUrl: '/auth/login' })
+  }
+
+  if (compact) {
+    return (
+      <button
+        onClick={handleLogout}
+        className="p-2 text-gray-600 hover:text-red-600 transition-colors duration-200"
+        title="Cerrar sesión"
+        aria-label="Cerrar sesión"
+      >
+        <FontAwesomeIcon icon={faSignOutAlt} className="w-5 h-5" />
+      </button>
+    )
   }
 
   return (
