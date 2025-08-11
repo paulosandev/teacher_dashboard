@@ -104,7 +104,7 @@ async function main() {
   const forum1 = await prisma.forum.create({
     data: {
       moodleForumId: 'FORUM_001',
-      name: 'Foro de Dudas Generales',
+      name: 'Foro Semana 1',
       courseId: course1.id,
       isOpen: true,
     },
@@ -113,7 +113,7 @@ async function main() {
   const forum2 = await prisma.forum.create({
     data: {
       moodleForumId: 'FORUM_002',
-      name: 'Foro de Discusión: Mejores Prácticas',
+      name: 'Foro Ruta hacia el éxito Profesional',
       courseId: course1.id,
       isOpen: true,
     },
@@ -121,8 +121,62 @@ async function main() {
 
   console.log('💬 Foros creados:', forum1.name, forum2.name)
 
-  // Crear algunos resultados de análisis de ejemplo
+  // Crear resultados de análisis de ejemplo - como en la maquetación
+  
+  // Foro Semana 1 - Card 1
   const analysisResult1 = await prisma.analysisResult.create({
+    data: {
+      groupId: group1.id,
+      forumId: forum1.id,
+      analysisType: 'forum',
+      strengths: [
+        {
+          id: '1',
+          description: 'tono respetuoso, varios ejemplos laborales que conectan teoría-práctica, debate eficaz vs eficiente',
+          evidence: '45 mensajes de 17 alumnos; 70% ya completó las dos etapas',
+        },
+      ],
+      alerts: [
+        {
+          id: '1',
+          description: 'sólo 43% cita correctamente en APA y 60% publica al final del plazo; algunos textos en MAYÚSCULAS',
+          severity: 'medium',
+        },
+      ],
+      nextStep: 'enviar recordatorio breve sobre formato APA/netiqueta y activar aviso 48 h antes del siguiente cierre para repartir mejor la participación',
+      isLatest: true,
+      confidence: 0.92,
+    },
+  })
+
+  // Foro Ruta hacia el éxito Profesional - Card 2
+  const analysisResult2 = await prisma.analysisResult.create({
+    data: {
+      groupId: group1.id,
+      forumId: forum2.id,
+      analysisType: 'forum',
+      strengths: [
+        {
+          id: '1',
+          description: 'tono respetuoso, varios ejemplos laborales que conectan teoría-práctica, debate eficaz vs eficiente',
+          evidence: '45 mensajes de 17 alumnos; 70% ya completó las dos etapas',
+        },
+      ],
+      alerts: [
+        {
+          id: '1',
+          description: 'sólo 43% cita correctamente en APA y 60% publica al final del plazo; algunos textos en MAYÚSCULAS',
+          severity: 'medium',
+        },
+      ],
+      nextStep: 'enviar recordatorio breve sobre formato APA/netiqueta y activar aviso 48 h antes del siguiente cierre para repartir mejor la participación',
+      isLatest: true,
+      confidence: 0.88,
+    },
+  })
+
+  // Actividad: Tarea 1 - Card 3 (ancho completo)
+  const analysisResult3 = await prisma.analysisResult.create({
     data: {
       groupId: group1.id,
       activityId: activity1.id,
@@ -131,7 +185,7 @@ async function main() {
         {
           id: '1',
           description: 'El 85% de los estudiantes entregaron la tarea antes de tiempo',
-          evidence: 'Análisis temporal de entregas',
+          evidence: '32 de 38 estudiantes han completado la actividad',
         },
         {
           id: '2',
@@ -151,37 +205,40 @@ async function main() {
           severity: 'medium',
         },
       ],
-      nextStep: 'Programar sesión de refuerzo sobre programación asíncrona',
+      nextStep: 'Programar sesión de refuerzo sobre programación asíncrona y contactar individualmente a los 3 estudiantes rezagados',
       isLatest: true,
-      confidence: 0.92,
+      confidence: 0.95,
     },
   })
 
-  const analysisResult2 = await prisma.analysisResult.create({
+  // Quiz: Conceptos de React - Card 4 (ancho completo)
+  const analysisResult4 = await prisma.analysisResult.create({
     data: {
-      groupId: group1.id,
-      forumId: forum1.id,
-      analysisType: 'forum',
+      groupId: group2.id,
+      activityId: activity2.id,
+      analysisType: 'activity',
       strengths: [
         {
           id: '1',
-          description: 'Alta participación con 45 posts en los últimos 3 días',
-        },
-        {
-          id: '2',
-          description: 'Los estudiantes se apoyan mutuamente respondiendo dudas',
+          description: 'Comprensión sólida de hooks básicos (useState, useEffect)',
+          evidence: '28 de 35 estudiantes obtuvieron más del 80% de aciertos',
         },
       ],
       alerts: [
         {
           id: '1',
-          description: 'Preguntas recurrentes sobre configuración del entorno',
-          severity: 'low',
+          description: 'Confusión generalizada con useCallback y useMemo',
+          severity: 'medium',
+        },
+        {
+          id: '2',
+          description: '7 estudiantes no han realizado el quiz a 24h del cierre',
+          severity: 'high',
         },
       ],
-      nextStep: 'Crear guía detallada de configuración del entorno de desarrollo',
+      nextStep: 'Preparar material adicional sobre optimización con useCallback/useMemo y enviar recordatorio urgente a estudiantes pendientes',
       isLatest: true,
-      confidence: 0.88,
+      confidence: 0.90,
     },
   })
 
