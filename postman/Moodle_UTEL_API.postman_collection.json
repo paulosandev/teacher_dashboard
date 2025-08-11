@@ -1,0 +1,253 @@
+{
+  "info": {
+    "name": "Moodle UTEL API",
+    "description": "Colección de endpoints de Moodle Web Services para UTEL",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "moodle_url",
+      "value": "https://av141.utel.edu.mx/webservice/rest/server.php",
+      "type": "string"
+    },
+		{
+			"key": "token",
+			"value": "e16e271b2e37da5ade1e439f3314069c",
+			"type": "string"
+		}
+  ],
+  "item": [
+    {
+      "name": "Información del Sistema",
+      "item": [
+        {
+          "name": "Obtener Info del Sitio",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{moodle_url}}?wstoken={{token}}&wsfunction=core_webservice_get_site_info&moodlewsrestformat=json",
+              "host": ["{{moodle_url}}"],
+              "query": [
+                {
+                  "key": "wstoken",
+                  "value": "{{token}}"
+                },
+                {
+                  "key": "wsfunction",
+                  "value": "core_webservice_get_site_info"
+                },
+                {
+                  "key": "moodlewsrestformat",
+                  "value": "json"
+                }
+              ]
+            },
+            "description": "Obtiene información general del sitio Moodle y del usuario del token"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cursos",
+      "item": [
+        {
+          "name": "Obtener Cursos del Usuario",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{moodle_url}}?wstoken={{token}}&wsfunction=core_enrol_get_users_courses&moodlewsrestformat=json&userid=2",
+              "host": ["{{moodle_url}}"],
+              "query": [
+                {
+                  "key": "wstoken",
+                  "value": "{{token}}"
+                },
+                {
+                  "key": "wsfunction",
+                  "value": "core_enrol_get_users_courses"
+                },
+                {
+                  "key": "moodlewsrestformat",
+                  "value": "json"
+                },
+                {
+                  "key": "userid",
+                  "value": "2",
+                  "description": "ID del usuario en Moodle"
+                }
+              ]
+            },
+            "description": "Obtiene todos los cursos donde el usuario está inscrito"
+          }
+        },
+        {
+          "name": "Obtener Contenido del Curso",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{moodle_url}}?wstoken={{token}}&wsfunction=core_course_get_contents&moodlewsrestformat=json&courseid=234",
+              "host": ["{{moodle_url}}"],
+              "query": [
+                {
+                  "key": "wstoken",
+                  "value": "{{token}}"
+                },
+                {
+                  "key": "wsfunction",
+                  "value": "core_course_get_contents"
+                },
+                {
+                  "key": "moodlewsrestformat",
+                  "value": "json"
+                },
+                {
+                  "key": "courseid",
+                  "value": "234",
+                  "description": "ID del curso"
+                }
+              ]
+            },
+            "description": "Obtiene el contenido completo del curso (secciones y actividades)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Grupos",
+      "item": [
+        {
+          "name": "Obtener Grupos del Curso",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{moodle_url}}?wstoken={{token}}&wsfunction=core_group_get_course_groups&moodlewsrestformat=json&courseid=234",
+              "host": ["{{moodle_url}}"],
+              "query": [
+                {
+                  "key": "wstoken",
+                  "value": "{{token}}"
+                },
+                {
+                  "key": "wsfunction",
+                  "value": "core_group_get_course_groups"
+                },
+                {
+                  "key": "moodlewsrestformat",
+                  "value": "json"
+                },
+                {
+                  "key": "courseid",
+                  "value": "234",
+                  "description": "ID del curso"
+                }
+              ]
+            },
+            "description": "Obtiene todos los grupos de un curso específico"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Foros",
+      "item": [
+        {
+          "name": "Obtener Foros por Curso",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{moodle_url}}?wstoken={{token}}&wsfunction=mod_forum_get_forums_by_courses&moodlewsrestformat=json&courseids[0]=234",
+              "host": ["{{moodle_url}}"],
+              "query": [
+                {
+                  "key": "wstoken",
+                  "value": "{{token}}"
+                },
+                {
+                  "key": "wsfunction",
+                  "value": "mod_forum_get_forums_by_courses"
+                },
+                {
+                  "key": "moodlewsrestformat",
+                  "value": "json"
+                },
+                {
+                  "key": "courseids[0]",
+                  "value": "234",
+                  "description": "ID del curso (puede ser múltiple)"
+                }
+              ]
+            },
+            "description": "Obtiene todos los foros de uno o más cursos"
+          }
+        },
+        {
+          "name": "Obtener Discusiones del Foro",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{moodle_url}}?wstoken={{token}}&wsfunction=mod_forum_get_forum_discussions&moodlewsrestformat=json&forumid=1509",
+              "host": ["{{moodle_url}}"],
+              "query": [
+                {
+                  "key": "wstoken",
+                  "value": "{{token}}"
+                },
+                {
+                  "key": "wsfunction",
+                  "value": "mod_forum_get_forum_discussions"
+                },
+                {
+                  "key": "moodlewsrestformat",
+                  "value": "json"
+                },
+                {
+                  "key": "forumid",
+                  "value": "1509",
+                  "description": "ID del foro"
+                }
+              ]
+            },
+            "description": "Obtiene todas las discusiones de un foro específico"
+          }
+        },
+        {
+          "name": "Obtener Posts de Discusión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{moodle_url}}?wstoken={{token}}&wsfunction=mod_forum_get_discussion_posts&moodlewsrestformat=json&discussionid=123",
+              "host": ["{{moodle_url}}"],
+              "query": [
+                {
+                  "key": "wstoken",
+                  "value": "{{token}}"
+                },
+                {
+                  "key": "wsfunction",
+                  "value": "mod_forum_get_discussion_posts"
+                },
+                {
+                  "key": "moodlewsrestformat",
+                  "value": "json"
+                },
+                {
+                  "key": "discussionid",
+                  "value": "123",
+                  "description": "ID de la discusión"
+                }
+              ]
+            },
+            "description": "Obtiene todos los posts de una discusión específica"
+          }
+        }
+      ]
+    }
+  ]
+}

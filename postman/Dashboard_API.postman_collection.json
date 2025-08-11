@@ -1,0 +1,264 @@
+{
+  "info": {
+    "name": "Dashboard Profebot API",
+    "description": "Colección de endpoints de nuestra aplicación Dashboard",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "session_token",
+      "value": "",
+      "type": "string",
+      "description": "Token de sesión obtenido después del login"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{session_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Autenticación",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Guardar el token de sesión si el login es exitoso",
+                  "if (pm.response.code === 200) {",
+                  "    const cookies = pm.response.headers.get('Set-Cookie');",
+                  "    if (cookies) {",
+                  "        pm.environment.set('session_token', cookies);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"profesor@utel.edu.mx\",\n    \"password\": \"password123\",\n    \"matricula\": \"PROF001\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/callback/credentials",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "callback", "credentials"]
+            },
+            "description": "Iniciar sesión con credenciales"
+          }
+        },
+        {
+          "name": "Obtener Sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/session",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "session"]
+            },
+            "description": "Obtener información de la sesión actual"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/signout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "signout"]
+            },
+            "description": "Cerrar sesión"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Integración Moodle",
+      "item": [
+        {
+          "name": "Test Conexión Moodle",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/moodle?action=test",
+              "host": ["{{base_url}}"],
+              "path": ["api", "moodle"],
+              "query": [
+                {
+                  "key": "action",
+                  "value": "test",
+                  "description": "Probar conexión con Moodle"
+                }
+              ]
+            },
+            "description": "Verificar que la conexión con Moodle funciona correctamente"
+          }
+        },
+        {
+          "name": "Obtener Cursos y Grupos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/moodle?action=courses&userId=2",
+              "host": ["{{base_url}}"],
+              "path": ["api", "moodle"],
+              "query": [
+                {
+                  "key": "action",
+                  "value": "courses"
+                },
+                {
+                  "key": "userId",
+                  "value": "2",
+                  "description": "ID del usuario en Moodle"
+                }
+              ]
+            },
+            "description": "Obtener cursos con sus grupos desde Moodle"
+          }
+        },
+        {
+          "name": "Obtener Foros del Curso",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/moodle?action=forums&courseId=234",
+              "host": ["{{base_url}}"],
+              "path": ["api", "moodle"],
+              "query": [
+                {
+                  "key": "action",
+                  "value": "forums"
+                },
+                {
+                  "key": "courseId",
+                  "value": "234",
+                  "description": "ID del curso en Moodle"
+                }
+              ]
+            },
+            "description": "Obtener todos los foros de un curso específico"
+          }
+        },
+        {
+          "name": "Obtener Discusiones del Foro",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/moodle?action=discussions&forumId=1509",
+              "host": ["{{base_url}}"],
+              "path": ["api", "moodle"],
+              "query": [
+                {
+                  "key": "action",
+                  "value": "discussions"
+                },
+                {
+                  "key": "forumId",
+                  "value": "1509",
+                  "description": "ID del foro en Moodle"
+                }
+              ]
+            },
+            "description": "Obtener todas las discusiones de un foro"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Análisis",
+      "item": [
+        {
+          "name": "Trigger Análisis Manual",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"courseId\": \"cltest001\",\n    \"groupId\": \"cltest002\",\n    \"type\": \"forum\",\n    \"forumId\": \"cltest003\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/analysis/trigger",
+              "host": ["{{base_url}}"],
+              "path": ["api", "analysis", "trigger"]
+            },
+            "description": "Disparar un análisis manual de foro o actividad"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Página Principal (HTML)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard"]
+            },
+            "description": "Obtener la página del dashboard (requiere autenticación)"
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Script global para agregar headers de autenticación si es necesario"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Script global para verificar respuestas"
+        ]
+      }
+    }
+  ]
+}

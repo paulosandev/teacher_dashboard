@@ -16,6 +16,7 @@
     "db:studio": "prisma studio",
     "db:setup": "npm run db:generate && npm run db:push && npm run db:seed",
     "check": "tsx scripts/check-setup.ts",
+    "test:moodle": "tsx scripts/test-moodle.ts",
     "worker": "tsx workers/analysis-worker.ts",
     "worker:dev": "tsx --watch workers/analysis-worker.ts"
   },

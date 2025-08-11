@@ -87,11 +87,11 @@ async function processAnalysisJob(job: Job<AnalysisJobData>) {
         activityId,
         forumId,
         analysisType: type,
-        strengths: analysisResult.strengths,
-        alerts: analysisResult.alerts,
+        strengths: analysisResult.strengths as any, // Prisma acepta JSON
+        alerts: analysisResult.alerts as any, // Prisma acepta JSON
         nextStep: analysisResult.nextStep,
-        rawData: moodleData,
-        llmResponse: analysisResult.llmResponse,
+        rawData: moodleData as any, // Prisma acepta JSON
+        llmResponse: analysisResult.llmResponse as any, // Prisma acepta JSON
         isLatest: true,
         confidence: analysisResult.confidence,
       },

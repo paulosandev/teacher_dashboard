@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import DashboardHeader from '@/components/dashboard/header'
 import CourseSelector from '@/components/dashboard/course-selector'
 import AnalysisCard from '@/components/dashboard/analysis-card'
 import { AnalysisCardData } from '@/types'
+import { useMoodleData } from '@/hooks/useMoodleData'
 
 interface Course {
   id: string
@@ -36,6 +37,22 @@ export default function DashboardContent({
   const [selectedCourse, setSelectedCourse] = useState<string | null>(initialCourseId || null)
   const [selectedGroup, setSelectedGroup] = useState<string | null>(initialGroupId || null)
   const [analysisCards, setAnalysisCards] = useState(initialCards)
+  const [shouldUseMoodleData, setShouldUseMoodleData] = useState(false)
+  const [displayCourses, setDisplayCourses] = useState(coursesWithGroups)
+  
+  // Hook para obtener datos de Moodle
+  const { courses: moodleCourses, loading, error, refetch } = useMoodleData(shouldUseMoodleData)
+  
+  // Actualizar cursos cuando cambie la fuente de datos
+  useEffect(() => {
+    if (shouldUseMoodleData && moodleCourses.length > 0) {
+      setDisplayCourses(moodleCourses)
+      console.log('📚 Usando datos de Moodle:', moodleCourses.length, 'cursos')
+    } else if (!shouldUseMoodleData) {
+      setDisplayCourses(coursesWithGroups)
+      console.log('💾 Usando datos locales:', coursesWithGroups.length, 'cursos')
+    }
+  }, [shouldUseMoodleData, moodleCourses, coursesWithGroups])
 
   const handleSelectionChange = (courseId: string, groupId: string) => {
     setSelectedCourse(courseId)
@@ -80,6 +97,59 @@ export default function DashboardContent({
           </p>
         </section>
 
+        {/* Toggle para fuente de datos */}
+        <section className="mb-6">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <label className="text-sm font-medium text-gray-700">
+                  Fuente de datos:
+                </label>
+                <button
+                  onClick={() => setShouldUseMoodleData(!shouldUseMoodleData)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    shouldUseMoodleData ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                  disabled={loading}
+                >
+                  <span className="sr-only">Usar datos de Moodle</span>
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      shouldUseMoodleData ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+                <span className="text-sm text-gray-600">
+                  {shouldUseMoodleData ? '🌐 Moodle' : '💾 Local'}
+                </span>
+              </div>
+              
+              {loading && (
+                <span className="text-sm text-blue-600">Cargando datos de Moodle...</span>
+              )}
+              
+              {error && (
+                <span className="text-sm text-red-600">Error: {error}</span>
+              )}
+              
+              {shouldUseMoodleData && !loading && !error && (
+                <button
+                  onClick={() => refetch()}
+                  className="text-sm text-blue-600 hover:text-blue-700 underline"
+                >
+                  🔄 Actualizar
+                </button>
+              )}
+            </div>
+            
+            {shouldUseMoodleData && moodleCourses.length === 0 && !loading && (
+              <div className="mt-2 text-sm text-amber-700">
+                ⚠️ No se encontraron cursos en Moodle. Verifica tu configuración.
+              </div>
+            )}
+          </div>
+        </section>
+
         {/* Selector de grupo */}
         <section className="mb-8">
           <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -87,7 +157,7 @@ export default function DashboardContent({
               Resumen de las actividades
             </h2>
             <CourseSelector 
-              courses={coursesWithGroups}
+              courses={displayCourses}
               onSelectionChange={handleSelectionChange}
             />
           </header>
