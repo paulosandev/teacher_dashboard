@@ -161,4 +161,3 @@ model JobLog {
   @@index([status])
   @@index([createdAt])
 }
-}
