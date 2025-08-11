@@ -1,9 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth/get-session'
 import { prisma } from '@/lib/db/prisma'
-import DashboardHeader from '@/components/dashboard/header'
-import CourseSelector from '@/components/dashboard/course-selector'
-import AnalysisCard from '@/components/dashboard/analysis-card'
+import DashboardContent from '@/components/dashboard/dashboard-content'
 import { AnalysisCardData, AnalysisStrength, AnalysisAlert } from '@/types'
 
 export default async function DashboardPage() {
@@ -85,79 +83,11 @@ export default async function DashboardPage() {
   const userFirstName = userName.split(' ')[0]
 
   return (
-    <div className="bg-white min-h-screen">
-      <DashboardHeader 
-        userName={userName}
-        notificationCount={3}
-      />
-
-      {/* Main Content */}
-      <main className="max-w-[1132px] mx-auto px-4 sm:px-6 lg:px-3">
-        {/* Saludo */}
-        <section className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            ¡Hola, {userFirstName}!
-          </h1>
-          <p className="text-gray-600">
-            Te mostramos un resumen de las actividades de tu grupo
-          </p>
-        </section>
-
-        {/* Selector de grupo */}
-        <section className="mb-8">
-          <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <h2 className="text-xl font-semibold text-gray-900">
-              Resumen de las actividades
-            </h2>
-            <CourseSelector 
-              courses={coursesWithGroups}
-              onSelectionChange={(courseId, groupId) => {
-                // Aquí puedes manejar el cambio de selección
-                console.log('Curso seleccionado:', courseId, 'Grupo:', groupId)
-              }}
-            />
-          </header>
-        </section>
-
-        {/* Cards de actividades */}
-        {analysisCards.length > 0 ? (
-          <>
-            {/* Grid de 2 columnas para las primeras tarjetas */}
-            <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8" aria-label="Resumen de actividades">
-              {analysisCards.slice(0, 2).map((card) => (
-                <AnalysisCard 
-                  key={card.id}
-                  data={card}
-                  onViewMore={() => {
-                    console.log('Ver más:', card.id)
-                  }}
-                />
-              ))}
-            </section>
-
-            {/* Tarjetas adicionales a ancho completo */}
-            {analysisCards.slice(2).map((card) => (
-              <section key={card.id} className="mb-6">
-                <AnalysisCard 
-                  data={card}
-                  onViewMore={() => {
-                    console.log('Ver más:', card.id)
-                  }}
-                />
-              </section>
-            ))}
-          </>
-        ) : (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
-            <p className="text-gray-600">
-              No hay análisis disponibles en este momento. Los análisis se generarán automáticamente cada 4 horas.
-            </p>
-          </div>
-        )}
-      </main>
-
-      {/* Espaciado al final */}
-      <div className="h-16"></div>
-    </div>
+    <DashboardContent
+      userName={userName}
+      userFirstName={userFirstName}
+      coursesWithGroups={coursesWithGroups}
+      analysisCards={analysisCards}
+    />
   )
 }
