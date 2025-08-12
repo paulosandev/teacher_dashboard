@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/auth-options'
 import { moodleClient } from '@/lib/moodle/api-client'
-import { prisma } from '@/lib/db/prisma'
+// import { prisma } from '@/lib/db/prisma' // Deshabilitado temporalmente
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,12 +33,18 @@ export async function GET(request: NextRequest) {
     }
 
     if (action === 'courses') {
-      // Intentar primero con el plugin personalizado que no requiere userId
-      // Si se proporciona userId, se usará como fallback
-      const moodleUserId = searchParams.get('userId') ? parseInt(searchParams.get('userId')!) : undefined
+      // NUEVA IMPLEMENTACIÓN: Filtrar por profesor usando matrícula
+      const userMatricula = session.user.matricula
       
-      // Obtener cursos con grupos (ahora userId es opcional)
-      const coursesWithGroups = await moodleClient.getCoursesWithGroups(moodleUserId)
+      if (!userMatricula) {
+        return NextResponse.json(
+          { error: 'No se pudo obtener la matrícula del usuario' },
+          { status: 400 }
+        )
+      }
+      
+      // Obtener SOLO cursos donde el profesor logueado tiene acceso
+      const coursesWithGroups = await moodleClient.getTeacherCoursesWithGroups(userMatricula)
       
       // Opcionalmente, guardar/actualizar en base de datos local
       if (coursesWithGroups.length > 0) {

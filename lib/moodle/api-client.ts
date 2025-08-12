@@ -257,6 +257,70 @@ class MoodleAPIClient {
 
   /**
    * Obtiene información completa para poblar el selector
+   * SOLO devuelve cursos donde el usuario especificado es profesor
+   * 
+   * @param userMatricula - Matrícula del profesor (se mapea a userId de Moodle)
+   */
+  async getTeacherCoursesWithGroups(userMatricula: string): Promise<Array<{
+    id: string
+    name: string
+    shortName: string
+    model?: string
+    groups: Array<{ id: string; name: string }>
+  }>> {
+    try {
+      // Paso 1: Obtener el ID de Moodle por matrícula
+      console.log(`🔍 Buscando usuario con matrícula: ${userMatricula}...`)
+      const moodleUser = await this.getUserByUsername(userMatricula)
+      
+      if (!moodleUser) {
+        console.log(`⚠️ No se encontró usuario con matrícula: ${userMatricula}`)
+        return []
+      }
+      
+      console.log(`👤 Usuario encontrado - ID: ${moodleUser.id}, Email: ${moodleUser.email}`)
+      
+      // Paso 2: Obtener cursos donde es profesor usando el método tradicional
+      console.log('📚 Obteniendo cursos donde es profesor...')
+      const courses = await this.getUserCourses(moodleUser.id)
+      
+      if (courses.length === 0) {
+        console.log('⚠️ No se encontraron cursos para este profesor')
+        return []
+      }
+      
+      console.log(`📖 Encontrados ${courses.length} cursos para el profesor`)
+      
+      // Paso 3: Para cada curso, obtener sus grupos
+      const coursesWithGroups = await Promise.all(
+        courses.map(async (course) => {
+          const groups = await this.getCourseGroups(course.id)
+          
+          return {
+            id: course.id.toString(),
+            name: course.fullname,
+            shortName: course.shortname,
+            model: course.model,
+            groups: groups.map(group => ({
+              id: group.id.toString(),
+              name: group.name,
+            })),
+          }
+        })
+      )
+      
+      console.log(`✅ Procesados ${coursesWithGroups.length} cursos con sus grupos`)
+      return coursesWithGroups
+      
+    } catch (error) {
+      console.error('Error obteniendo cursos del profesor:', error)
+      return []
+    }
+  }
+
+  /**
+   * @deprecated Usar getTeacherCoursesWithGroups para filtrar por profesor
+   * Obtiene información completa para poblar el selector
    * Combina cursos con sus grupos
    */
   async getCoursesWithGroups(userId?: number): Promise<Array<{
@@ -305,6 +369,33 @@ class MoodleAPIClient {
     } catch (error) {
       console.error('Error obteniendo cursos con grupos:', error)
       return []
+    }
+  }
+
+  /**
+   * Obtiene el usuario de Moodle por su matrícula/username
+   */
+  async getUserByUsername(username: string): Promise<{ id: number; username: string; email: string } | null> {
+    try {
+      const users = await this.callMoodleAPI('core_user_get_users_by_field', {
+        field: 'username',
+        values: [username]
+      })
+      
+      if (users && users.length > 0) {
+        const user = users[0]
+        return {
+          id: user.id,
+          username: user.username,
+          email: user.email
+        }
+      }
+      
+      return null
+    } catch (error) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      console.error('Error obteniendo usuario por matrícula:', error)
+      return null
     }
   }
 

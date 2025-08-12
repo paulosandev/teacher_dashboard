@@ -43,9 +43,9 @@ export function useMoodleData(enabled = false): UseMoodleDataResult {
         throw new Error('No se pudo conectar con Moodle. Verifica la configuración.')
       }
 
-      // Obtener cursos con grupos
-      // Por ahora usamos userId=2, pero esto debería venir del usuario actual
-      const coursesResponse = await fetch('/api/moodle?action=courses&userId=2')
+      // Obtener cursos con grupos del profesor logueado
+      // Ahora la API usa automáticamente la matrícula del usuario en sesión
+      const coursesResponse = await fetch('/api/moodle?action=courses')
       const coursesData = await coursesResponse.json()
 
       if (coursesData.success && coursesData.data) {
