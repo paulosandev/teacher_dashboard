@@ -168,9 +168,107 @@ class MoodleAPIClient {
       return courses.filter((course: MoodleCourse) => course.visible === 1)
     } catch (error) {
       console.error('Error obteniendo cursos del usuario:', error)
-      // Intentar con el plugin personalizado como fallback
-      console.log('Intentando con el plugin de cursos activos...')
-      return this.getActiveCourses()
+      console.log('⚠️ Fallback: obteniendo cursos usando filtrado por rol...')
+      
+      // NUEVO FALLBACK: Filtrar cursos activos donde el usuario es profesor
+      return this.getTeacherCoursesFiltered(userId)
+    }
+  }
+
+  /**
+   * Obtiene cursos donde el usuario es profesor usando filtrado por rol
+   * Este método implementa seguridad: solo devuelve cursos donde el usuario específico es profesor
+   */
+  async getTeacherCoursesFiltered(userId: number): Promise<MoodleCourse[]> {
+    try {
+      // Obtener todos los cursos activos
+      const allCourses = await this.getActiveCourses()
+      
+      if (allCourses.length === 0) {
+        console.log('📚 No hay cursos activos disponibles')
+        return []
+      }
+      
+      console.log(`🔍 [SEGURIDAD] Filtrando ${allCourses.length} cursos para encontrar donde userId ${userId} es profesor...`)
+      
+      const teacherCourses: MoodleCourse[] = []
+      let coursesChecked = 0
+      const maxCoursesToCheck = 10 // Limitar para rendimiento
+      
+      for (const course of allCourses.slice(0, maxCoursesToCheck)) {
+        coursesChecked++
+        
+        try {
+          console.log(`🔎 [${coursesChecked}/${maxCoursesToCheck}] Verificando curso: ${course.shortname}...`)
+          
+          // Obtener usuarios inscritos con roles en el curso
+          const enrolledUsers = await this.callMoodleAPI('core_enrol_get_enrolled_users', {
+            courseid: course.id,
+            options: [
+              {
+                name: 'withcapability',
+                value: 'moodle/course:manageactivities' // Capacidad típica de profesores
+              }
+            ]
+          })
+          
+          // Buscar específicamente nuestro usuario
+          const userInCourse = enrolledUsers.find((user: any) => user.id === userId)
+          
+          if (userInCourse) {
+            console.log(`👤 Usuario ${userId} encontrado en curso ${course.shortname}`)
+            
+            // Verificar roles de profesor
+            if (userInCourse.roles && userInCourse.roles.length > 0) {
+              const roles = userInCourse.roles.map((role: any) => ({
+                id: role.roleid,
+                name: role.shortname || role.name
+              }))
+              
+              console.log(`🎭 Roles del usuario en ${course.shortname}:`, roles)
+              
+              // Verificar si tiene rol de profesor
+              const hasTeacherRole = userInCourse.roles.some((role: any) => {
+                return (
+                  role.roleid === 3 || // editingteacher
+                  role.roleid === 4 || // teacher
+                  role.shortname === 'editingteacher' ||
+                  role.shortname === 'teacher' ||
+                  role.shortname === 'manager'
+                )
+              })
+              
+              if (hasTeacherRole) {
+                console.log(`✅ [AUTORIZADO] Usuario ${userId} ES PROFESOR en: ${course.shortname}`)
+                teacherCourses.push(course)
+              } else {
+                console.log(`❌ [NO AUTORIZADO] Usuario ${userId} no es profesor en: ${course.shortname}`)
+              }
+            } else {
+              console.log(`⚠️ Usuario ${userId} sin roles definidos en: ${course.shortname}`)
+            }
+          } else {
+            console.log(`👻 Usuario ${userId} NO INSCRITO en: ${course.shortname}`)
+          }
+          
+        } catch (courseError) {
+          console.log(`⚠️ Error verificando curso ${course.shortname}:`, courseError instanceof Error ? courseError.message : courseError)
+          continue
+        }
+      }
+      
+      if (teacherCourses.length === 0) {
+        console.log(`🚫 [SEGURIDAD] No se encontraron cursos donde userId ${userId} sea profesor`)
+        console.log(`📊 Estadísticas: ${coursesChecked} cursos verificados de ${allCourses.length} disponibles`)
+        return [] // NO devolver todos los cursos por seguridad
+      }
+      
+      console.log(`🎓 [ÉXITO] Usuario ${userId} es profesor en ${teacherCourses.length} cursos`)
+      return teacherCourses
+      
+    } catch (error) {
+      console.error(`❌ Error crítico en filtrado de cursos para userId ${userId}:`, error)
+      return [] // En caso de error, no devolver cursos por seguridad
     }
   }
 
