@@ -5,6 +5,10 @@
  * y proporcionar información sobre cómo solicitar permisos adicionales
  */
 
+// Cargar variables de entorno
+import dotenv from 'dotenv'
+dotenv.config()
+
 import { moodleClient } from '../lib/moodle/api-client'
 
 async function main() {

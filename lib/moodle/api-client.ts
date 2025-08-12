@@ -379,9 +379,9 @@ class MoodleAPIClient {
   private getMoodleUserMapping(): Record<string, { id: number; username: string; email: string }> {
     return {
       // Mapeo conocido de usuarios UTEL (matrículas reales de Moodle)
-      'marco.arce': { id: 2, username: 'marco.arce', email: 'marco.arce@utel.edu.mx' },
+      'marco.arce': { id: 29791, username: 'marco.arce', email: 'marco.arce@utel.edu.mx' }, // ID real de Moodle
       // Mapeo de prueba (matrículas locales)
-      'MAT001': { id: 2, username: 'marco.arce', email: 'marco.arce@utel.edu.mx' }, // Mismo usuario para testing
+      'MAT001': { id: 29791, username: 'marco.arce', email: 'marco.arce@utel.edu.mx' }, // Mismo usuario para testing
       'MAT002': { id: 3, username: 'profesor2', email: 'profesor2@utel.edu.mx' },
       'MAT003': { id: 4, username: 'profesor3', email: 'profesor3@utel.edu.mx' },
       // Añadir más matrículas según se necesiten
