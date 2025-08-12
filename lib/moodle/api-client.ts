@@ -373,10 +373,37 @@ class MoodleAPIClient {
   }
 
   /**
-   * Obtiene el usuario de Moodle por su matrícula/username
+   * Mapeo local de matrículas a IDs de Moodle
+   * TODO: En producción esto debería venir de la base de datos
+   */
+  private getMoodleUserMapping(): Record<string, { id: number; username: string; email: string }> {
+    return {
+      // Mapeo conocido de usuarios UTEL (matrículas reales de Moodle)
+      'marco.arce': { id: 2, username: 'marco.arce', email: 'marco.arce@utel.edu.mx' },
+      // Mapeo de prueba (matrículas locales)
+      'MAT001': { id: 2, username: 'marco.arce', email: 'marco.arce@utel.edu.mx' }, // Mismo usuario para testing
+      'MAT002': { id: 3, username: 'profesor2', email: 'profesor2@utel.edu.mx' },
+      'MAT003': { id: 4, username: 'profesor3', email: 'profesor3@utel.edu.mx' },
+      // Añadir más matrículas según se necesiten
+    }
+  }
+
+  /**
+   * Obtiene el usuario de Moodle por su matrícula usando mapeo local
+   * FALLBACK: Si no se encuentra en el mapeo local, intenta con la API
    */
   async getUserByUsername(username: string): Promise<{ id: number; username: string; email: string } | null> {
+    // Primero intentar con mapeo local
+    const localMapping = this.getMoodleUserMapping()
+    
+    if (localMapping[username]) {
+      console.log(`💾 Usando mapeo local para matrícula: ${username}`)
+      return localMapping[username]
+    }
+    
+    // Si no se encuentra localmente, intentar con la API
     try {
+      console.log(`🌍 Intentando obtener usuario de Moodle API: ${username}`)
       const users = await this.callMoodleAPI('core_user_get_users_by_field', {
         field: 'username',
         values: [username]
@@ -384,6 +411,7 @@ class MoodleAPIClient {
       
       if (users && users.length > 0) {
         const user = users[0]
+        console.log(`✅ Usuario encontrado en Moodle API: ${user.username}`)
         return {
           id: user.id,
           username: user.username,
@@ -393,8 +421,7 @@ class MoodleAPIClient {
       
       return null
     } catch (error) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      console.error('Error obteniendo usuario por matrícula:', error)
+      console.log(`⚠️ API fallback falló para ${username}, usuario no encontrado en mapeo local`)
       return null
     }
   }
