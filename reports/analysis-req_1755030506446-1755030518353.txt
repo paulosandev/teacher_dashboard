@@ -1,0 +1,158 @@
+
+========================================
+REPORTE TÉCNICO DE ANÁLISIS EDUCATIVO
+========================================
+
+📊 INFORMACIÓN GENERAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• ID de Solicitud: req_1755030506446
+• Fecha y Hora: 2025-08-12T20:28:26.446Z
+• Curso ID: 161
+• Grupo ID: 1926
+• Usuario ID: cme7vepdp0000vkmgami03b27
+• Matrícula: cesar.espindola
+• Estado: ✅ EXITOSO
+• Tiempo de procesamiento: 11892ms	
+
+🤖 DETALLES DE IA (OpenAI)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Modelo utilizado: gpt-4
+• Tokens utilizados:
+  - Prompt: 1125
+  - Respuesta: 230
+  - Total: 1355
+• Costo estimado: $0.0475 USD
+
+📝 PROMPT ENVIADO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Como experto en análisis educativo, analiza los siguientes datos del curso 161:
+
+**RESUMEN DEL CURSO:**
+- Estudiantes inscritos: 0
+- Secciones/semanas: 11
+- Total de actividades: 51
+- Total de recursos: 23
+
+**ANÁLISIS DE FOROS:**
+
+- Avisos:
+  • 0 discusiones
+  • 0 participantes únicos
+  • Tasa de participación: 0%
+  • 0 mensajes totales
+
+- Foro de trabajo Prueba:
+  • 1 discusiones
+  • 1 participantes únicos
+  • Tasa de participación: 0%
+  • 1 mensajes totales
+
+- Foro de presentación:
+  • 0 discusiones
+  • 0 participantes únicos
+  • Tasa de participación: 0%
+  • 0 mensajes totales
+
+- Espacio del profesor:
+  • 1 discusiones
+  • 8 participantes únicos
+  • Tasa de participación: 0%
+  • 8 mensajes totales
+
+- Foro ejecutivo 1:
+  • 0 discusiones
+  • 0 participantes únicos
+  • Tasa de participación: 0%
+  • 0 mensajes totales
+
+- Foro ejecutivo 2:
+  • 0 discusiones
+  • 0 participantes únicos
+  • Tasa de participación: 0%
+  • 0 mensajes totales
+
+
+**TAREAS Y ACTIVIDADES:**
+Puntos extra, Puntos extra 1 autocalificable, Puntos extra 2 autocalificable, Puntos extra 3 autocalificable, Puntos extra 4 autocalificable, Puntos extra 5 autocalificable, Examen final, Actividad General de Recuperación, Open Class 1, Open Class 2, Open Class 3, Open Class 4, Open Class 5, Open Class 6, Sesión ejecutiva 1, Sesión ejecutiva 2, Examen ejecutivo primer parcial (Segunda vuelta), Examen ejecutivo segundo parcial (Segunda vuelta), Examen ejecutivo tercer parcial (Segunda vuelta), Examen ejecutivo cuarto parcial (Segunda vuelta), Examen ejecutivo quinto parcial (Segunda vuelta), Examen ejecutivo sexto parcial (Segunda vuelta), Examen primer parcial (Segunda vuelta), Examen segundo parcial (Segunda vuelta), Examen tercer parcial (Segunda vuelta), Examen cuarto parcial (Segunda vuelta), Examen quinto parcial (Segunda vuelta), Examen sexto parcial (Segunda vuelta), Modalidad de actividades | Semana 1, Modalidad de actividades | Semana 2, Modalidad de actividades | Semana 3, Modalidad de actividades | Semana 4, Modalidad de actividades | Semana 5, Modalidad de actividades | Semana 6, Modalidad de actividades | Semana 7, Modalidad de exámenes | Semana 1, Modalidad de exámenes | Semana 2, Modalidad de exámenes | Semana 3, Modalidad de exámenes | Semana 4, Modalidad de exámenes | Semana 5, Modalidad de exámenes | Semana 6, Modalidad de trabajo final | Semana 2, Modalidad de trabajo final | Semana 4, Modalidad de trabajo final | Semana 6, Modalidad de evidencia por competencias | Semana 3, Modalidad ejecutiva | Semana 1, Modalidad ejecutiva | Semana 2, Modalidad ejecutiva | Semana 3, Modalidad ejecutiva | Semana 4, Modalidad ejecutiva | Semana 5, Modalidad ejecutiva | Semana 6
+
+BASADO EN ESTOS DATOS, proporciona un análisis detallado y práctico que incluya:
+
+1. **Fortalezas** (3-4 puntos específicos sobre lo que funciona bien)
+2. **Alertas críticas** (problemas urgentes que requieren atención inmediata)
+3. **Estudiantes en riesgo** (basado en baja o nula participación)
+4. **Recomendaciones específicas** (acciones concretas para mejorar)
+5. **Próximo paso prioritario** (la acción más importante a tomar)
+
+Responde en formato JSON con la siguiente estructura:
+{
+  "strengths": ["fortaleza específica 1", "fortaleza 2", "fortaleza 3"],
+  "alerts": ["alerta crítica 1", "alerta 2"],
+  "studentsAtRisk": "número estimado o porcentaje de estudiantes con baja participación",
+  "recommendations": ["recomendación 1", "recomendación 2"],
+  "nextStep": "acción prioritaria concreta",
+  "overallHealth": "buena/regular/necesita atención"
+}
+
+🔄 RESPUESTA COMPLETA DE OpenAI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{
+  "id": "chatcmpl-C3ptenMld1drvAEkiptJ4vCwCzs2j",
+  "object": "chat.completion",
+  "created": 1755030510,
+  "model": "gpt-4-0613",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"strengths\": [\"Amplia variedad de actividades y recursos disponibles.\", \"Existencia de foros de trabajo y espacios para la interacción con el profesor.\", \"Existencia de actividades autocalificables para feedback inmediato.\"],\n  \"alerts\": [\"No hay estudiantes inscritos en el curso.\", \"Tasa de participación en los foros es del 0%.\", \"Falta de discusiones y participantes en la mayoría de los foros.\"],\n  \"studentsAtRisk\": \"No aplica pues no hay estudiantes inscritos.\",\n  \"recommendations\": [\"Realizar esfuerzos para atraer estudiantes al curso.\", \"Promover la participación activa en los foros de discusión.\", \"Revisar el contenido y estructura del curso para asegurarse de que sea atractivo y relevante para los posibles estudiantes.\"],\n  \"nextStep\": \"Realizar una campaña de promoción y reclutamiento para atraer estudiantes al curso.\",\n  \"overallHealth\": \"Necesita atención\"\n}",
+        "refusal": null,
+        "annotations": []
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1125,
+    "completion_tokens": 230,
+    "total_tokens": 1355,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    }
+  },
+  "service_tier": "default",
+  "system_fingerprint": null
+}
+
+
+
+📈 MÉTRICAS DE RENDIMIENTO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Inicio del procesamiento: 8/12/2025, 2:28:26 PM
+• Duración total: 11892ms
+• Eficiencia: 113.94 tokens/segundo
+
+💰 INFORMACIÓN DE COSTOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Costo por prompt: $0.0338 USD
+• Costo por respuesta: $0.0138 USD
+• Costo total: $0.0475 USD
+
+📋 METADATOS TÉCNICOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Versión de la API: OpenAI Chat Completions v1
+• Temperatura: 0.7
+• Max tokens: 1000
+• Servidor: development
+• Timestamp Unix: 1755030506
+
+🔚 FIN DEL REPORTE
+Generado automáticamente por el Dashboard Académico UTEL

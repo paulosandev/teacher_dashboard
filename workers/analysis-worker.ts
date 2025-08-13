@@ -83,9 +83,11 @@ async function processAnalysisJob(job: Job<AnalysisJobData>) {
     // Guardar nuevo resultado de análisis
     const savedResult = await prisma.analysisResult.create({
       data: {
-        groupId,
-        activityId,
-        forumId,
+        userId,
+        courseId,
+        groupId: groupId || null,
+        activityId: activityId || null,
+        forumId: forumId || null,
         analysisType: type,
         strengths: analysisResult.strengths as any, // Prisma acepta JSON
         alerts: analysisResult.alerts as any, // Prisma acepta JSON

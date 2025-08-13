@@ -123,12 +123,14 @@ async function main() {
 
   // Crear resultados de análisis de ejemplo - como en la maquetación
   
-  // Foro Semana 1 - Card 1
+// Foro Semana 1 - Card 1
   const analysisResult1 = await prisma.analysisResult.create({
     data: {
+      userId: testUser.id, // Usuario que solicitó el análisis
+      courseId: course1.id, // ID del curso
       groupId: group1.id,
       forumId: forum1.id,
-      analysisType: 'forum',
+      analysisType: "FORUM_PARTICIPATION",
       strengths: [
         {
           id: '1',
@@ -152,9 +154,11 @@ async function main() {
   // Foro Ruta hacia el éxito Profesional - Card 2
   const analysisResult2 = await prisma.analysisResult.create({
     data: {
+      userId: testUser.id,
+      courseId: course1.id,
       groupId: group1.id,
       forumId: forum2.id,
-      analysisType: 'forum',
+      analysisType: 'FORUM_PARTICIPATION',
       strengths: [
         {
           id: '1',
@@ -178,9 +182,11 @@ async function main() {
   // Actividad: Tarea 1 - Card 3 (ancho completo)
   const analysisResult3 = await prisma.analysisResult.create({
     data: {
+      userId: testUser.id,
+      courseId: course1.id,
       groupId: group1.id,
       activityId: activity1.id,
-      analysisType: 'activity',
+      analysisType: 'ACTIVITY_SUBMISSION',
       strengths: [
         {
           id: '1',
@@ -214,9 +220,11 @@ async function main() {
   // Quiz: Conceptos de React - Card 4 (ancho completo)
   const analysisResult4 = await prisma.analysisResult.create({
     data: {
+      userId: testUser.id,
+      courseId: course1.id,
       groupId: group2.id,
       activityId: activity2.id,
-      analysisType: 'activity',
+      analysisType: 'ACTIVITY_SUBMISSION',
       strengths: [
         {
           id: '1',

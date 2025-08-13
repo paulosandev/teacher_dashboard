@@ -23,12 +23,15 @@ export interface AnalysisCardData {
   title: string
   type: 'activity' | 'forum'
   courseId: string
+  moodleCourseId?: string // ID del curso en Moodle para mapeo
   groupId?: string
   strengths: AnalysisStrength[]
   alerts: AnalysisAlert[]
   nextStep: AnalysisNextStep
   lastUpdated: Date
   confidence?: number
+  rawData?: any // Datos crudos de Moodle
+  llmResponse?: any // Respuesta completa del LLM
 }
 
 // Tipos para Moodle

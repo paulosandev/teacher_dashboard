@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/auth-options'
-import { moodleClient } from '@/lib/moodle/api-client'
-// import { prisma } from '@/lib/db/prisma' // Deshabilitado temporalmente
+import { MoodleAPIClientEnhanced } from '@/lib/moodle/client-enhanced'
+import { prisma } from '@/lib/db/prisma'
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,65 +21,84 @@ export async function GET(request: NextRequest) {
     const action = searchParams.get('action')
 
     if (action === 'test') {
-      // Probar conexión con Moodle
-      const isConnected = await moodleClient.testConnection()
+      // Probar conexión con Moodle usando el cliente del usuario
+      const moodleClient = new MoodleAPIClientEnhanced(session.user.id, session.user.email)
       
-      return NextResponse.json({
-        success: isConnected,
-        message: isConnected 
-          ? 'Conexión con Moodle exitosa' 
-          : 'Error al conectar con Moodle',
-      })
+      try {
+        const userInfo = await moodleClient.getCurrentUser()
+        const isConnected = !!userInfo
+        
+        return NextResponse.json({
+          success: isConnected,
+          message: isConnected 
+            ? `Conexión exitosa como ${userInfo.fullname}` 
+            : 'Error al conectar con Moodle',
+          userInfo: isConnected ? userInfo : null
+        })
+      } catch (error) {
+        return NextResponse.json({
+          success: false,
+          message: 'Error al conectar con Moodle',
+          error: error instanceof Error ? error.message : 'Error desconocido'
+        })
+      }
     }
 
     if (action === 'courses') {
-      // NUEVA IMPLEMENTACIÓN: Filtrar por profesor usando matrícula
-      const userMatricula = session.user.matricula
+      console.log('🔐 SESIÓN ACTUAL:')
+      console.log(`   Usuario: ${session.user.name || 'Sin nombre'}`)
+      console.log(`   Email: ${session.user.email}`)
+      console.log(`   ID: ${session.user.id}`)
       
-      if (!userMatricula) {
+      // Crear cliente con contexto del usuario
+      const moodleClient = new MoodleAPIClientEnhanced(session.user.id, session.user.email)
+      
+      try {
+        console.log(`🔍 Obteniendo cursos donde el usuario es profesor...`)
+        
+        const teacherCourses = await moodleClient.getUserCourses()
+        
+        // Para cada curso, obtener sus grupos
+        const coursesWithGroups = []
+        
+        for (const course of teacherCourses) {
+          try {
+            const groups = await moodleClient.getCourseGroups(course.id)
+            
+            coursesWithGroups.push({
+              ...course,
+              groups: groups || []
+            })
+          } catch (groupError) {
+            console.log(`⚠️ Error obteniendo grupos del curso ${course.shortname}: ${groupError instanceof Error ? groupError.message : groupError}`)
+            // Añadir el curso sin grupos
+            coursesWithGroups.push({
+              ...course,
+              groups: []
+            })
+          }
+        }
+        
+        console.log(`📚 Total de ${coursesWithGroups.length} cursos obtenidos`)
+        
+        return NextResponse.json({
+          success: true,
+          data: coursesWithGroups,
+          count: coursesWithGroups.length,
+          usingUserToken: true
+        })
+        
+      } catch (error) {
+        console.error('Error obteniendo cursos:', error)
         return NextResponse.json(
-          { error: 'No se pudo obtener la matrícula del usuario' },
-          { status: 400 }
+          { 
+            error: 'Error al obtener cursos de Moodle',
+            details: error instanceof Error ? error.message : 'Error desconocido',
+            needsToken: error instanceof Error && error.message.includes('token')
+          },
+          { status: 500 }
         )
       }
-      
-      // Obtener SOLO cursos donde el profesor logueado tiene acceso
-      const coursesWithGroups = await moodleClient.getTeacherCoursesWithGroups(userMatricula)
-      
-      // Opcionalmente, guardar/actualizar en base de datos local
-      if (coursesWithGroups.length > 0) {
-        console.log(`📚 Obtenidos ${coursesWithGroups.length} cursos de Moodle`)
-        
-        // Aquí podrías sincronizar con la base de datos local si lo deseas
-        // Por ejemplo:
-        /*
-        for (const course of coursesWithGroups) {
-          await prisma.course.upsert({
-            where: { 
-              moodleId: parseInt(course.id) 
-            },
-            update: {
-              name: course.name,
-              shortName: course.shortName,
-            },
-            create: {
-              moodleId: parseInt(course.id),
-              name: course.name,
-              shortName: course.shortName,
-              professorId: session.user.id,
-            },
-          })
-          
-          // Sincronizar grupos...
-        }
-        */
-      }
-      
-      return NextResponse.json({
-        success: true,
-        data: coursesWithGroups,
-        count: coursesWithGroups.length,
-      })
     }
 
     if (action === 'forums') {
@@ -92,14 +111,27 @@ export async function GET(request: NextRequest) {
         )
       }
       
-      // Obtener foros del curso
-      const forums = await moodleClient.getCourseForums(courseId)
+      // Crear cliente con contexto del usuario
+      const moodleClient = new MoodleAPIClientEnhanced(session.user.id, session.user.email)
       
-      return NextResponse.json({
-        success: true,
-        data: forums,
-        count: forums.length,
-      })
+      try {
+        // Obtener foros del curso
+        const forums = await moodleClient.getCourseForums(courseId)
+        
+        return NextResponse.json({
+          success: true,
+          data: forums,
+          count: forums.length,
+        })
+      } catch (error) {
+        return NextResponse.json(
+          { 
+            error: 'Error al obtener foros',
+            details: error instanceof Error ? error.message : 'Error desconocido'
+          },
+          { status: 500 }
+        )
+      }
     }
 
     if (action === 'discussions') {
@@ -112,14 +144,27 @@ export async function GET(request: NextRequest) {
         )
       }
       
-      // Obtener discusiones del foro
-      const discussions = await moodleClient.getForumDiscussions(forumId)
+      // Crear cliente con contexto del usuario
+      const moodleClient = new MoodleAPIClientEnhanced(session.user.id, session.user.email)
       
-      return NextResponse.json({
-        success: true,
-        data: discussions,
-        count: discussions.length,
-      })
+      try {
+        // Obtener discusiones del foro
+        const discussions = await moodleClient.getForumDiscussions(forumId)
+        
+        return NextResponse.json({
+          success: true,
+          data: discussions,
+          count: discussions.length,
+        })
+      } catch (error) {
+        return NextResponse.json(
+          { 
+            error: 'Error al obtener discusiones',
+            details: error instanceof Error ? error.message : 'Error desconocido'
+          },
+          { status: 500 }
+        )
+      }
     }
 
     // Acción por defecto: obtener info general

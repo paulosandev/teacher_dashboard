@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import DashboardHeader from '@/components/dashboard/header'
 import CourseSelector from '@/components/dashboard/course-selector'
 import AnalysisCard from '@/components/dashboard/analysis-card'
 import { AnalysisCardData } from '@/types'
@@ -34,61 +33,163 @@ export default function DashboardContent({
   initialCourseId,
   initialGroupId
 }: DashboardContentProps) {
-  const [selectedCourse, setSelectedCourse] = useState<string | null>(initialCourseId || null)
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(initialGroupId || null)
+  const [selectedCourse, setSelectedCourse] = useState<string | null>(null)
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
   const [analysisCards, setAnalysisCards] = useState(initialCards)
-  const [shouldUseMoodleData, setShouldUseMoodleData] = useState(false)
-  const [displayCourses, setDisplayCourses] = useState(coursesWithGroups)
+  const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState(false)
   
-  // Hook para obtener datos de Moodle
-  const { courses: moodleCourses, loading, error, refetch } = useMoodleData(shouldUseMoodleData)
+  // Hook para obtener datos de Moodle - siempre habilitado
+  const { courses: moodleCourses, loading, error, refetch } = useMoodleData(true)
   
-  // Actualizar cursos cuando cambie la fuente de datos
-  useEffect(() => {
-    if (shouldUseMoodleData && moodleCourses.length > 0) {
-      setDisplayCourses(moodleCourses)
-      console.log('📚 Usando datos de Moodle:', moodleCourses.length, 'cursos')
-    } else if (!shouldUseMoodleData) {
-      setDisplayCourses(coursesWithGroups)
-      console.log('💾 Usando datos locales:', coursesWithGroups.length, 'cursos')
-    }
-  }, [shouldUseMoodleData, moodleCourses, coursesWithGroups])
+  // Siempre usamos datos de Moodle
+  const displayCourses = moodleCourses
 
-  const handleSelectionChange = (courseId: string, groupId: string) => {
+  // Selección automática del primer curso y grupo disponible
+  useEffect(() => {
+    if (moodleCourses && moodleCourses.length > 0 && !selectedCourse) {
+      const firstCourse = moodleCourses[0];
+      if (firstCourse.groups && firstCourse.groups.length > 0) {
+        const firstGroup = firstCourse.groups[0];
+        setSelectedCourse(firstCourse.id);
+        setSelectedGroup(firstGroup.id);
+        // Disparar la selección para cargar el análisis inicial
+        setTimeout(() => {
+          handleSelectionChange(firstCourse.id, firstGroup.id);
+        }, 100);
+      }
+    }
+  }, [moodleCourses]);
+
+  const handleSelectionChange = async (courseId: string, groupId: string) => {
     setSelectedCourse(courseId)
     setSelectedGroup(groupId)
     
-    // Aquí puedes filtrar las tarjetas basándote en la selección
-    // Por ahora solo mostramos un console.log
     console.log('Curso seleccionado:', courseId, 'Grupo:', groupId)
     
-    // Filtrar tarjetas por curso y grupo seleccionados
+    // Filtrar tarjetas por curso y grupo seleccionados (siempre usando IDs de Moodle)
     const filteredCards = initialCards.filter(card => {
-      if (card.courseId !== courseId) return false
-      if (card.groupId && card.groupId !== groupId) return false
+      const cardMoodleId = card.moodleCourseId || card.courseId
+      const courseMatches = cardMoodleId === courseId
+      console.log(`   Comparando Moodle: card(${cardMoodleId}) === selected(${courseId}) → ${courseMatches}`)
+      
+      if (!courseMatches) return false
+      
+      // Filtrar por grupo si se especifica
+      if (card.groupId && card.groupId !== groupId) {
+        console.log(`   Grupo no coincide: card(${card.groupId}) !== selected(${groupId})`)
+        return false
+      }
+      
       return true
     })
     
-    setAnalysisCards(filteredCards.length > 0 ? filteredCards : initialCards)
+    console.log(`Análisis filtrados: ${filteredCards.length} de ${initialCards.length} total`)
+    setAnalysisCards(filteredCards)
+    
+    // Si no hay análisis, verificar si debemos generar uno
+    if (filteredCards.length === 0) {
+      await checkAndTriggerAnalysis(courseId, groupId)
+    }
+  }
+
+  const refreshAnalysisForCourse = async (courseId: string, groupId: string) => {
+    try {
+      console.log('🔄 Refrescando análisis para curso:', courseId, 'grupo:', groupId)
+      
+      const response = await fetch('/api/analysis', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error('Error obteniendo análisis actualizados')
+      }
+      
+      const freshAnalysis = await response.json()
+      
+      // Filtrar los análisis para el curso y grupo actuales
+      const filteredCards = freshAnalysis.filter((card: AnalysisCardData) => {
+        const cardMoodleId = card.moodleCourseId
+        const courseMatches = cardMoodleId === courseId
+        const cardMoodleGroupId = card.groupId
+        const groupMatches = cardMoodleGroupId === groupId
+        console.log(`   🔄 Comparando Moodle: curso card(${cardMoodleId}) === selected(${courseId}) → ${courseMatches}`)
+        console.log(`   🔄 Comparando Moodle: grupo card(${cardMoodleGroupId}) === selected(${groupId}) → ${groupMatches}`)
+        return courseMatches && groupMatches
+      })
+      
+      console.log(`✅ Análisis refrescados: ${filteredCards.length} encontrados`)
+      setAnalysisCards(filteredCards)
+      
+    } catch (error) {
+      console.error('Error refrescando análisis:', error)
+    }
+  }
+
+  const checkAndTriggerAnalysis = async (courseId: string, groupId: string) => {
+    try {
+      console.log('🔍 Verificando contenido y generando análisis...')
+      setIsGeneratingAnalysis(true)
+      
+      const response = await fetch('/api/analysis/generate-real', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ courseId, groupId })
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Error en la solicitud')
+      }
+      
+      console.log('📊 Resultado del análisis:', data)
+      
+      if (data.success) {
+        console.log('🎉 Análisis generado exitosamente')
+        // Refrescar los análisis del curso actual
+        await refreshAnalysisForCourse(courseId, groupId)
+      } else {
+        console.log('⚠️ No se pudo generar el análisis:', data.message)
+      }
+      
+    } catch (error) {
+      console.error('Error verificando/generando análisis:', error)
+      alert(`❌ Error: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+    } finally {
+      setIsGeneratingAnalysis(false)
+    }
   }
 
   const handleViewMore = (cardId: string) => {
     console.log('Ver más detalles:', cardId)
-    // Aquí puedes implementar la navegación a la vista detallada
-    // Por ejemplo: router.push(`/dashboard/analysis/${cardId}`)
+  }
+
+  const handleReanalyze = async (card: AnalysisCardData) => {
+    try {
+      console.log('🔄 Re-analizando tarjeta:', card.id)
+      
+      // Usar IDs de Moodle
+      const courseId = card.moodleCourseId || card.courseId
+      const groupId = card.groupId || ''
+      console.log(`🌐 Re-analizando con IDs Moodle: curso=${courseId}, grupo=${groupId}`)
+      
+      await checkAndTriggerAnalysis(courseId, groupId)
+      
+    } catch (error) {
+      console.error('Error en re-análisis:', error)
+      alert(`❌ Error al re-analizar: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+    }
   }
 
   return (
-    <div className="bg-white min-h-screen">
-      <DashboardHeader 
-        userName={userName}
-        notificationCount={3}
-      />
-
-      {/* Main Content */}
-      <main className="max-w-[1132px] mx-auto px-4 sm:px-6 lg:px-3">
-        {/* Saludo */}
-        <section className="mb-8">
+    <div className="max-w-[1132px] mx-auto px-4 sm:px-6 lg:px-3">
+      {/* Saludo */}
+      <section className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             ¡Hola, {userFirstName}!
           </h1>
@@ -97,58 +198,30 @@ export default function DashboardContent({
           </p>
         </section>
 
-        {/* Toggle para fuente de datos */}
-        <section className="mb-6">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <label className="text-sm font-medium text-gray-700">
-                  Fuente de datos:
-                </label>
-                <button
-                  onClick={() => setShouldUseMoodleData(!shouldUseMoodleData)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    shouldUseMoodleData ? 'bg-blue-600' : 'bg-gray-200'
-                  }`}
-                  disabled={loading}
-                >
-                  <span className="sr-only">Usar datos de Moodle</span>
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      shouldUseMoodleData ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-                <span className="text-sm text-gray-600">
-                  {shouldUseMoodleData ? '🌐 Moodle' : '💾 Local'}
-                </span>
-              </div>
-              
-              {loading && (
-                <span className="text-sm text-blue-600">Cargando datos de Moodle...</span>
-              )}
-              
-              {error && (
-                <span className="text-sm text-red-600">Error: {error}</span>
-              )}
-              
-              {shouldUseMoodleData && !loading && !error && (
-                <button
-                  onClick={() => refetch()}
-                  className="text-sm text-blue-600 hover:text-blue-700 underline"
-                >
-                  🔄 Actualizar
-                </button>
-              )}
+        {/* Estado de carga de Moodle */}
+        {loading && (
+          <section className="mb-6">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+              <span className="text-sm text-blue-600">Cargando datos de Moodle...</span>
             </div>
-            
-            {shouldUseMoodleData && moodleCourses.length === 0 && !loading && (
-              <div className="mt-2 text-sm text-amber-700">
-                ⚠️ No se encontraron cursos en Moodle. Verifica tu configuración.
-              </div>
-            )}
-          </div>
-        </section>
+          </section>
+        )}
+
+        {/* Error de conexión */}
+        {error && (
+          <section className="mb-6">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <span className="text-sm text-red-600">Error: {error}</span>
+              <button
+                onClick={() => refetch()}
+                className="ml-4 text-sm text-red-600 hover:text-red-700 underline"
+              >
+                🔄 Reintentar
+              </button>
+            </div>
+          </section>
+        )}
 
         {/* Selector de grupo */}
         <section className="mb-8">
@@ -159,6 +232,8 @@ export default function DashboardContent({
             <CourseSelector 
               courses={displayCourses}
               onSelectionChange={handleSelectionChange}
+              selectedCourseId={selectedCourse}
+              selectedGroupId={selectedGroup}
             />
           </header>
         </section>
@@ -186,6 +261,7 @@ export default function DashboardContent({
                           key={card.id}
                           data={card}
                           onViewMore={() => handleViewMore(card.id)}
+                          onReanalyze={() => handleReanalyze(card)}
                         />
                       ))}
                     </section>
@@ -195,9 +271,10 @@ export default function DashboardContent({
                   const single = cards.splice(0, 1)[0]
                   sections.push(
                     <section key={`full-${single.id}`} className="mb-8">
-                      <AnalysisCard 
+                    <AnalysisCard 
                         data={single}
                         onViewMore={() => handleViewMore(single.id)}
+                        onReanalyze={() => handleReanalyze(single)}
                       />
                     </section>
                   )
@@ -209,15 +286,82 @@ export default function DashboardContent({
           </>
         ) : (
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
-            <p className="text-gray-600">
-              {selectedCourse && selectedGroup 
-                ? 'No hay análisis disponibles para el curso y grupo seleccionados.'
-                : 'No hay análisis disponibles en este momento. Los análisis se generarán automáticamente cada 4 horas.'
-              }
-            </p>
+            {isGeneratingAnalysis ? (
+              // Estado: Generando análisis
+              <div className="flex flex-col items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                <p className="text-lg font-medium text-gray-700 mb-2">
+                  🔄 Generando análisis...
+                </p>
+                <p className="text-sm text-gray-600">
+                  Estamos analizando las actividades y foros del curso.
+                  Esto puede tomar unos momentos.
+                </p>
+              </div>
+            ) : selectedCourse && selectedGroup ? (
+              // Estado: Curso y grupo seleccionados pero sin análisis
+              <>
+                <div className="mb-4">
+                  <p className="text-lg font-medium text-gray-700 mb-2">
+                    📁 No hay análisis disponible
+                  </p>
+                  <div className="text-gray-600 space-y-2">
+                    <p>
+                      Este curso está activo en Moodle y eres profesor.
+                    </p>
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 mt-4 text-left">
+                      <p className="font-medium text-gray-700 mb-2">Posibles razones:</p>
+                      <ul className="text-sm text-gray-600 space-y-1">
+                        <li>• El curso no tiene actividades o foros abiertos para analizar</li>
+                        <li>• Las actividades aún no tienen participación estudiantil</li>
+                        <li>• El análisis está programado pero aún no se ha ejecutado</li>
+                        <li>• El curso es nuevo y no ha sido sincronizado</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Acciones sugeridas */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md mx-auto">
+                  <p className="text-sm text-blue-800 mb-2 font-medium">
+                    💡 Acciones disponibles
+                  </p>
+                  <ul className="text-sm text-blue-700 text-left space-y-1">
+                    <li>• Verifica que el curso tenga actividades o foros activos</li>
+                    <li>• El análisis automático se ejecuta cada 4 horas</li>
+                    <li>• Selecciona otro curso del menú desplegable</li>
+                  </ul>
+                  
+                  <button 
+                    className="mt-3 w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                    onClick={() => checkAndTriggerAnalysis(selectedCourse, selectedGroup)}
+                    disabled={isGeneratingAnalysis}
+                  >
+                    🔄 Generar análisis ahora
+                  </button>
+                </div>
+              </>
+            ) : (
+              // Estado: Ningún curso seleccionado
+              <>
+                <p className="text-lg font-medium text-gray-700 mb-2">
+                  👋 Bienvenido al Dashboard de Análisis
+                </p>
+                <p className="text-gray-600 mb-4">
+                  Selecciona un curso y grupo del menú desplegable para ver el análisis de actividades.
+                </p>
+                <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 max-w-md mx-auto text-left">
+                  <p className="text-sm font-medium text-blue-800 mb-2">ℹ️ Información útil:</p>
+                  <ul className="text-sm text-blue-700 space-y-1">
+                    <li>• Solo verás cursos donde eres profesor</li>
+                    <li>• Los análisis se actualizan automáticamente</li>
+                    <li>• Los datos provienen directamente de Moodle</li>
+                  </ul>
+                </div>
+              </>
+            )}
           </div>
         )}
-      </main>
 
       {/* Espaciado al final */}
       <div className="h-16"></div>

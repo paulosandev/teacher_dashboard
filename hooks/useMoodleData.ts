@@ -21,7 +21,7 @@ interface UseMoodleDataResult {
   refetch: () => Promise<void>
 }
 
-export function useMoodleData(enabled = false): UseMoodleDataResult {
+export function useMoodleData(enabled = true): UseMoodleDataResult {
   const [courses, setCourses] = useState<MoodleCourse[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)

@@ -24,24 +24,33 @@ export const authOptions: NextAuthOptions = {
         }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password || !credentials?.matricula) {
-          throw new Error('Por favor complete todos los campos')
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error('Por favor ingrese email y contraseña')
         }
 
         try {
-          // Buscar usuario por email
-          const user = await prisma.user.findUnique({
+          // Buscar usuario por email O username
+          const user = await prisma.user.findFirst({
             where: {
-              email: credentials.email.toLowerCase()
+              OR: [
+                { email: credentials.email.toLowerCase() },
+                { username: credentials.email.toLowerCase() }
+              ]
             }
           })
 
           if (!user) {
+            console.log(`Usuario no encontrado: ${credentials.email}`)
             throw new Error('Credenciales inválidas')
           }
 
-          // Verificar que la matrícula coincida
+          // Verificar que la matrícula coincida (obligatorio)
+          if (!credentials.matricula || credentials.matricula.trim() === '') {
+            throw new Error('La matrícula es obligatoria')
+          }
+          
           if (user.matricula !== credentials.matricula) {
+            console.log(`Matrícula incorrecta: esperada ${user.matricula}, recibida ${credentials.matricula}`)
             throw new Error('Matrícula incorrecta')
           }
 

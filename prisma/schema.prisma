@@ -24,6 +24,7 @@ model User {
   // Relaciones
   courses     Course[]
   sessions    Session[]
+  moodleToken UserMoodleToken?
 }
 
 // Modelo de Sesión para NextAuth
@@ -116,10 +117,12 @@ model Forum {
 // Modelo de Resultado de Análisis
 model AnalysisResult {
   id              String   @id @default(cuid())
+  userId          String   // Profesor que solicitó el análisis
+  courseId        String   // ID del curso de Moodle
   groupId         String?
   activityId      String?
   forumId         String?
-  analysisType    String   // 'activity' o 'forum'
+  analysisType    String   // 'FORUM_PARTICIPATION', 'ACTIVITY_SUBMISSION', etc.
   
   // Resultados del análisis
   strengths       Json     // Array de fortalezas identificadas
@@ -160,4 +163,23 @@ model JobLog {
   
   @@index([status])
   @@index([createdAt])
+}
+
+// Modelo para almacenar tokens de Moodle de cada profesor
+model UserMoodleToken {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token        String    @db.Text // Token de Moodle
+  moodleUserId Int?
+  moodleUsername String?
+  capabilities Json?     // Almacenar capacidades/permisos del token
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  expiresAt    DateTime? // Si los tokens expiran
+  isActive     Boolean   @default(true)
+  
+  // Índices
+  @@index([userId])
+  @@index([moodleUserId])
 }

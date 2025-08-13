@@ -19,13 +19,25 @@ interface Group {
 interface CourseSelectorProps {
   courses: Course[]
   onSelectionChange?: (courseId: string, groupId: string) => void
+  selectedCourseId?: string | null
+  selectedGroupId?: string | null
 }
 
-export default function CourseSelector({ courses, onSelectionChange }: CourseSelectorProps) {
+export default function CourseSelector({ courses, onSelectionChange, selectedCourseId, selectedGroupId }: CourseSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [selectedCourse, setSelectedCourse] = useState<string | null>(null)
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
+  const [selectedCourse, setSelectedCourse] = useState<string | null>(selectedCourseId || null)
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(selectedGroupId || null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Sincronizar con props externas
+  useEffect(() => {
+    if (selectedCourseId !== selectedCourse) {
+      setSelectedCourse(selectedCourseId || null)
+    }
+    if (selectedGroupId !== selectedGroup) {
+      setSelectedGroup(selectedGroupId || null)
+    }
+  }, [selectedCourseId, selectedGroupId])
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

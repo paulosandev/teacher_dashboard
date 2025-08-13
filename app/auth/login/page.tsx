@@ -163,7 +163,7 @@ export default function LoginPage() {
                     value={formData.matricula}
                     onChange={handleChange}
                     className="appearance-none relative block w-full pl-10 pr-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary focus:z-10 sm:text-sm transition-colors duration-200"
-                    placeholder="MAT001"
+                    placeholder="Matrícula de Moodle"
                     disabled={loading}
                   />
                 </div>
@@ -193,9 +193,13 @@ export default function LoginPage() {
             <div className="mt-6 p-4 bg-primary-selected rounded-lg border border-primary-light">
               <p className="text-xs text-primary-darker font-semibold mb-2">Credenciales de prueba:</p>
               <div className="text-xs text-primary-dark space-y-1">
-                <p>📧 Email: profesor@test.com</p>
-                <p>🔐 Password: password123</p>
-                <p>🆔 Matrícula: MAT001</p>
+                <p>📧 Email: mail.paulo@gmail.com</p>
+                <p>🔐 Password: admin1234</p>
+                <p>🆔 Matrícula: paulo.cesar</p>
+                <hr className="my-2 border-primary-light" />
+                <p>📧 Email: cesar.espindola@utel.edu.mx</p>
+                <p>🔐 Password: admin1234</p>
+                <p>🆔 Matrícula: cesar.espindola</p>
               </div>
             </div>
           )}

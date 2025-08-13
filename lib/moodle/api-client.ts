@@ -63,6 +63,15 @@ interface MoodlePost {
 class MoodleAPIClient {
   private config: MoodleConfig | null = null
 
+  constructor(baseUrl?: string, token?: string) {
+    if (baseUrl && token) {
+      this.config = {
+        baseUrl,
+        token
+      }
+    }
+  }
+
   private getConfig(): MoodleConfig {
     if (!this.config) {
       this.config = {
@@ -155,115 +164,103 @@ class MoodleAPIClient {
 
   /**
    * Obtiene los cursos donde el usuario es profesor
+   * SEGURIDAD: SIEMPRE filtra por rol de profesor para evitar mostrar cursos donde es estudiante
    * Nota: Requiere el ID del usuario en Moodle
-   * FALLBACK: Usa este método si el plugin personalizado no está disponible
    */
   async getUserCourses(userId: number): Promise<MoodleCourse[]> {
-    try {
-      const courses = await this.callMoodleAPI('core_enrol_get_users_courses', {
-        userid: userId,
-      })
-      
-      // Filtrar solo cursos visibles
-      return courses.filter((course: MoodleCourse) => course.visible === 1)
-    } catch (error) {
-      console.error('Error obteniendo cursos del usuario:', error)
-      console.log('⚠️ Fallback: obteniendo cursos usando filtrado por rol...')
-      
-      // NUEVO FALLBACK: Filtrar cursos activos donde el usuario es profesor
-      return this.getTeacherCoursesFiltered(userId)
-    }
+    console.log(`🔒 [SEGURIDAD] Obteniendo SOLO cursos donde userId ${userId} es PROFESOR...`)
+    
+    // SIEMPRE usar el método de filtrado por rol por seguridad
+    // No usar core_enrol_get_users_courses directamente porque incluye cursos donde es estudiante
+    return this.getTeacherCoursesFiltered(userId)
   }
 
   /**
    * Obtiene cursos donde el usuario es profesor usando filtrado por rol
-   * Este método implementa seguridad: solo devuelve cursos donde el usuario específico es profesor
+   * NUEVO: Usa los cursos del usuario directamente en lugar de filtrar todos los cursos activos
    */
   async getTeacherCoursesFiltered(userId: number): Promise<MoodleCourse[]> {
     try {
-      // Obtener todos los cursos activos
-      const allCourses = await this.getActiveCourses()
+      console.log(`🔍 [SEGURIDAD] Obteniendo cursos de userId ${userId} y filtrando solo donde es profesor...`)
       
-      if (allCourses.length === 0) {
-        console.log('📚 No hay cursos activos disponibles')
+      // Obtener TODOS los cursos donde el usuario está inscrito
+      const allUserCourses = await this.callMoodleAPI('core_enrol_get_users_courses', {
+        userid: userId,
+      })
+      
+      if (allUserCourses.length === 0) {
+        console.log('📚 No hay cursos donde el usuario esté inscrito')
         return []
       }
       
-      console.log(`🔍 [SEGURIDAD] Filtrando ${allCourses.length} cursos para encontrar donde userId ${userId} es profesor...`)
+      console.log(`📚 Encontrados ${allUserCourses.length} cursos donde está inscrito. Filtrando solo donde es profesor...`)
       
       const teacherCourses: MoodleCourse[] = []
-      let coursesChecked = 0
-      const maxCoursesToCheck = 10 // Limitar para rendimiento
       
-      for (const course of allCourses.slice(0, maxCoursesToCheck)) {
-        coursesChecked++
+      // Para cada curso donde está inscrito, verificar si es profesor
+      for (let i = 0; i < allUserCourses.length; i++) {
+        const course = allUserCourses[i]
         
         try {
-          console.log(`🔎 [${coursesChecked}/${maxCoursesToCheck}] Verificando curso: ${course.shortname}...`)
+          console.log(`🔎 [${i+1}/${allUserCourses.length}] Verificando roles en: ${course.shortname}...`)
           
-          // Obtener usuarios inscritos con roles en el curso
+          // Obtener usuarios inscritos con roles para este curso
           const enrolledUsers = await this.callMoodleAPI('core_enrol_get_enrolled_users', {
-            courseid: course.id,
-            options: [
-              {
-                name: 'withcapability',
-                value: 'moodle/course:manageactivities' // Capacidad típica de profesores
-              }
-            ]
+            courseid: course.id
           })
           
           // Buscar específicamente nuestro usuario
           const userInCourse = enrolledUsers.find((user: any) => user.id === userId)
           
-          if (userInCourse) {
-            console.log(`👤 Usuario ${userId} encontrado en curso ${course.shortname}`)
+          if (userInCourse && userInCourse.roles && userInCourse.roles.length > 0) {
+            const roles = userInCourse.roles.map((role: any) => ({
+              id: role.roleid,
+              name: role.shortname || role.name
+            }))
             
-            // Verificar roles de profesor
-            if (userInCourse.roles && userInCourse.roles.length > 0) {
-              const roles = userInCourse.roles.map((role: any) => ({
-                id: role.roleid,
-                name: role.shortname || role.name
-              }))
-              
-              console.log(`🎭 Roles del usuario en ${course.shortname}:`, roles)
-              
-              // Verificar si tiene rol de profesor
-              const hasTeacherRole = userInCourse.roles.some((role: any) => {
-                return (
-                  role.roleid === 3 || // editingteacher
-                  role.roleid === 4 || // teacher
-                  role.shortname === 'editingteacher' ||
-                  role.shortname === 'teacher' ||
-                  role.shortname === 'manager'
-                )
-              })
-              
-              if (hasTeacherRole) {
-                console.log(`✅ [AUTORIZADO] Usuario ${userId} ES PROFESOR en: ${course.shortname}`)
-                teacherCourses.push(course)
-              } else {
-                console.log(`❌ [NO AUTORIZADO] Usuario ${userId} no es profesor en: ${course.shortname}`)
-              }
+            console.log(`   🎭 Roles: ${roles.map((r: any) => `${r.name}(${r.id})`).join(', ')}`)
+            
+            // Verificar si tiene rol de profesor
+            const hasTeacherRole = userInCourse.roles.some((role: any) => {
+              const roleName = (role.shortname || role.name || '').toLowerCase()
+              return (
+                role.roleid === 3 || // editingteacher
+                role.roleid === 4 || // teacher
+                role.roleid === 1 || // manager
+                roleName.includes('teacher') ||
+                roleName.includes('editor') ||
+                roleName.includes('manager') ||
+                roleName.includes('tutor')
+              )
+            })
+            
+            if (hasTeacherRole) {
+              console.log(`   ✅ ES PROFESOR - Agregando curso: ${course.shortname}`)
+              teacherCourses.push(course)
             } else {
-              console.log(`⚠️ Usuario ${userId} sin roles definidos en: ${course.shortname}`)
+              console.log(`   👨‍🎓 Es estudiante - Omitiendo: ${course.shortname}`)
             }
           } else {
-            console.log(`👻 Usuario ${userId} NO INSCRITO en: ${course.shortname}`)
+            console.log(`   ⚠️ Sin roles encontrados en: ${course.shortname}`)
           }
           
         } catch (courseError) {
-          console.log(`⚠️ Error verificando curso ${course.shortname}:`, courseError instanceof Error ? courseError.message : courseError)
+          console.log(`   ❌ Error verificando ${course.shortname}: ${courseError instanceof Error ? courseError.message : courseError}`)
           continue
         }
       }
       
+      console.log(`📊 RESULTADO: ${teacherCourses.length} cursos como profesor de ${allUserCourses.length} total`)
+      
       if (teacherCourses.length === 0) {
         console.log(`🚫 [SEGURIDAD] No se encontraron cursos donde userId ${userId} sea profesor`)
-        console.log(`📊 Estadísticas: ${coursesChecked} cursos verificados de ${allCourses.length} disponibles`)
-        return [] // NO devolver todos los cursos por seguridad
+      } else {
+        console.log(`🎓 [ÉXITO] Usuario ${userId} es profesor en:`);
+        teacherCourses.forEach(course => {
+          console.log(`   - ${course.shortname}: ${course.fullname}`)
+        })
       }
       
-      console.log(`🎓 [ÉXITO] Usuario ${userId} es profesor en ${teacherCourses.length} cursos`)
       return teacherCourses
       
     } catch (error) {
@@ -307,11 +304,13 @@ class MoodleAPIClient {
   /**
    * Obtiene las discusiones de un foro
    */
-  async getForumDiscussions(forumId: number): Promise<MoodleDiscussion[]> {
+  async getForumDiscussions(forumId: number | string, groupId?: string): Promise<MoodleDiscussion[] | any[]> {
     try {
+      const forumIdNum = typeof forumId === 'string' ? parseInt(forumId) : forumId
+      
       // Usar solo el parámetro requerido, sin sortby/sortdirection que causan error
       const response = await this.callMoodleAPI('mod_forum_get_forum_discussions', {
-        forumid: forumId
+        forumid: forumIdNum
       })
       
       return response.discussions || []
@@ -351,6 +350,248 @@ class MoodleAPIClient {
       console.error('Error obteniendo contenido del curso:', error)
       return []
     }
+  }
+
+  /**
+   * Obtiene usuarios matriculados en un curso con sus roles
+   */
+  async getEnrolledUsers(courseId: number): Promise<any[]> {
+    try {
+      const users = await this.callMoodleAPI('core_enrol_get_enrolled_users', {
+        courseid: courseId
+      })
+      
+      return users || []
+    } catch (error) {
+      console.error('Error obteniendo usuarios matriculados:', error)
+      return []
+    }
+  }
+
+  /**
+   * Obtiene las entregas de una tarea (assignment)
+   */
+  async getAssignmentSubmissions(assignmentId: number): Promise<any> {
+    try {
+      const submissions = await this.callMoodleAPI('mod_assign_get_submissions', {
+        assignmentids: [assignmentId],
+      })
+      
+      return submissions?.assignments?.[0] || { submissions: [] }
+    } catch (error) {
+      console.error(`Error obteniendo entregas de la tarea ${assignmentId}:`, error)
+      return { submissions: [] }
+    }
+  }
+
+  /**
+   * Obtiene detalles completos de una tarea (assignment)
+   */
+  async getAssignmentDetails(assignmentId: number): Promise<any> {
+    try {
+      const assignments = await this.callMoodleAPI('mod_assign_get_assignments', {
+        assignmentids: [assignmentId],
+      })
+      
+      return assignments?.courses?.[0]?.assignments?.[0] || null
+    } catch (error) {
+      console.error(`Error obteniendo detalles de la tarea ${assignmentId}:`, error)
+      return null
+    }
+  }
+
+  /**
+   * Obtiene el contenido del curso filtrado por grupo
+   * Incluye el mapeo de qué módulos/actividades corresponden a cada grupo
+   */
+  async getCourseContentsByGroup(courseId: number, groupId: number): Promise<any[]> {
+    try {
+      const allContents = await this.callMoodleAPI('core_course_get_contents', {
+        courseid: courseId,
+        options: [
+          { name: 'excludemodules', value: '0' },
+          { name: 'excludecontents', value: '0' }
+        ]
+      })
+      
+      // Filtrar módulos que pertenecen al grupo específico
+      // Esto requiere analizar la disponibilidad y restricciones de cada módulo
+      const filteredContents = []
+      
+      for (const section of allContents) {
+        const filteredSection = {
+          ...section,
+          modules: []
+        }
+        
+        if (section.modules) {
+          for (const sectionModule of section.modules) {
+            // Verificar si el módulo está disponible para el grupo
+            if (await this.isModuleAvailableForGroup(sectionModule, groupId)) {
+              filteredSection.modules.push(sectionModule)
+            }
+          }
+        }
+        
+        // Solo incluir secciones que tengan módulos para este grupo
+        if (filteredSection.modules.length > 0) {
+          filteredContents.push(filteredSection)
+        }
+      }
+      
+      return filteredContents
+    } catch (error) {
+      console.error('Error obteniendo contenido del curso por grupo:', error)
+      return []
+    }
+  }
+
+  /**
+   * Verifica si un módulo está disponible para un grupo específico
+   */
+  private async isModuleAvailableForGroup(module: any, groupId: number): Promise<boolean> {
+    // Si no hay restricciones de disponibilidad, está disponible para todos
+    if (!module.availability) {
+      return true
+    }
+    
+    try {
+      // Parsear las restricciones de disponibilidad (formato JSON)
+      const availability = JSON.parse(module.availability)
+      
+      // Buscar restricciones de grupo
+      if (availability.c && Array.isArray(availability.c)) {
+        for (const condition of availability.c) {
+          // type: 'group' indica restricción por grupo
+          if (condition.type === 'group') {
+            // Si el módulo está restringido a un grupo específico
+            if (condition.id && condition.id !== groupId) {
+              return false // No disponible para este grupo
+            }
+            if (condition.id === groupId) {
+              return true // Disponible para este grupo
+            }
+          }
+        }
+      }
+      
+      return true // Si no hay restricciones de grupo, está disponible
+    } catch (error) {
+      // Si no se pueden parsear las restricciones, asumir que está disponible
+      return true
+    }
+  }
+
+  /**
+   * Obtiene información detallada de un módulo específico
+   * Incluye recursos, archivos, y configuración completa
+   */
+  async getModuleDetails(moduleId: number, moduleType: string): Promise<any> {
+    try {
+      let details = null
+      
+      switch (moduleType) {
+        case 'assign':
+          details = await this.getAssignmentDetails(moduleId)
+          if (details) {
+            details.submissions = await this.getAssignmentSubmissions(moduleId)
+          }
+          break
+          
+        case 'forum':
+          const forums = await this.callMoodleAPI('mod_forum_get_forums_by_courses', {
+            courseids: [moduleId]
+          })
+          details = forums?.[0] || null
+          break
+          
+        case 'resource':
+        case 'url':
+        case 'page':
+        case 'book':
+          // Para recursos, obtener información del archivo o contenido
+          details = { type: moduleType, id: moduleId }
+          break
+          
+        case 'quiz':
+          // Obtener detalles del quiz
+          try {
+            const quizzes = await this.callMoodleAPI('mod_quiz_get_quizzes_by_courses', {
+              courseids: [moduleId]
+            })
+            details = quizzes?.quizzes?.[0] || null
+          } catch (error) {
+            console.log(`No se pudo obtener detalles del quiz ${moduleId}`)
+          }
+          break
+          
+        default:
+          details = { type: moduleType, id: moduleId }
+      }
+      
+      return details
+    } catch (error) {
+      console.error(`Error obteniendo detalles del módulo ${moduleId} (${moduleType}):`, error)
+      return null
+    }
+  }
+
+  /**
+   * Obtiene las modalidades/grupos de evaluación de un curso
+   * En UTEL estos grupos representan diferentes modalidades (actividades, proyectos, etc.)
+   */
+  async getCourseGroupsWithDetails(courseId: number): Promise<any[]> {
+    try {
+      const groups = await this.callMoodleAPI('core_group_get_course_groups', {
+        courseid: courseId,
+      })
+      
+      // Enriquecer cada grupo con información sobre su modalidad
+      const groupsWithDetails = []
+      for (const group of groups) {
+        const groupDetail = {
+          ...group,
+          modalityType: this.identifyModalityType(group.name),
+          memberCount: 0
+        }
+        
+        // Obtener miembros del grupo
+        try {
+          const members = await this.callMoodleAPI('core_group_get_group_members', {
+            groupids: [group.id]
+          })
+          groupDetail.memberCount = members?.[0]?.userids?.length || 0
+        } catch (error) {
+          console.log(`No se pudo obtener miembros del grupo ${group.id}`)
+        }
+        
+        groupsWithDetails.push(groupDetail)
+      }
+      
+      return groupsWithDetails
+    } catch (error) {
+      console.error('Error obteniendo grupos detallados del curso:', error)
+      return []
+    }
+  }
+
+  /**
+   * Identifica el tipo de modalidad basado en el nombre del grupo
+   */
+  private identifyModalityType(groupName: string): string {
+    const name = groupName.toLowerCase()
+    
+    if (name.includes('actividad') || name.includes('activities')) {
+      return 'activities'
+    } else if (name.includes('proyecto') || name.includes('project')) {
+      return 'project'
+    } else if (name.includes('examen') || name.includes('exam')) {
+      return 'exam'
+    } else if (name.includes('practica') || name.includes('practice')) {
+      return 'practice'
+    }
+    
+    return 'standard'
   }
 
   /**
@@ -478,6 +719,7 @@ class MoodleAPIClient {
     return {
       // Mapeo conocido de usuarios UTEL (matrículas reales de Moodle)
       'marco.arce': { id: 29791, username: 'marco.arce', email: 'marco.arce@utel.edu.mx' }, // ID real de Moodle
+      'cesar.espindola': { id: 29868, username: 'cesar.espindola', email: 'mail.paulo@gmail.com' }, // ID real de Moodle
       // Mapeo de prueba (matrículas locales)
       'MAT001': { id: 29791, username: 'marco.arce', email: 'marco.arce@utel.edu.mx' }, // Mismo usuario para testing
       'MAT002': { id: 3, username: 'profesor2', email: 'profesor2@utel.edu.mx' },
@@ -525,6 +767,103 @@ class MoodleAPIClient {
   }
 
   /**
+   * Obtiene información de un usuario por matrícula
+   */
+  async getUserInfo(matricula: string): Promise<any> {
+    const user = await this.getUserByUsername(matricula)
+    if (user) {
+      return {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        fullname: user.username
+      }
+    }
+    return null
+  }
+
+  /**
+   * Obtiene envíos de una actividad específica
+   */
+  async getActivitySubmissions(activityId: string, groupId?: string): Promise<any[]> {
+    try {
+      return await this.getAssignmentSubmissions(parseInt(activityId))
+    } catch (error) {
+      console.error('Error obteniendo envíos de actividad:', error)
+      return []
+    }
+  }
+
+
+  /**
+   * Crea un post en el foro (placeholder)
+   */
+  async createForumPost(forumId: string, subject: string, message: string): Promise<any> {
+    throw new Error('createForumPost no implementado - requiere token específico del profesor')
+  }
+
+  /**
+   * Obtiene el libro de calificaciones
+   */
+  async getGradebook(courseId: string): Promise<any> {
+    try {
+      // Placeholder - implementar según API de Moodle
+      return []
+    } catch (error) {
+      console.error('Error obteniendo libro de calificaciones:', error)
+      return []
+    }
+  }
+
+  /**
+   * Obtiene todas las tareas de un curso
+   */
+  async getCourseAssignments(courseId: number): Promise<any> {
+    try {
+      const result = await this.callMoodleAPI('mod_assign_get_assignments', {
+        courseids: [courseId]
+      })
+      
+      return result || { courses: [] }
+    } catch (error) {
+      console.error('Error obteniendo tareas del curso:', error)
+      return { courses: [] }
+    }
+  }
+
+  /**
+   * Obtiene las discusiones de un foro
+   */
+  async getForumDiscussions(forumId: number): Promise<any> {
+    try {
+      const result = await this.callMoodleAPI('mod_forum_get_forum_discussions', {
+        forumid: forumId
+      })
+      
+      return result || { discussions: [] }
+    } catch (error) {
+      console.error('Error obteniendo discusiones del foro:', error)
+      return { discussions: [] }
+    }
+  }
+
+  /**
+   * Obtiene las calificaciones del curso
+   */
+  async getCourseGrades(courseId: number): Promise<any> {
+    try {
+      const result = await this.callMoodleAPI('gradereport_user_get_grades_table', {
+        courseid: courseId
+      })
+      
+      return result || { tables: [] }
+    } catch (error) {
+      console.error('Error obteniendo calificaciones del curso:', error)
+      return { tables: [] }
+    }
+  }
+
+  /**
    * Verifica la conexión con Moodle
    */
   async testConnection(): Promise<boolean> {
@@ -544,5 +883,6 @@ class MoodleAPIClient {
   }
 }
 
-// Exportar instancia singleton
+// Exportar tanto la clase como una instancia singleton
+export { MoodleAPIClient }
 export const moodleClient = new MoodleAPIClient()
