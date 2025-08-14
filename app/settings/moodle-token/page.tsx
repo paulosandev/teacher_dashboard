@@ -199,21 +199,6 @@ export default function MoodleTokenSettings() {
               Token de API de Moodle
             </h2>
             
-            {!hasToken && (
-              <Tabs defaultValue={activeTab} className="w-full" onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="manual" className="flex items-center gap-2">
-                    <Key className="w-4 h-4" />
-                    Token Manual
-                  </TabsTrigger>
-                  <TabsTrigger value="auto" className="flex items-center gap-2">
-                    <Lock className="w-4 h-4" />
-                    Generar Automático
-                  </TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="manual" className="mt-4">
-            
             {hasToken ? (
               <div className="space-y-4">
                 <Alert className="bg-green-50 border-green-200">
@@ -233,26 +218,39 @@ export default function MoodleTokenSettings() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="token">Token de API</Label>
-                  <Input
-                    id="token"
-                    type="password"
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    placeholder="Ingresa tu token de Moodle"
-                    className="mt-1"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    El token se encriptará antes de guardarse
-                  </p>
-                </div>
-                
-                <Button onClick={saveToken} disabled={loading}>
-                  {loading ? 'Guardando...' : 'Guardar Token'}
-                </Button>
-              </div>
+              <Tabs defaultValue={activeTab} className="w-full" onValueChange={setActiveTab}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="manual" className="flex items-center gap-2">
+                    <Key className="w-4 h-4" />
+                    Token Manual
+                  </TabsTrigger>
+                  <TabsTrigger value="auto" className="flex items-center gap-2">
+                    <Lock className="w-4 h-4" />
+                    Generar Automático
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="manual" className="mt-4">
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="token">Token de API</Label>
+                      <Input
+                        id="token"
+                        type="password"
+                        value={token}
+                        onChange={(e) => setToken(e.target.value)}
+                        placeholder="Ingresa tu token de Moodle"
+                        className="mt-1"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        El token se encriptará antes de guardarse
+                      </p>
+                    </div>
+                    
+                    <Button onClick={saveToken} disabled={loading}>
+                      {loading ? 'Guardando...' : 'Guardar Token'}
+                    </Button>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="auto" className="mt-4">

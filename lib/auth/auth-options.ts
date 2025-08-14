@@ -8,50 +8,36 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: 'credentials',
       credentials: {
-        email: { 
-          label: "Email", 
-          type: "email", 
-          placeholder: "profesor@ejemplo.com" 
+        login: { 
+          label: "Email o Matrícula", 
+          type: "text", 
+          placeholder: "cesar.espindola o profesor@ejemplo.com" 
         },
         password: { 
           label: "Contraseña", 
           type: "password" 
-        },
-        matricula: { 
-          label: "Matrícula", 
-          type: "text", 
-          placeholder: "MAT001" 
         }
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error('Por favor ingrese email y contraseña')
+        if (!credentials?.login || !credentials?.password) {
+          throw new Error('Por favor ingrese login y contraseña')
         }
 
         try {
-          // Buscar usuario por email O username
+          // Buscar usuario por email, username O matrícula
           const user = await prisma.user.findFirst({
             where: {
               OR: [
-                { email: credentials.email.toLowerCase() },
-                { username: credentials.email.toLowerCase() }
+                { email: credentials.login.toLowerCase() },
+                { username: credentials.login.toLowerCase() },
+                { matricula: credentials.login.toLowerCase() }
               ]
             }
           })
 
           if (!user) {
-            console.log(`Usuario no encontrado: ${credentials.email}`)
+            console.log(`Usuario no encontrado: ${credentials.login}`)
             throw new Error('Credenciales inválidas')
-          }
-
-          // Verificar que la matrícula coincida (obligatorio)
-          if (!credentials.matricula || credentials.matricula.trim() === '') {
-            throw new Error('La matrícula es obligatoria')
-          }
-          
-          if (user.matricula !== credentials.matricula) {
-            console.log(`Matrícula incorrecta: esperada ${user.matricula}, recibida ${credentials.matricula}`)
-            throw new Error('Matrícula incorrecta')
           }
 
           // Verificar contraseña
@@ -61,8 +47,11 @@ export const authOptions: NextAuthOptions = {
           )
 
           if (!isPasswordValid) {
+            console.log(`Contraseña incorrecta para usuario: ${credentials.login}`)
             throw new Error('Contraseña incorrecta')
           }
+
+          console.log(`✅ Login exitoso para: ${user.name} (${user.matricula})`)
 
           // Retornar datos del usuario para la sesión
           return {
@@ -92,13 +81,54 @@ export const authOptions: NextAuthOptions = {
     },
     
     async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string
-        session.user.email = token.email as string
-        session.user.matricula = token.matricula as string
-        session.user.username = token.username as string
+      if (session.user && token.id) {
+        // Buscar los datos actuales del usuario en la BD para asegurar consistencia
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { 
+            id: true, 
+            email: true, 
+            matricula: true, 
+            username: true, 
+            name: true 
+          }
+        })
+
+        if (dbUser) {
+          session.user.id = dbUser.id
+          session.user.email = dbUser.email
+          session.user.matricula = dbUser.matricula
+          session.user.username = dbUser.username || ''
+          session.user.name = dbUser.name
+        } else {
+          // Si no se encuentra el usuario, usar datos del token como fallback
+          session.user.id = token.id as string
+          session.user.email = token.email as string
+          session.user.matricula = token.matricula as string
+          session.user.username = token.username as string
+        }
       }
       return session
+    },
+    
+    async redirect({ url, baseUrl }) {
+      // Si es una redirección después del login exitoso, ir a dashboard v2
+      if (url === baseUrl || url === baseUrl + '/dashboard') {
+        return baseUrl + '/dashboard/v2'
+      }
+      
+      // Si la URL ya es absoluta y está en el mismo dominio, usarla
+      if (url.startsWith(baseUrl)) {
+        return url
+      }
+      
+      // Para rutas relativas, construir URL completa
+      if (url.startsWith('/')) {
+        return baseUrl + url
+      }
+      
+      // Por defecto, ir a dashboard v2
+      return baseUrl + '/dashboard/v2'
     }
   },
   

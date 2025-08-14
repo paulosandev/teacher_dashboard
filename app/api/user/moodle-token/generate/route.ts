@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/auth-options'
-import { MoodleTokenGenerator } from '@/lib/moodle/token-generator'
+import { MoodleAuthService } from '@/lib/moodle/auth-service'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,9 +19,13 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Generar token
-    const tokenGenerator = new MoodleTokenGenerator()
-    const result = await tokenGenerator.generateToken(username, password)
+    // Usar el servicio de autenticación para generar y guardar el token
+    const authService = new MoodleAuthService()
+    const result = await authService.authenticateWithCredentials(
+      session.user.id,
+      username,
+      password
+    )
 
     if (!result.success) {
       return NextResponse.json({ 
@@ -32,7 +36,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Token generado y guardado exitosamente'
+      message: 'Token generado y guardado exitosamente',
+      tokenType: result.tokenType
     })
 
   } catch (error: any) {

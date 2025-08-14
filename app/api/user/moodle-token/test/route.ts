@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     
     // Crear cliente de Moodle con el token del usuario
     const moodleClient = new MoodleAPIClient(
-      process.env.MOODLE_URL!,
+      process.env.MOODLE_API_URL!,
       decryptedToken
     )
 

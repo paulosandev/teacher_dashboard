@@ -9,14 +9,13 @@ import { faUser, faLock, faIdCard, faSpinner, faExclamationCircle, faPencilAlt }
 export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl') || '/dashboard'
+  const callbackUrl = searchParams.get('callbackUrl') || '/dashboard/v2'
   
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    matricula: ''
+    login: '',
+    password: ''
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -26,9 +25,8 @@ export default function LoginPage() {
 
     try {
       const result = await signIn('credentials', {
-        email: formData.email,
+        login: formData.login,
         password: formData.password,
-        matricula: formData.matricula,
         redirect: false,
       })
 
@@ -101,26 +99,29 @@ export default function LoginPage() {
             
             <div className="space-y-4">
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                  Correo Electrónico
+                <label htmlFor="login" className="block text-sm font-medium text-gray-700 mb-1">
+                  Email o Matrícula
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <FontAwesomeIcon icon={faUser} className="h-5 w-5 text-gray-400" />
                   </div>
                   <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
+                    id="login"
+                    name="login"
+                    type="text"
+                    autoComplete="username"
                     required
-                    value={formData.email}
+                    value={formData.login}
                     onChange={handleChange}
                     className="appearance-none relative block w-full pl-10 pr-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary focus:z-10 sm:text-sm transition-colors duration-200"
-                    placeholder="profesor@ejemplo.com"
+                    placeholder="cesar.espindola o profesor@ejemplo.com"
                     disabled={loading}
                   />
                 </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  Puedes usar tu matrícula de Moodle, email o nombre de usuario
+                </p>
               </div>
               
               <div>
@@ -141,29 +142,6 @@ export default function LoginPage() {
                     onChange={handleChange}
                     className="appearance-none relative block w-full pl-10 pr-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary focus:z-10 sm:text-sm transition-colors duration-200"
                     placeholder="••••••••"
-                    disabled={loading}
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <label htmlFor="matricula" className="block text-sm font-medium text-gray-700 mb-1">
-                  Matrícula
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <FontAwesomeIcon icon={faIdCard} className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                    id="matricula"
-                    name="matricula"
-                    type="text"
-                    autoComplete="off"
-                    required
-                    value={formData.matricula}
-                    onChange={handleChange}
-                    className="appearance-none relative block w-full pl-10 pr-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary focus:z-10 sm:text-sm transition-colors duration-200"
-                    placeholder="Matrícula de Moodle"
                     disabled={loading}
                   />
                 </div>
@@ -193,13 +171,11 @@ export default function LoginPage() {
             <div className="mt-6 p-4 bg-primary-selected rounded-lg border border-primary-light">
               <p className="text-xs text-primary-darker font-semibold mb-2">Credenciales de prueba:</p>
               <div className="text-xs text-primary-dark space-y-1">
-                <p>📧 Email: mail.paulo@gmail.com</p>
+                <p>🔑 Login: paulo.cesar (o mail.paulo@gmail.com)</p>
                 <p>🔐 Password: admin1234</p>
-                <p>🆔 Matrícula: paulo.cesar</p>
                 <hr className="my-2 border-primary-light" />
-                <p>📧 Email: cesar.espindola@utel.edu.mx</p>
+                <p>🔑 Login: cesar.espindola (o cesar.espindola@utel.edu.mx)</p>
                 <p>🔐 Password: admin1234</p>
-                <p>🆔 Matrícula: cesar.espindola</p>
               </div>
             </div>
           )}

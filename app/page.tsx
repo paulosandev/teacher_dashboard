@@ -1,12 +1,12 @@
 import { redirect } from 'next/navigation'
-import { getSession } from '@/lib/auth/get-session'
+import { getServerSession } from 'next-auth'
 
 export default async function Home() {
-  const session = await getSession()
+  const session = await getServerSession()
   
   if (session) {
-    // Si ya está autenticado, redirigir al dashboard
-    redirect('/dashboard')
+    // Si ya está autenticado, redirigir al dashboard v2
+    redirect('/dashboard/v2')
   } else {
     // Si no está autenticado, redirigir al login
     redirect('/auth/login')

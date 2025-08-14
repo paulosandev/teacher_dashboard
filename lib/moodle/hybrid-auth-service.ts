@@ -41,46 +41,39 @@ export class HybridMoodleAuthService {
 
   /**
    * Determina qué token usar basado en el contexto de la operación
+   * PRIORIDAD: Siempre usar token del profesor si está disponible
    */
   async getOptimalToken(context: OperationContext): Promise<TokenInfo> {
-    // Operaciones que SIEMPRE requieren token de profesor específico
+    // Primero, intentar obtener el token del profesor
+    try {
+      const professorToken = await this.getProfessorToken(context.userMatricula)
+      
+      // Si tenemos token del profesor válido, usarlo SIEMPRE
+      if (professorToken.type === 'professor' && professorToken.token) {
+        console.log(`🎯 Usando token del profesor para ${context.operation}`)
+        return professorToken
+      }
+    } catch (error) {
+      console.log(`⚠️ No se pudo obtener token del profesor, usando fallback`)
+    }
+
+    // Operaciones que ABSOLUTAMENTE requieren token de profesor
     const professorOnlyOperations = [
       'create_assignment',
-      'grade_submission',
+      'grade_submission', 
       'send_message',
       'create_forum_post',
       'edit_course_content',
       'manage_enrollments'
     ]
 
-    // Operaciones que pueden usar token de administrador
-    const adminCompatibleOperations = [
-      'get_courses',
-      'get_course_contents',
-      'get_forum_discussions',
-      'get_assignments',
-      'get_submissions',
-      'get_gradebook',
-      'get_user_info',
-      'get_groups',
-      'get_activities'
-    ]
-
-    // Si la operación requiere permisos específicos del profesor
-    if (professorOnlyOperations.includes(context.operation) || 
-        context.requiresSpecificPermissions) {
-      return await this.getProfessorToken(context.userMatricula)
+    // Si es una operación que requiere profesor y no tenemos token, error
+    if (professorOnlyOperations.includes(context.operation)) {
+      throw new Error(`Operación ${context.operation} requiere token del profesor configurado`)
     }
 
-    // Para operaciones de lectura, usar token de administrador
-    if (adminCompatibleOperations.includes(context.operation)) {
-      return {
-        token: process.env.MOODLE_TOKEN!,
-        type: 'admin'
-      }
-    }
-
-    // Por defecto, intentar con admin primero
+    // Fallback: usar token administrativo para operaciones de lectura
+    console.log(`📖 Usando token administrativo como fallback para ${context.operation}`)
     return {
       token: process.env.MOODLE_TOKEN!,
       type: 'admin'

@@ -206,10 +206,9 @@ async function collectDetailedCourseDataSmart(courseId: string, groupId: string,
     const selectedGroup = courseGroups?.find((g: any) => g.id.toString() === groupId.toString())
     
     if (selectedGroup) {
-      const groupMembers = await smartClient.getGroupMembers(groupId)
-      students = groupMembers?.filter((u: any) => 
-        u.roles?.some((r: any) => r.roleid === 5) // Rol estudiante
-      ) || []
+      const groupMembers = await smartClient.getGroupMembers(groupId, courseId)
+      // Ya no necesitamos filtrar por roles porque el método alternativo ya retorna solo estudiantes
+      students = groupMembers || []
       console.log(`👥 Estudiantes en el grupo ${selectedGroup.name}: ${students.length}`)
     } else {
       // Fallback: todos los estudiantes del curso

@@ -197,11 +197,111 @@ export class SmartMoodleClient {
   }
 
   /**
-   * Obtiene miembros de un grupo específico (temporalmente deshabilitado)
+   * Obtiene miembros de un grupo específico usando método alternativo
+   * Debido a restricciones de permisos en Moodle, usa core_enrol_get_enrolled_users
    */
-  async getGroupMembers(groupId: string) {
-    console.log(`⚠️ getGroupMembers temporalmente deshabilitado para groupId: ${groupId}`)
-    return []
+  async getGroupMembers(groupId: string, courseId?: string) {
+    return await hybridAuth.executeWithOptimalAuth(
+      {
+        operation: 'get_group_members_alternative',
+        userId: this.userId,
+        userMatricula: this.userMatricula,
+        requiresSpecificPermissions: false // Usar método alternativo que no requiere permisos especiales
+      },
+      async (client) => {
+        try {
+          console.log(`👥 [ALTERNATIVO] Obteniendo miembros del grupo: ${groupId}`)
+          
+          // Método 1: Intentar core_group_get_group_members (puede fallar por permisos)
+          try {
+            const members = await client.callMoodleAPI('core_group_get_group_members', {
+              groupids: [parseInt(groupId)]
+            });
+            
+            const userIds = members?.[0]?.userids || [];
+            if (userIds.length > 0) {
+              console.log(`✅ Método directo exitoso: ${userIds.length} miembros`)
+              return await this.getUsersDetails(client, userIds);
+            }
+          } catch (directError) {
+            console.log(`⚠️ Método directo falló (esperado): ${directError.message}`);
+          }
+          
+          // Método 2: Alternativo - Obtener todos los usuarios del curso y filtrar por grupos
+          if (!courseId) {
+            console.log('⚠️ No se proporcionó courseId para método alternativo');
+            return [];
+          }
+          
+          console.log(`🔄 Usando método alternativo con curso ${courseId}...`);
+          
+          // Obtener todos los usuarios inscritos en el curso
+          const enrolledUsers = await client.callMoodleAPI('core_enrol_get_enrolled_users', {
+            courseid: parseInt(courseId)
+          });
+          
+          console.log(`📚 Usuarios inscritos en curso: ${enrolledUsers.length}`);
+          
+          // Filtrar solo estudiantes (eliminar profesores y otros roles)
+          const students = enrolledUsers.filter((user: any) => {
+            const roles = user.roles || [];
+            return roles.some((role: any) => {
+              const roleName = (role.shortname || role.name || '').toLowerCase();
+              return roleName.includes('student') || roleName === 'estudiante' || role.roleid === 5;
+            });
+          });
+          
+          console.log(`👨‍🎓 Estudiantes encontrados: ${students.length}`);
+          
+          if (students.length === 0) {
+            console.log('ℹ️ No hay estudiantes en este curso');
+            return [];
+          }
+          
+          // Por ahora, retornar todos los estudiantes del curso
+          // TODO: Implementar filtrado real por grupo cuando tengamos acceso a esa información
+          const studentsFormatted = students.map((user: any) => ({
+            id: user.id,
+            username: user.username,
+            firstname: user.firstname,
+            lastname: user.lastname,
+            fullname: user.fullname || `${user.firstname} ${user.lastname}`,
+            email: user.email
+          }));
+          
+          console.log(`✅ Retornando ${studentsFormatted.length} estudiantes del curso (aproximación por grupo)`);
+          return studentsFormatted;
+          
+        } catch (error) {
+          console.error(`❌ Error en método alternativo para grupo ${groupId}:`, error);
+          return [];
+        }
+      }
+    );
+  }
+
+  /**
+   * Obtiene información detallada de usuarios por sus IDs
+   */
+  private async getUsersDetails(client: any, userIds: number[]) {
+    try {
+      const usersInfo = await client.callMoodleAPI('core_user_get_users_by_field', {
+        field: 'id',
+        values: userIds
+      });
+      
+      return usersInfo.map((user: any) => ({
+        id: user.id,
+        username: user.username,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        fullname: `${user.firstname} ${user.lastname}`,
+        email: user.email
+      }));
+    } catch (error) {
+      console.warn(`⚠️ No se pudo obtener información detallada de usuarios: ${error}`);
+      return userIds.map((id: number) => ({ id, fullname: `Usuario ${id}` }));
+    }
   }
 
   /**

@@ -767,19 +767,42 @@ class MoodleAPIClient {
   }
 
   /**
-   * Obtiene información de un usuario por matrícula
+   * Obtiene información del usuario actual usando el token configurado
+   * Si no se proporciona matrícula, obtiene la info del usuario dueño del token
    */
-  async getUserInfo(matricula: string): Promise<any> {
-    const user = await this.getUserByUsername(matricula)
-    if (user) {
-      return {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        fullname: user.username
+  async getUserInfo(matricula?: string): Promise<any> {
+    // Si se proporciona matrícula, buscar ese usuario específico
+    if (matricula) {
+      const user = await this.getUserByUsername(matricula)
+      if (user) {
+        return {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          fullname: user.username
+        }
       }
+      return null
     }
-    return null
+    
+    // Si no se proporciona matrícula, obtener info del usuario del token actual
+    try {
+      const siteInfo = await this.callMoodleAPI('core_webservice_get_site_info')
+      
+      if (siteInfo && siteInfo.userid) {
+        return {
+          id: siteInfo.userid,
+          username: siteInfo.username,
+          email: siteInfo.useremail || '',
+          fullname: siteInfo.fullname || siteInfo.username
+        }
+      }
+      
+      return null
+    } catch (error) {
+      console.error('Error obteniendo información del usuario del token:', error)
+      return null
+    }
   }
 
   /**

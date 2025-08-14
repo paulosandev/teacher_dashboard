@@ -33,10 +33,16 @@ export class MoodleAuthService {
    * El profesor usa sus credenciales de Moodle y obtenemos el token automáticamente
    */
   async authenticateWithCredentials(
+    userId: string, // ID del usuario local en nuestra BD
     username: string, 
-    password: string,
-    userId: string // ID del usuario local en nuestra BD
-  ): Promise<{ success: boolean; message: string; token?: string }> {
+    password: string
+  ): Promise<{ 
+    success: boolean; 
+    error?: string;
+    token?: string;
+    userId?: number;
+    tokenType?: string;
+  }> {
     try {
       console.log(`🔐 Autenticando usuario ${username} en Moodle...`)
       
@@ -63,7 +69,7 @@ export class MoodleAuthService {
         console.error('❌ Error de autenticación:', data.error)
         return {
           success: false,
-          message: data.error || 'Credenciales inválidas'
+          error: data.error || 'Credenciales inválidas'
         }
       }
 
@@ -92,15 +98,16 @@ export class MoodleAuthService {
 
       return {
         success: true,
-        message: `Token configurado automáticamente para ${data.fullname}`,
-        token: data.token
+        token: data.token,
+        userId: data.userid,
+        tokenType: 'user'
       }
 
     } catch (error: any) {
       console.error('❌ Error en autenticación con Moodle:', error)
       return {
         success: false,
-        message: error.message || 'Error al conectar con Moodle'
+        error: error.message || 'Error al conectar con Moodle'
       }
     }
   }

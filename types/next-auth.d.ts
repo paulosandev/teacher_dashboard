@@ -5,7 +5,7 @@ declare module 'next-auth' {
     id: string
     email: string
     name?: string | null
-    matricula?: string
+    matricula: string
     username?: string
   }
 
@@ -14,7 +14,7 @@ declare module 'next-auth' {
       id: string
       email: string
       name?: string | null
-      matricula?: string
+      matricula: string
       username?: string
     }
   }
@@ -24,7 +24,7 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id: string
     email: string
-    matricula?: string
+    matricula: string
     username?: string
   }
 }
