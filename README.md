@@ -29,7 +29,7 @@ Dashboard académico moderno que integra **Moodle** con **OpenAI GPT-4** para ge
 - **📊 Métricas de Actividades**: Seguimiento de 50+ actividades evaluables
 - **🤖 IA Generativa**: Análisis profundo con OpenAI GPT-4
 - **📄 Reportes Automáticos**: Generación de PDFs con métricas técnicas detalladas
-- **🎨 UI Moderna**: Interface intuitiva con Tailwind CSS y componentes Radix UI
+- **🎨 UI Moderna**: Interface intuitiva con Tailwind CSS, dropdown de perfil y layout optimizado
 
 ## 📋 Requisitos Previos
 

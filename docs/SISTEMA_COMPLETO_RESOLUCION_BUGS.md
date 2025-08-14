@@ -180,8 +180,10 @@ async getGroupMembers(groupId: string, courseId?: string) {
 - `app/api/analysis/generate-intelligent/route.ts` - Endpoint principal
 - `app/auth/login/page.tsx` - Redirect a dashboard v2
 
-### Nuevos Componentes:
+### Componentes UI Mejorados:
 - `components/ui/tabs.tsx` - Componente UI para dashboard
+- `components/dashboard/header.tsx` - Header con dropdown de perfil y navegación mejorada
+- `components/dashboard/intelligent-dashboard-content.tsx` - Layout optimizado para análisis
 
 ---
 

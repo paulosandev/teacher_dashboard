@@ -1,8 +1,9 @@
 'use client'
 
+import { useState, useRef, useEffect } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPencilAlt, faBell, faGear, faKey } from '@fortawesome/free-solid-svg-icons'
-import LogoutButton from '@/components/ui/logout-button'
+import { faPencilAlt, faBell, faGear, faKey, faSignOutAlt, faChevronDown } from '@fortawesome/free-solid-svg-icons'
+import { signOut } from 'next-auth/react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
@@ -18,6 +19,26 @@ export default function DashboardHeader({
   notificationCount = 0 
 }: HeaderProps) {
   const pathname = usePathname()
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Cerrar dropdown cuando se hace click fuera
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsProfileDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
+
+  const handleLogout = () => {
+    signOut({ callbackUrl: '/auth/login' })
+  }
   
   return (
     <header className="pt-3 pb-6">
@@ -26,7 +47,7 @@ export default function DashboardHeader({
           {/* Logo, título y navegación */}
           <div className="flex items-center space-x-6">
             <div className="flex items-center space-x-3">
-              <Link href="/dashboard" className="flex items-center space-x-3">
+              <Link href="/dashboard/v2" className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-full flex items-center justify-center">
                   <svg width="44" height="40" viewBox="0 0 44 40" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
@@ -43,8 +64,8 @@ export default function DashboardHeader({
                     />
                   </svg>
                 </div>
-                <span className="bg-primary-light text-green-800 px-4 py-3 rounded-md text-sm font-medium flex items-center gap-2">
-                  <FontAwesomeIcon icon={faPencilAlt} className="w-4 h-4 text-icon-dark" />
+                <span className="bg-primary-light text-green-900 px-4 py-3 rounded-md text-sm font-medium flex items-center gap-2">
+                  <FontAwesomeIcon icon={faPencilAlt} className="w-3 h-3 text-icon-dark" />
                   Portal docente
                 </span>
               </Link>
@@ -52,38 +73,7 @@ export default function DashboardHeader({
             
             {/* Navegación */}
             <nav className="flex items-center space-x-1">
-              <Link 
-                href="/dashboard" 
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  pathname === '/dashboard' 
-                    ? 'text-primary-darker bg-primary-light/50' 
-                    : 'text-gray-600 hover:text-primary-darker hover:bg-gray-100'
-                }`}
-              >
-                Dashboard
-              </Link>
-              <Link 
-                href="/settings/moodle-token" 
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-                  pathname === '/settings/moodle-token' 
-                    ? 'text-primary-darker bg-primary-light/50' 
-                    : 'text-gray-600 hover:text-primary-darker hover:bg-gray-100'
-                }`}
-              >
-                <FontAwesomeIcon icon={faKey} className="w-4 h-4" />
-                Token Moodle
-              </Link>
-              <Link 
-                href="/dashboard/settings" 
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
-                  pathname === '/dashboard/settings' 
-                    ? 'text-primary-darker bg-primary-light/50' 
-                    : 'text-gray-600 hover:text-primary-darker hover:bg-gray-100'
-                }`}
-              >
-                <FontAwesomeIcon icon={faGear} className="w-4 h-4" />
-                Configuración
-              </Link>
+              {/* Los links se movieron al dropdown del perfil */}
             </nav>
           </div>
 
@@ -98,24 +88,72 @@ export default function DashboardHeader({
               )}
             </div>
             
-            <div className="flex items-center gap-3">
-              {userImage ? (
-                <div className="w-10 h-10 rounded-md overflow-hidden cursor-pointer">
-                  <img 
-                    src={userImage} 
-                    alt={userName} 
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ) : (
-                <div className="w-10 h-10 rounded-md bg-primary-light flex items-center justify-center cursor-pointer">
-                  <span className="text-primary-darker font-semibold">
-                    {userName.charAt(0).toUpperCase()}
-                  </span>
+            {/* Perfil con dropdown */}
+            <div className="relative" ref={dropdownRef}>
+              <div 
+                className="flex items-center gap-3 cursor-pointer"
+                onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+              >
+                {userImage ? (
+                  <div className="w-10 h-10 rounded-md overflow-hidden">
+                    <img 
+                      src={userImage} 
+                      alt={userName} 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-10 h-10 rounded-md bg-primary-light flex items-center justify-center">
+                    <span className="text-primary-darker font-semibold">
+                      {userName.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Dropdown menu */}
+              {isProfileDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                  <div className="py-1">
+                    <div className="px-4 py-2 text-sm text-gray-700 border-b border-gray-100">
+                      <div className="font-medium">{userName}</div>
+                      <div className="text-gray-500">Profesor</div>
+                    </div>
+                    <Link
+                      href="/settings/moodle-token"
+                      className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors ${
+                        pathname === '/settings/moodle-token' 
+                          ? 'text-primary-darker bg-primary-light/50' 
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                      onClick={() => setIsProfileDropdownOpen(false)}
+                    >
+                      <FontAwesomeIcon icon={faKey} className="w-4 h-4" />
+                      Token Moodle
+                    </Link>
+                    <Link
+                      href="/dashboard/settings"
+                      className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors ${
+                        pathname === '/dashboard/settings' 
+                          ? 'text-primary-darker bg-primary-light/50' 
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                      onClick={() => setIsProfileDropdownOpen(false)}
+                    >
+                      <FontAwesomeIcon icon={faGear} className="w-4 h-4" />
+                      Configuración
+                    </Link>
+                    <div className="border-t border-gray-100 my-1"></div>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 transition-colors"
+                    >
+                      <FontAwesomeIcon icon={faSignOutAlt} className="w-4 h-4" />
+                      Cerrar sesión
+                    </button>
+                  </div>
                 </div>
               )}
-              
-              <LogoutButton />
             </div>
           </div>
         </div>
