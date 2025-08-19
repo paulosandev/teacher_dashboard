@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/auth-options'
-import { createSmartMoodleClient } from '@/lib/moodle/smart-client'
+import { createSessionMoodleClient } from '@/lib/moodle/session-client'
 import { prisma } from '@/lib/db/prisma'
 import OpenAI from 'openai'
 import fs from 'fs'
@@ -12,8 +12,8 @@ interface AnalysisDetails {
   timestamp: string
   courseId: string
   groupId: string
-  userId: string
-  userMatricula: string
+  analyzedBy: string
+  analyzedByName: string
   prompt: string
   model: string
   response: any
@@ -30,15 +30,15 @@ interface AnalysisDetails {
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
-  const requestId = `req_intelligent_${startTime}`
+  const requestId = `req_course_analysis_${startTime}`
   
   const analysisDetails: AnalysisDetails = {
     requestId,
     timestamp: new Date().toISOString(),
     courseId: '',
     groupId: '',
-    userId: '',
-    userMatricula: '',
+    analyzedBy: '',
+    analyzedByName: '',
     prompt: '',
     model: '',
     response: null,
@@ -51,45 +51,52 @@ export async function POST(request: NextRequest) {
   try {
     // Verificar autenticación
     const session = await getServerSession(authOptions)
-    if (!session?.user) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+    if (!session?.user?.moodleToken) {
+      return NextResponse.json({ error: 'No autorizado - sesión requerida' }, { status: 401 })
     }
 
-    const { courseId, groupId, userMatricula } = await request.json()
-
-    if (!courseId || !groupId || !userMatricula) {
+    // Verificar expiración del token
+    if (session.user.tokenExpiry && new Date() > new Date(session.user.tokenExpiry)) {
       return NextResponse.json({ 
-        error: 'courseId, groupId y userMatricula son requeridos' 
+        error: 'Token expirado - por favor inicie sesión nuevamente' 
+      }, { status: 401 })
+    }
+
+    const { courseId, groupId } = await request.json()
+
+    if (!courseId || !groupId) {
+      return NextResponse.json({ 
+        error: 'courseId y groupId son requeridos' 
       }, { status: 400 })
     }
 
     // Llenar datos iniciales del análisis
     analysisDetails.courseId = courseId
     analysisDetails.groupId = groupId  
-    analysisDetails.userId = session.user.id
-    analysisDetails.userMatricula = userMatricula
+    analysisDetails.analyzedBy = session.user.matricula
+    analysisDetails.analyzedByName = session.user.name || ''
 
-    console.log(`🤖 [${requestId}] Iniciando análisis inteligente profundo...`)
-    console.log(`   Usuario: ${session.user.name} (${userMatricula})`)
+    console.log(`🤖 [${requestId}] Iniciando análisis course-based...`)
+    console.log(`   Profesor: ${session.user.name} (${session.user.matricula})`)
     console.log(`   Curso: ${courseId}`)
     console.log(`   Grupo: ${groupId}`)
 
-    // Crear cliente inteligente
-    const smartClient = createSmartMoodleClient(session.user.id, userMatricula)
+    // Crear cliente basado en sesión
+    const sessionClient = createSessionMoodleClient(true) // server-side
 
     // 1. Verificar conexión
-    const isConnected = await smartClient.testConnection()
+    const isConnected = await sessionClient.testConnection()
     if (!isConnected) {
-      analysisDetails.error = 'No se pudo conectar con Moodle usando autenticación híbrida'
+      analysisDetails.error = 'No se pudo conectar con Moodle'
       await saveAnalysisDetailsToPDF(analysisDetails)
       return NextResponse.json({
-        error: 'No se pudo conectar con Moodle usando autenticación híbrida'
+        error: 'No se pudo conectar con Moodle'
       }, { status: 503 })
     }
 
     // 2. Verificar contenido del curso
     console.log(`🔍 [${requestId}] Verificando contenido del curso...`)
-    const courseContent = await checkCourseContent(courseId, smartClient)
+    const courseContent = await checkCourseContent(courseId, sessionClient)
     
     if (!courseContent.hasContent) {
       analysisDetails.error = courseContent.reason
@@ -101,16 +108,23 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // 3. Recolectar datos detallados usando el smart client
-    console.log(`🔄 [${requestId}] Recolectando datos detallados del curso y grupo...`)
-    const analysisData = await collectDetailedCourseDataSmart(courseId, groupId, smartClient, userMatricula)
+    // 3. Recolectar datos detallados del curso
+    console.log(`🔄 [${requestId}] Recolectando datos del curso...`)
+    const analysisData = await collectCourseAnalysisData(courseId, groupId, sessionClient, session.user.matricula)
 
     // 4. Generar análisis con OpenAI
     console.log(`🤖 [${requestId}] Generando análisis con OpenAI...`)
     const aiAnalysisResult = await generateAIAnalysisWithDetails(analysisData, courseId, analysisDetails)
     
-    // 5. Guardar análisis en base de datos
-    const savedAnalysis = await saveAnalysisToDatabase(courseId, groupId, aiAnalysisResult, session.user.id, analysisData)
+    // 5. Guardar análisis en base de datos (course-based)
+    const savedAnalysis = await saveCourseAnalysisToDatabase(
+      courseId, 
+      groupId, 
+      aiAnalysisResult, 
+      session.user.matricula,
+      session.user.name || '',
+      analysisData
+    )
 
     // 6. Finalizar detalles del análisis
     analysisDetails.processingTime = Date.now() - startTime
@@ -119,7 +133,7 @@ export async function POST(request: NextRequest) {
     // 7. Generar PDF con todos los detalles
     const pdfPath = await saveAnalysisDetailsToPDF(analysisDetails)
 
-    console.log(`✅ [${requestId}] Análisis inteligente completado en ${analysisDetails.processingTime}ms`)
+    console.log(`✅ [${requestId}] Análisis course-based completado en ${analysisDetails.processingTime}ms`)
     console.log(`📄 [${requestId}] PDF generado: ${pdfPath}`)
 
     return NextResponse.json({
@@ -134,28 +148,28 @@ export async function POST(request: NextRequest) {
         pdfGenerated: true,
         pdfPath
       },
-      message: '🎉 Análisis inteligente generado exitosamente con detalles técnicos'
+      message: '🎉 Análisis course-based generado exitosamente'
     })
 
   } catch (error: any) {
-    console.error(`❌ [${requestId}] Error en análisis inteligente:`, error)
+    console.error(`❌ [${requestId}] Error en análisis course-based:`, error)
     
     analysisDetails.error = error instanceof Error ? error.message : 'Error desconocido'
     analysisDetails.processingTime = Date.now() - startTime
     await saveAnalysisDetailsToPDF(analysisDetails)
     
     return NextResponse.json({
-      error: 'Error al generar análisis inteligente',
+      error: 'Error al generar análisis course-based',
       details: error instanceof Error ? error.message : 'Error desconocido',
       requestId
     }, { status: 500 })
   }
 }
 
-async function checkCourseContent(courseId: string, smartClient: any) {
+async function checkCourseContent(courseId: string, sessionClient: any) {
   try {
-    const forums = await smartClient.getCourseForums(courseId)
-    const courseContents = await smartClient.getCourseContents(courseId)
+    const forums = await sessionClient.getCourseForums(courseId)
+    const courseContents = await sessionClient.getCourseContents(courseId)
     
     const activitiesCount = courseContents.reduce((acc: number, section: any) => {
       return acc + (section.modules?.length || 0)
@@ -191,37 +205,24 @@ async function checkCourseContent(courseId: string, smartClient: any) {
   }
 }
 
-async function collectDetailedCourseDataSmart(courseId: string, groupId: string, smartClient: any, userMatricula: string) {
-  console.log('🔍 Iniciando recolección de datos profunda del curso:', courseId, 'Grupo/Modalidad:', groupId)
-  console.log('📤 PARÁMETROS DE ENTRADA - ANÁLISIS INTELIGENTE:')
+async function collectCourseAnalysisData(courseId: string, groupId: string, sessionClient: any, userMatricula: string) {
+  console.log('🔍 Iniciando recolección de datos del curso:', courseId, 'Grupo:', groupId)
+  console.log('📤 PARÁMETROS DE ENTRADA:')
   console.log(`   🏫 CourseId: ${courseId}`)
-  console.log(`   👥 GroupId/Modalidad: ${groupId}`)
+  console.log(`   👥 GroupId: ${groupId}`)
   console.log(`   🔐 Usuario: ${userMatricula}`)
   
-  const courseContents = await smartClient.getCourseContents(courseId)
+  const courseContents = await sessionClient.getCourseContents(courseId)
   const currentDate = new Date()
   
   console.log(`📋 Secciones disponibles: ${courseContents.length}`)
   
-  // Obtener estudiantes matriculados en el curso
+  // Obtener estudiantes del curso/grupo
   let students = []
   try {
-    const courseGroups = await smartClient.getCourseGroups(courseId)
-    const selectedGroup = courseGroups?.find((g: any) => g.id.toString() === groupId.toString())
-    
-    if (selectedGroup) {
-      const groupMembers = await smartClient.getGroupMembers(groupId, courseId)
-      // Ya no necesitamos filtrar por roles porque el método alternativo ya retorna solo estudiantes
-      students = groupMembers || []
-      console.log(`👥 Estudiantes en el grupo ${selectedGroup.name}: ${students.length}`)
-    } else {
-      // Fallback: todos los estudiantes del curso
-      const allUsers = await smartClient.getEnrolledUsers(courseId)
-      students = allUsers?.filter((u: any) => 
-        u.roles?.some((r: any) => r.roleid === 5) // Rol estudiante
-      ) || []
-      console.log(`👥 Estudiantes matriculados en el curso: ${students.length}`)
-    }
+    const members = await sessionClient.getGroupMembers(groupId, courseId)
+    students = members || []
+    console.log(`👥 Estudiantes encontrados: ${students.length}`)
   } catch (error) {
     console.log('⚠️ No se pudo obtener lista de estudiantes:', error)
   }
@@ -233,7 +234,7 @@ async function collectDetailedCourseDataSmart(courseId: string, groupId: string,
       analysisDate: currentDate.toISOString(),
       totalStudents: students.length,
       groupId: groupId,
-      userMatricula
+      analyzedBy: userMatricula
     },
     weeklyStructure: {
       totalSections: courseContents.length,
@@ -259,7 +260,6 @@ async function collectDetailedCourseDataSmart(courseId: string, groupId: string,
   // Análisis de estructura semanal
   console.log('📅 Analizando estructura semanal del curso...')
   
-  // Calcular fechas aproximadas (asumiendo que el curso comenzó hace 4 meses)
   const courseStartDate = new Date()
   courseStartDate.setMonth(courseStartDate.getMonth() - 4)
   
@@ -308,178 +308,53 @@ async function collectDetailedCourseDataSmart(courseId: string, groupId: string,
   console.log(`📊 Secciones activas: ${analysisData.weeklyStructure.activeSections.length}`)
   console.log(`📊 Secciones completadas: ${analysisData.weeklyStructure.completedSections.length}`)
   
-  // Análisis de módulos en secciones activas y recientes
-  const sectionsToAnalyze = [
-    ...analysisData.weeklyStructure.activeSections,
-    ...analysisData.weeklyStructure.completedSections.slice(-2) // Últimas 2 semanas completadas
-  ]
-  
-  for (const section of sectionsToAnalyze) {
-    console.log(`\n📅 Analizando sección: ${section.name}`)
+  // Analizar foros del curso
+  try {
+    const forums = await sessionClient.getCourseForums(courseId)
+    analysisData.overallMetrics.totalForums = forums?.length || 0
     
-    for (const sectionModule of section.modules) {
-      try {
-        // Analizar FOROS
-        if (sectionModule.type === 'forum') {
-          console.log(`   💬 Analizando foro: ${sectionModule.name}`)
-          
-          const discussions = await smartClient.getForumDiscussions(sectionModule.id, groupId)
+    if (forums && forums.length > 0) {
+      for (const forum of forums.slice(0, 3)) {
+        try {
+          console.log(`📤 PROCESANDO FORO: ${forum.name} (ID: ${forum.id})`)
+          const discussions = await sessionClient.getForumDiscussions(forum.id)
           analysisData.overallMetrics.totalDiscussions += discussions?.length || 0
-          analysisData.overallMetrics.totalForums++
           
           const forumAnalysis: any = {
-            forumId: sectionModule.id,
-            forumName: sectionModule.name,
-            sectionName: section.name,
+            forumId: forum.id,
+            forumName: forum.name,
             discussionCount: discussions?.length || 0,
             totalPosts: 0,
-            uniqueParticipants: new Set(),
-            discussionDetails: []
+            uniqueParticipants: new Set()
           }
           
-          // Analizar discusiones (limitadas para rendimiento)
-          if (discussions && discussions.length > 0) {
-            for (const discussion of discussions.slice(0, 5)) {
-              try {
-                const posts = await smartClient.getDiscussionPosts(discussion.id)
-                
-                let totalWordCount = 0
-                const discussionParticipants = new Set()
-                
-                for (const post of posts || []) {
-                  if (post.userid) {
-                    const studentInfo = students.find((s: any) => s.id === post.userid)
-                    if (studentInfo) {
-                      discussionParticipants.add(post.userid)
-                      forumAnalysis.uniqueParticipants.add(post.userid)
-                      analysisData.studentParticipation.activeStudents.add(post.userid)
-                    }
-                  }
-                  
-                  const wordCount = (post.message || '').split(' ').length
-                  totalWordCount += wordCount
-                }
-                
-                forumAnalysis.totalPosts += posts?.length || 0
-                analysisData.overallMetrics.totalPosts += posts?.length || 0
-                
-                forumAnalysis.discussionDetails.push({
-                  discussionId: discussion.id,
-                  name: discussion.name,
-                  totalPosts: posts?.length || 0,
-                  uniqueParticipants: discussionParticipants.size,
-                  averageWordCount: posts && posts.length > 0 ? Math.round(totalWordCount / posts.length) : 0,
-                  hasRecentActivity: (currentDate.getTime() - discussion.timemodified * 1000) < (7 * 24 * 60 * 60 * 1000)
-                })
-                
-              } catch (error: any) {
-                console.log(`     ⚠️ No se pudo obtener posts de la discusión: ${discussion.name}`, error.message)
-                
-                forumAnalysis.discussionDetails.push({
-                  discussionId: discussion.id,
-                  name: discussion.name,
-                  totalPosts: 0,
-                  uniqueParticipants: 0,
-                  averageWordCount: 0,
-                  hasRecentActivity: (currentDate.getTime() - discussion.timemodified * 1000) < (7 * 24 * 60 * 60 * 1000),
-                  hasError: true
-                })
-              }
-            }
-          }
-          
+          console.log(`   📊 Discusiones encontradas: ${discussions?.length || 0}`)
           analysisData.detailedForumAnalysis.push(forumAnalysis)
+        } catch (error) {
+          console.log(`⚠️ Error analizando foro ${forum.id}:`, error)
         }
-        
-        // Analizar TAREAS
-        else if (sectionModule.type === 'assign') {
-          console.log(`   📝 Analizando tarea: ${sectionModule.name}`)
-          
-          let submissions: any = { submissions: [] }
-          let hasPermissionError = false
-          
-          try {
-            submissions = await smartClient.getAssignmentSubmissions(sectionModule.id, groupId)
-          } catch (error: any) {
-            console.log(`     ⚠️ Sin permisos para ver entregas de: ${sectionModule.name}`, error.message)
-            hasPermissionError = true
-          }
-          
-          const assignmentAnalysis: any = {
-            assignmentId: sectionModule.id,
-            assignmentName: sectionModule.name,
-            sectionName: section.name,
-            week: section.sectionNumber,
-            isCurrentWeek: section.isCurrentWeek,
-            visible: sectionModule.visible,
-            hasPermissionError,
-            submissionStats: {
-              totalSubmissions: submissions.submissions?.length || 0,
-              studentsSubmitted: new Set()
-            }
-          }
-          
-          // Si tenemos permisos, procesar las entregas
-          if (submissions.submissions && !hasPermissionError) {
-            for (const submission of submissions.submissions) {
-              if (submission.userid) {
-                assignmentAnalysis.submissionStats.studentsSubmitted.add(submission.userid)
-                analysisData.studentParticipation.activeStudents.add(submission.userid)
-              }
-            }
-          }
-          
-          // Marcar tareas especiales de modalidad
-          if (sectionModule.name.toLowerCase().includes('modalidad')) {
-            console.log(`     🎯 Tarea de modalidad detectada: ${sectionModule.name}`)
-            assignmentAnalysis.isModalityAssignment = true
-          }
-          
-          analysisData.overallMetrics.totalAssignments++
-          analysisData.detailedAssignmentAnalysis.push(assignmentAnalysis)
-        }
-        
-        // Contar RECURSOS
-        else if (['resource', 'url', 'page', 'book'].includes(sectionModule.type)) {
-          analysisData.overallMetrics.totalResources++
-        }
-        
-      } catch (error) {
-        console.log(`     ❌ Error analizando módulo ${sectionModule.name}:`, error)
       }
     }
+  } catch (error) {
+    console.log('⚠️ Error obteniendo foros:', error)
   }
   
-  // Identificar estudiantes inactivos
+  // Calcular estudiantes activos vs inactivos
   const activeStudentIds = Array.from(analysisData.studentParticipation.activeStudents)
   for (const student of students) {
     if (!activeStudentIds.includes(student.id)) {
       analysisData.studentParticipation.inactiveStudents.push({
         id: student.id,
         name: `${student.firstname} ${student.lastname}`,
-        email: student.email,
-        lastAccess: student.lastaccess
+        email: student.email
       })
     }
   }
   
-  // Estadísticas finales
-  const assignmentsWithPermissionErrors = analysisData.detailedAssignmentAnalysis.filter(
-    (a: any) => a.hasPermissionError
-  ).length
-  
-  const modalityAssignments = analysisData.detailedAssignmentAnalysis.filter(
-    (a: any) => a.isModalityAssignment
-  ).length
-  
   console.log(`\n📊 RESUMEN FINAL:`)
-  console.log(`   - Estudiantes activos: ${activeStudentIds.length}/${students.length}`)
-  console.log(`   - Estudiantes inactivos: ${analysisData.studentParticipation.inactiveStudents.length}`)
-  console.log(`   - Total discusiones: ${analysisData.overallMetrics.totalDiscussions}`)
-  console.log(`   - Total posts: ${analysisData.overallMetrics.totalPosts}`)
-  console.log(`   - Total tareas: ${analysisData.overallMetrics.totalAssignments}`)
-  console.log(`   - Tareas de modalidad: ${modalityAssignments}`)
-  console.log(`   - Tareas sin permisos: ${assignmentsWithPermissionErrors}`)
+  console.log(`   - Estudiantes analizados: ${students.length}`)
+  console.log(`   - Foros: ${analysisData.overallMetrics.totalForums}`)
+  console.log(`   - Discusiones: ${analysisData.overallMetrics.totalDiscussions}`)
   
   return analysisData
 }
@@ -491,31 +366,28 @@ async function generateAIAnalysisWithDetails(analysisData: any, courseId: string
   
   const courseInfo = analysisData.courseInfo
   const weeklyStructure = analysisData.weeklyStructure
-  const forumAnalysis = analysisData.detailedForumAnalysis
-  const assignmentAnalysis = analysisData.detailedAssignmentAnalysis
-  const studentParticipation = analysisData.studentParticipation
   const overallMetrics = analysisData.overallMetrics
+  const studentParticipation = analysisData.studentParticipation
   
   const activeStudentsCount = Array.from(studentParticipation.activeStudents).length
   const inactiveStudentsCount = studentParticipation.inactiveStudents.length
   
-  console.log(`📤 DATOS ENVIADOS A PROCESAR - ANÁLISIS INTELIGENTE:`)
-  console.log(`   🏫 Curso ID: ${courseId} (Grupo/Modalidad: ${courseInfo.groupId})`)
+  console.log(`📤 DATOS ENVIADOS A PROCESAR - ANÁLISIS DE CURSO:`)
+  console.log(`   🏫 Curso ID: ${courseId}`)
   console.log(`   👥 Estudiantes: ${courseInfo.totalStudents} total, ${activeStudentsCount} activos, ${inactiveStudentsCount} inactivos`)
-  console.log(`   📅 Estructura: ${weeklyStructure.totalSections} secciones`)
-  console.log(`   💬 Foros: ${overallMetrics.totalForums} con ${overallMetrics.totalDiscussions} discusiones`)
-  console.log(`   📝 Asignaciones: ${overallMetrics.totalAssignments}`)
-  console.log(`   📊 Posts totales: ${overallMetrics.totalPosts}`)
-  
-  const prompt = `Como experto en análisis educativo, realiza un análisis PROFUNDO del curso ${courseId} (Grupo/Modalidad: ${courseInfo.groupId}):
+  console.log(`   📅 Estructura: ${weeklyStructure.totalSections} secciones, ${weeklyStructure.activeSections.length} activas`)
+  console.log(`   💬 Actividad: ${overallMetrics.totalForums} foros, ${overallMetrics.totalDiscussions} discusiones`)
+  console.log(`   🔍 Analizado por: ${courseInfo.analyzedBy}`)
+
+  const prompt = `Como experto en análisis educativo, realiza un análisis PROFUNDO del curso ${courseId}:
 
 📊 **INFORMACIÓN DEL CURSO**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • Estudiantes matriculados: ${courseInfo.totalStudents}
 • Fecha de análisis: ${new Date(courseInfo.analysisDate).toLocaleDateString()}
-• Estudiantes ACTIVOS: ${activeStudentsCount} (${courseInfo.totalStudents > 0 ? Math.round((activeStudentsCount / courseInfo.totalStudents) * 100) : 0}%)
-• Estudiantes INACTIVOS: ${inactiveStudentsCount} (${courseInfo.totalStudents > 0 ? Math.round((inactiveStudentsCount / courseInfo.totalStudents) * 100) : 0}%)
-• Profesor analizado: ${courseInfo.userMatricula}
+• Estudiantes ACTIVOS: ${activeStudentsCount}
+• Estudiantes INACTIVOS: ${inactiveStudentsCount}
+• Analizado por: ${courseInfo.analyzedBy}
 
 📅 **ESTRUCTURA SEMANAL**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -523,41 +395,10 @@ async function generateAIAnalysisWithDetails(analysisData: any, courseId: string
 • Secciones ACTIVAS: ${weeklyStructure.activeSections.length}
 • Secciones completadas: ${weeklyStructure.completedSections.length}
 
-**SECCIONES ACTIVAS:**
-${weeklyStructure.activeSections.map((section: any) => `
-• ${section.name} - ${section.status.toUpperCase()}
-  - Actividades: ${section.activitiesCount}
-  - Recursos: ${section.resourcesCount}`).join('')}
-
-💬 **ANÁLISIS DE FOROS**
+💬 **ANÁLISIS DE PARTICIPACIÓN**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • Total foros: ${overallMetrics.totalForums}
 • Total discusiones: ${overallMetrics.totalDiscussions}
-• Total posts: ${overallMetrics.totalPosts}
-
-${forumAnalysis.map((forum: any) => `
-**${forum.forumName}** (${forum.sectionName})
-- Discusiones: ${forum.discussionCount}
-- Posts: ${forum.totalPosts}
-- Participantes: ${Array.from(forum.uniqueParticipants).length}`).join('')}
-
-📝 **ANÁLISIS DE TAREAS**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Total tareas: ${overallMetrics.totalAssignments}
-
-${assignmentAnalysis.map((assignment: any) => `
-**${assignment.assignmentName}** (${assignment.sectionName})
-- Entregas: ${assignment.submissionStats.totalSubmissions}
-- Estudiantes que entregaron: ${Array.from(assignment.submissionStats.studentsSubmitted).length}/${courseInfo.totalStudents}
-${assignment.isModalityAssignment ? '- **TAREA DE MODALIDAD** 🎯' : ''}
-${assignment.hasPermissionError ? '- ⚠️ Sin acceso a entregas' : ''}`).join('')}
-
-🚨 **ESTUDIANTES EN RIESGO**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${inactiveStudentsCount > 0 ? `
-**${inactiveStudentsCount} ESTUDIANTES SIN PARTICIPACIÓN:**
-${studentParticipation.inactiveStudents.slice(0, 5).map((student: any) => `• ${student.name}`).join('\n')}
-${inactiveStudentsCount > 5 ? `... y ${inactiveStudentsCount - 5} más` : ''}` : 'No hay estudiantes completamente inactivos.'}
 
 Proporciona un análisis que incluya:
 
@@ -572,7 +413,7 @@ Responde ÚNICAMENTE en formato JSON:
 {
   "strengths": ["fortaleza 1", "fortaleza 2", "fortaleza 3"],
   "alerts": ["alerta 1", "alerta 2"],
-  "studentsAtRisk": "${inactiveStudentsCount} estudiantes (${courseInfo.totalStudents > 0 ? Math.round((inactiveStudentsCount / courseInfo.totalStudents) * 100) : 0}%) sin participación",
+  "studentsAtRisk": "${inactiveStudentsCount} estudiantes sin participación detectada",
   "recommendations": ["recomendación 1", "recomendación 2"],
   "nextStep": "acción prioritaria concreta",
   "overallHealth": "buena/regular/necesita atención"
@@ -580,9 +421,9 @@ Responde ÚNICAMENTE en formato JSON:
 
   details.prompt = prompt
   
-  console.log(`🚀 ENVIANDO A OpenAI - ANÁLISIS INTELIGENTE:`)
+  console.log(`🚀 ENVIANDO A OpenAI - ANÁLISIS DE CURSO:`)
   console.log(`   🔗 Modelo: gpt-4`)
-  console.log(`   📝 Prompt (primeros 400 chars):`, prompt.substring(0, 400) + '...')
+  console.log(`   📝 Prompt (primeros 300 chars):`, prompt.substring(0, 300) + '...')
   console.log(`   ⚙️ Configuración: max_tokens=1000, temperature=0.7`)
   
   try {
@@ -629,9 +470,17 @@ Responde ÚNICAMENTE en formato JSON:
   }
 }
 
-async function saveAnalysisToDatabase(courseId: string, groupId: string, analysisResult: any, userId: string, rawData: any) {
+async function saveCourseAnalysisToDatabase(
+  courseId: string, 
+  groupId: string, 
+  analysisResult: any, 
+  analyzedBy: string,
+  analyzedByName: string,
+  rawData: any
+) {
+  // Buscar o crear curso
   let course = await prisma.course.findFirst({
-    where: { moodleCourseId: courseId, userId }
+    where: { moodleCourseId: courseId }
   })
   
   if (!course) {
@@ -639,14 +488,24 @@ async function saveAnalysisToDatabase(courseId: string, groupId: string, analysi
       data: {
         moodleCourseId: courseId,
         name: `Curso ${courseId}`,
-        userId,
+        lastAnalyzedBy: analyzedBy,
+        lastSync: new Date()
+      }
+    })
+  } else {
+    // Actualizar último profesor que analizó
+    await prisma.course.update({
+      where: { id: course.id },
+      data: { 
+        lastAnalyzedBy: analyzedBy,
         lastSync: new Date()
       }
     })
   }
   
+  // Buscar o crear grupo
   let dbGroup = await prisma.group.findFirst({
-    where: { moodleGroupId: groupId, courseId: course.id }
+    where: { moodleGroupId: groupId }
   })
   
   if (!dbGroup) {
@@ -659,6 +518,7 @@ async function saveAnalysisToDatabase(courseId: string, groupId: string, analysi
     })
   }
   
+  // Marcar análisis anteriores como no-latest
   await prisma.analysisResult.updateMany({
     where: {
       courseId: course.id,
@@ -668,19 +528,29 @@ async function saveAnalysisToDatabase(courseId: string, groupId: string, analysi
     data: { isLatest: false }
   })
   
+  // Crear nuevo análisis
   const analysisResult_db = await prisma.analysisResult.create({
     data: {
-      userId,
       courseId: course.id,
+      moodleCourseId: courseId,
       groupId: dbGroup.id,
-      analysisType: 'INTELLIGENT_ANALYSIS',
+      moodleGroupId: groupId,
+      analysisType: 'COURSE_OVERVIEW',
+      analyzedBy,
+      analyzedByName,
       strengths: analysisResult.strengths,
       alerts: analysisResult.alerts,
+      recommendations: analysisResult.recommendations || [],
       nextStep: analysisResult.nextStep,
+      overallHealth: analysisResult.overallHealth,
+      studentsAtRisk: analysisResult.studentsAtRisk,
       rawData,
       llmResponse: analysisResult,
       confidence: 0.9,
-      isLatest: true
+      isLatest: true,
+      studentsAnalyzed: rawData?.courseInfo?.totalStudents || 0,
+      activitiesCount: rawData?.overallMetrics?.totalAssignments || 0,
+      forumsCount: rawData?.overallMetrics?.totalForums || 0
     }
   })
   
@@ -691,7 +561,7 @@ async function saveAnalysisDetailsToPDF(details: AnalysisDetails) {
   try {
     const content = `
 ========================================
-REPORTE TÉCNICO DE ANÁLISIS INTELIGENTE
+REPORTE TÉCNICO DE ANÁLISIS COURSE-BASED
 ========================================
 
 📊 INFORMACIÓN GENERAL
@@ -700,8 +570,7 @@ REPORTE TÉCNICO DE ANÁLISIS INTELIGENTE
 • Fecha y Hora: ${details.timestamp}
 • Curso ID: ${details.courseId}
 • Grupo ID: ${details.groupId}
-• Usuario ID: ${details.userId}
-• Matrícula: ${details.userMatricula}
+• Analizado por: ${details.analyzedBy} (${details.analyzedByName})
 • Estado: ${details.success ? '✅ EXITOSO' : '❌ ERROR'}
 • Tiempo de procesamiento: ${details.processingTime}ms
 
@@ -732,14 +601,8 @@ ${details.error}` : ''}
 • Duración total: ${details.processingTime}ms
 • Eficiencia: ${details.tokensUsed.total > 0 ? (details.tokensUsed.total / (details.processingTime / 1000)).toFixed(2) : 'N/A'} tokens/segundo
 
-💰 INFORMACIÓN DE COSTOS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Costo por prompt: $${((details.tokensUsed.prompt * 0.03) / 1000).toFixed(4)} USD
-• Costo por respuesta: $${((details.tokensUsed.completion * 0.06) / 1000).toFixed(4)} USD
-• Costo total: $${details.cost.toFixed(4)} USD
-
 🔚 FIN DEL REPORTE
-Generado automáticamente por el Dashboard Académico UTEL - Análisis Inteligente V2
+Generado automáticamente por el Dashboard Académico UTEL - Sistema Course-Based V2
 `
 
     const reportsDir = path.join(process.cwd(), 'reports')
@@ -747,7 +610,7 @@ Generado automáticamente por el Dashboard Académico UTEL - Análisis Inteligen
       fs.mkdirSync(reportsDir, { recursive: true })
     }
 
-    const fileName = `analysis-intelligent-${details.requestId}-${Date.now()}.txt`
+    const fileName = `analysis-course-${details.requestId}-${Date.now()}.txt`
     const filePath = path.join(reportsDir, fileName)
 
     fs.writeFileSync(filePath, content, 'utf8')
