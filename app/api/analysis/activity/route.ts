@@ -286,16 +286,37 @@ ${discussion.posts?.slice(0, 5).map((post: any) => `
 
 ---
 
-**Proporciona un análisis educativo completo y profesional** de esta discusión usando **formato Markdown** para organizar visualmente la información. 
+**ESTRUCTURA TU ANÁLISIS EN SECCIONES CLARAS Y SEPARADAS**.
 
-**Organiza el contenido según consideres más apropiado**, por ejemplo:
-- Usa **encabezados** para secciones principales 
-- **Listas** para enumerar puntos clave
-- **Énfasis** para destacar aspectos importantes
-- **Citas** para observaciones relevantes
-- **Tablas** si necesitas comparar datos
+Proporciona entre 4-8 secciones independientes. Cada sección debe tener:
+1. Un título breve y descriptivo (sin números, máximo 5 palabras)
+2. Contenido específico para esa sección
 
-Incluye insights sobre: patrones de participación, calidad de respuestas, evidencia de comprensión, aspectos positivos, áreas de mejora, y recomendaciones específicas.
+**EJEMPLO DE ESTRUCTURA:**
+
+## Patrones de Participación
+[Contenido sobre cómo participan los estudiantes]
+
+## Calidad del Engagement  
+[Análisis de la profundidad de las interacciones]
+
+## Distribución de Actividad
+[Cómo se distribuye la participación]
+
+## Aspectos Positivos Identificados
+[Elementos que funcionan bien]
+
+## Áreas de Mejora
+[Oportunidades de mejora detectadas]
+
+## Recomendaciones Docentes
+[Acciones sugeridas para el profesor]
+
+**IMPORTANTE**: 
+- Cada sección debe ser independiente y autocontenida
+- Usa formato Markdown apropiado: listas numeradas, viñetas, tablas según el contenido
+- Los títulos deben ser descriptivos pero breves
+- Evita repetir información entre secciones
 `
   } else {
     // Prompt para foro general con múltiples discusiones
@@ -323,16 +344,40 @@ ${analysisData.allPosts?.filter((p: any) => p.userId !== professorUserId).slice(
 
 ---
 
-**Proporciona un análisis educativo completo y profesional** de este foro usando **formato Markdown** para organizar visualmente la información.
+**ESTRUCTURA TU ANÁLISIS EN SECCIONES CLARAS Y SEPARADAS**.
 
-**Estructura el contenido dinámicamente**, por ejemplo:
-- **Encabezados** para organizar secciones clave
-- **Listas** para patrones identificados  
-- **Tablas** para comparar discusiones si es útil
-- **Énfasis** para destacar hallazgos importantes
-- **Citas** para observaciones destacables
+Proporciona entre 4-8 secciones independientes. Cada sección debe tener:
+1. Un título breve y descriptivo (sin números, máximo 5 palabras)
+2. Contenido específico para esa sección
 
-Incluye insights sobre: patrones de participación entre discusiones, calidad del engagement, distribución de actividad, aspectos que funcionan bien, áreas de mejora, y recomendaciones específicas.
+**EJEMPLO DE ESTRUCTURA:**
+
+## Panorama General de Participación
+[Métricas y estadísticas generales del foro]
+
+## Patrones de Participación
+[Cómo participan los estudiantes en las discusiones]
+
+## Calidad del Engagement
+[Análisis de la profundidad de las interacciones]
+
+## Distribución de Actividad
+[Cómo se distribuye la participación entre discusiones]
+
+## Aspectos Positivos Identificados
+[Elementos que funcionan bien en el foro]
+
+## Áreas de Mejora
+[Oportunidades de mejora detectadas]
+
+## Recomendaciones Docentes
+[Acciones sugeridas para mejorar el foro]
+
+**IMPORTANTE**:
+- Cada sección debe ser independiente y autocontenida
+- Usa formato Markdown apropiado: listas numeradas, viñetas, tablas según el contenido
+- Los títulos deben ser descriptivos pero breves
+- Evita repetir información entre secciones
 `
   }
 

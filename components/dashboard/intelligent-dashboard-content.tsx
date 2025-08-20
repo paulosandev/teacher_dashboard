@@ -422,32 +422,41 @@ export function IntelligentDashboardContent({
     const content = analysis.fullAnalysis
     const points = []
     
-    // Dividir por headers principales (## o ###) o por párrafos largos
-    const sections = content.split(/(?=##\s)|(?=###\s)|(?=\*\*[^*]+\*\*)|(?=\n\n(?=[A-ZÁÉÍÓÚ]))/g)
+    // Dividir por headers ## (secciones principales)
+    const sections = content.split(/(?=^##\s)/gm)
       .map((section: string) => section.trim())
-      .filter((section: string) => section.length > 50)
+      .filter((section: string) => section.length > 20)
 
-    if (sections.length <= 1) {
-      // Si no hay secciones claras, dividir por párrafos largos
+    if (sections.length > 1) {
+      // Si hay secciones con headers, usar esas
+      sections.forEach((section: string, index: number) => {
+        // Extraer título y contenido
+        const lines = section.split('\n')
+        const headerLine = lines[0]
+        const title = headerLine.replace(/^##\s*/, '').trim()
+        const sectionContent = lines.slice(1).join('\n').trim()
+        
+        if (title && sectionContent) {
+          points.push({
+            id: `section-${index}`,
+            title: title,
+            content: sectionContent,
+            type: detectContentType(sectionContent)
+          })
+        }
+      })
+    } else {
+      // Si no hay headers claros, intentar dividir por párrafos significativos
       const paragraphs = content.split(/\n\n+/)
         .map((p: string) => p.trim())
-        .filter((p: string) => p.length > 100)
+        .filter((p: string) => p.length > 50)
       
       paragraphs.forEach((paragraph: string, index: number) => {
         points.push({
           id: `point-${index}`,
-          title: extractTitleFromContent(paragraph, index),
+          title: generateDefaultTitle(paragraph, index),
           content: paragraph,
           type: detectContentType(paragraph)
-        })
-      })
-    } else {
-      sections.forEach((section: string, index: number) => {
-        points.push({
-          id: `section-${index}`,
-          title: extractTitleFromContent(section, index),
-          content: section,
-          type: detectContentType(section)
         })
       })
     }
@@ -455,60 +464,21 @@ export function IntelligentDashboardContent({
     return points
   }, [])
 
-  // Función auxiliar para extraer título del contenido
-  const extractTitleFromContent = (content: string, index: number) => {
-    // Buscar headers markdown
-    const headerMatch = content.match(/^(##?\s*(.+))$/m)
-    if (headerMatch) {
-      const title = headerMatch[2].trim()
-      return simplifyTitle(title)
-    }
-    
-    // Buscar texto en negrita al inicio
-    const boldMatch = content.match(/^\*\*([^*]+)\*\*/)
-    if (boldMatch) {
-      return simplifyTitle(boldMatch[1].trim())
-    }
-    
-    // Detectar tipo de contenido para título automático
+  // Función para generar títulos por defecto cuando no hay headers
+  const generateDefaultTitle = (content: string, index: number) => {
     const type = detectContentType(content)
     switch (type) {
       case 'table':
-        return `${index + 1}. Panorama general de la participación`
+        return 'Panorama General'
       case 'numbered-list':
-        return `${index + 1}. Aspectos clave identificados`
+        return 'Aspectos Clave Identificados'
       case 'bullet-list':
-        return `${index + 1}. Insights clave para la evaluación`
+        return 'Puntos Destacados'
       case 'quote':
-        return `${index + 1}. Observaciones destacadas`
+        return 'Observaciones'
       default:
-        return `${index + 1}. Análisis detallado`
+        return 'Análisis Detallado'
     }
-  }
-
-  // Función auxiliar para simplificar títulos largos
-  const simplifyTitle = (title: string) => {
-    // Remover prefijos comunes
-    title = title.replace(/^(análisis|evaluación|revisión|estudio)\s+(de|del|sobre)\s+/i, '')
-    title = title.replace(/^(panorama|resumen|información)\s+(general|detallad[ao])\s+(de|del|sobre)\s+/i, '')
-    
-    // Simplificar palabras comunes
-    title = title.replace(/participación estudiantil/i, 'participación')
-    title = title.replace(/insights? clave para la evaluación/i, 'insights clave')
-    title = title.replace(/aspectos? positivos?/i, 'aspectos positivos')
-    title = title.replace(/recomendaciones? docente?/i, 'recomendaciones')
-    
-    // Limitar longitud
-    if (title.length > 40) {
-      const words = title.split(' ')
-      if (words.length > 5) {
-        title = words.slice(0, 5).join(' ') + '...'
-      } else {
-        title = title.substring(0, 40) + '...'
-      }
-    }
-    
-    return title.charAt(0).toUpperCase() + title.slice(1)
   }
 
   // Función auxiliar para detectar el tipo de contenido
@@ -558,70 +528,36 @@ export function IntelligentDashboardContent({
 
     return (
       <div className="max-w-[1132px] mx-auto px-4 sm:px-6 lg:px-3">
-        {/* Header de vista de detalle */}
-        <section className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            <h1 className="text-3xl font-bold text-gray-900">
-              Información detallada - {detailView.activity.name}
-            </h1>
-            
-            {/* Chip con fecha de análisis */}
-            {analysis && (
-              <div className="flex items-center space-x-2 bg-primary-light text-primary-darker px-3 py-2 rounded-full text-sm font-medium">
-                <span>📊</span>
-                <span>Análisis del {new Date(analysis.generatedAt).toLocaleDateString('es-ES', { 
-                  day: 'numeric', 
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}</span>
-              </div>
-            )}
-          </div>
+        {/* Header de seguimiento */}
+        <section className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">
+            Informe de seguimiento
+          </h1>
           
           <button 
             onClick={navigateBackToDashboard}
-            className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 transition-colors mb-4"
+            className="flex items-center space-x-2 text-primary-darker hover:text-primary transition-colors mb-6"
           >
             <FontAwesomeIcon icon={faArrowLeft} className="text-sm" />
             <span>Volver al dashboard general</span>
           </button>
-        </section>
 
-        {/* Header de actividad */}
-        <section className="mb-8">
-          <div className="bg-white border border-gray-300 rounded-lg p-6 shadow-sm">
-            <div className="flex items-center space-x-3">
-              <span className="text-3xl">
-                {(() => {
-                  switch (detailView.activity.type) {
-                    case 'forum': return '💬'
-                    case 'assign': return '📝'
-                    case 'quiz': return '📊'
-                    case 'feedback': return '📋'
-                    case 'choice': return '🗳️'
-                    default: return '🎯'
-                  }
-                })()}
-              </span>
-              <div>
-                <h2 className="text-2xl font-bold text-primary-darker">
-                  {detailView.activity.name}
-                </h2>
-                <p className="text-gray-600">
-                  {(() => {
-                    switch (detailView.activity.type) {
-                      case 'forum': return 'Foro'
-                      case 'assign': return 'Tarea'
-                      case 'quiz': return 'Cuestionario'
-                      case 'feedback': return 'Encuesta'
-                      case 'choice': return 'Elección'
-                      default: return 'Actividad'
-                    }
-                  })()} • {detailView.activity.status === 'open' ? 'Disponible' : 'Estado: ' + detailView.activity.status}
-                </p>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-gray-900">
+              Información detallada - {detailView.activity.name}
+            </h2>
+            
+            {/* Chip con fecha de análisis */}
+            {analysis && (
+              <div className="flex items-center space-x-2 bg-primary-light text-primary-darker px-4 py-2 rounded-full text-sm font-medium">
+                <span>📅</span>
+                <span>Fecha de corte del análisis: {new Date(analysis.generatedAt).toLocaleDateString('es-ES', { 
+                  day: 'numeric', 
+                  month: 'short',
+                  year: 'numeric'
+                })}</span>
               </div>
-            </div>
+            )}
           </div>
         </section>
 
@@ -653,16 +589,14 @@ export function IntelligentDashboardContent({
                 }
 
                 return (
-                  <div key={point.id} className="bg-white border border-gray-300 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
+                  <div key={point.id} className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
                     {/* Header del point */}
                     <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center space-x-2">
-                        <h3 className="text-lg font-semibold text-primary-darker font-inter line-clamp-2">
-                          {point.title}
-                        </h3>
-                      </div>
-                      <span className="bg-white border border-blue-500 text-blue-700 px-3 py-1 rounded-[100px] text-sm font-semibold flex items-center space-x-1 font-inter">
-                        <span className="text-md">{getPointIcon(point.type)}</span>
+                      <h3 className="text-base font-semibold text-gray-900 font-inter">
+                        {point.title}
+                      </h3>
+                      <span className="bg-blue-50 border border-blue-300 text-blue-700 px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1 font-inter">
+                        <span className="text-sm">{getPointIcon(point.type)}</span>
                         <span>{getPointTypeLabel(point.type)}</span>
                       </span>
                     </div>
