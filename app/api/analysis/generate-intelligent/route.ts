@@ -587,19 +587,18 @@ Responde ÚNICAMENTE en formato JSON:
   details.prompt = prompt
   
   console.log(`🚀 ENVIANDO A OpenAI - ANÁLISIS INTELIGENTE:`)
-  console.log(`   🔗 Modelo: gpt-4`)
+  console.log(`   🔗 Modelo: o3-mini`)
   console.log(`   📝 Prompt (primeros 400 chars):`, prompt.substring(0, 400) + '...')
-  console.log(`   ⚙️ Configuración: max_tokens=1000, temperature=0.7`)
+  console.log(`   ⚙️ Configuración: max_completion_tokens=1000 (modelo o3-mini)`)
   
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "o3-mini",
       messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
-      max_tokens: 1000
+      max_completion_tokens: 1000
     })
     
-    details.model = "gpt-4"
+    details.model = "o3-mini"
     details.response = response
     details.tokensUsed = {
       prompt: response.usage?.prompt_tokens || 0,

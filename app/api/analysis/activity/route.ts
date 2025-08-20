@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
             recommendation: analysisResult.recommendation,
             fullAnalysis: analysisResult.fullAnalysis || analysisResult.summary,
             activityData: activityData,
-            llmResponse: { model: 'gpt-4', generatedAt: new Date() },
+            llmResponse: { model: 'o3-mini', generatedAt: new Date() },
             lastUpdated: new Date()
           }
         })
@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
             recommendation: analysisResult.recommendation,
             fullAnalysis: analysisResult.fullAnalysis || analysisResult.summary,
             activityData: activityData,
-            llmResponse: { model: 'gpt-4', generatedAt: new Date() }
+            llmResponse: { model: 'o3-mini', generatedAt: new Date() }
           }
         })
       }
@@ -242,11 +242,12 @@ async function analyzeForum(client: MoodleAPIClient, forumData: any, openai: Ope
   console.log(`   📊 Estadísticas: ${analysisData.stats.totalDiscussions} discusiones, ${analysisData.stats.totalPosts} posts`)
   console.log(`   👥 ${analysisData.stats.uniqueParticipants} participantes únicos`)
 
-  // Crear prompt dinámico basado en el tipo de contenido
+  // Crear prompt dinámico UNIVERSAL para formato consistente
   let prompt: string
   
+  // NUEVO: FORMATO ESTRUCTURADO UNIVERSAL para todas las actividades
   if (analysisData.isSpecificDiscussion && analysisData.discussionData) {
-    // Prompt específico para una discusión individual
+    // Prompt para discusión individual con FORMATO ESTRUCTURADO DINÁMICO
     const discussion = analysisData.discussionData
     // Usar ID del profesor para filtrado consistente
     const currentUserId = professorUserId
@@ -270,18 +271,18 @@ async function analyzeForum(client: MoodleAPIClient, forumData: any, openai: Ope
       : 'No se detectó participación de estudiantes'
     
     prompt = `
-Como experto en análisis educativo, analiza la siguiente DISCUSIÓN EDUCATIVA y proporciona insights profesionales basados en los datos disponibles:
+Eres un experto en análisis educativo. Analiza la siguiente DISCUSIÓN EDUCATIVA y genera un análisis con formato estructurado dinámico:
 
 ## CONTEXTO DE LA DISCUSIÓN:
 - **Título**: "${discussion.name || discussion.subject}"
-- **Descripción del foro**: ${analysisData.description}
+- **Descripción**: ${analysisData.description}
 - **Posts totales**: ${discussion.posts?.length || 0}
-- **Contenido inicial del profesor**: ${discussion.message ? discussion.message.substring(0, 300) + '...' : 'Sin contenido inicial'}
+- **Contenido inicial**: ${discussion.message ? discussion.message.substring(0, 300) + '...' : 'Sin contenido inicial'}
 
 ## DATOS DE PARTICIPACIÓN:
 ${studentResponseInfo}
 
-## CONTENIDO DE LA DISCUSIÓN:
+## CONTENIDO DISPONIBLE:
 ${discussion.posts?.slice(0, 5).map((post: any) => `
 **${post.userFullName}** (${post.isTeacherPost ? 'Profesor' : 'Estudiante'}):
 "${post.message.substring(0, 200)}${post.message.length > 200 ? '...' : ''}"
@@ -289,54 +290,56 @@ ${discussion.posts?.slice(0, 5).map((post: any) => `
 
 ---
 
-**ESTRUCTURA TU ANÁLISIS EN SECCIONES CLARAS Y SEPARADAS**.
+**GENERA UN ANÁLISIS CON SECCIONES DINÁMICAS Y ESPECÍFICAS AL CONTEXTO**
 
-Proporciona entre 4-8 secciones independientes. Cada sección debe tener:
-1. Un título breve y descriptivo (sin números, máximo 5 palabras)
-2. Contenido específico para esa sección
+Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido real. Evita títulos genéricos. Adapta los nombres según el contexto de la actividad.
 
-**ADEMÁS, AL FINAL DEL ANÁLISIS, PROPORCIONA UN RESUMEN EJECUTIVO:**
+**EJEMPLOS DE TÍTULOS DINÁMICOS:**
+- "Panorama General del Foro"
+- "Patrones de Participación" 
+- "Calidad de Interacción"
+- "Análisis de Engagement"
+- "Distribución Temporal"
+- "Profundidad de Discusión"
+- "Tendencias de Actividad"
+- "Insights Pedagógicos"
+- "Oportunidades de Mejora"
+- "Estrategias Recomendadas"
+
+**ESTRUCTURA REQUERIDA:**
+
+## [Título Dinámico 1]
+[Contenido específico y detallado - mínimo 3 líneas]
+
+## [Título Dinámico 2] 
+[Contenido específico y detallado - mínimo 3 líneas]
+
+## [Título Dinámico 3]
+[Contenido específico y detallado - mínimo 3 líneas]
+
+## [Título Dinámico 4]
+[Contenido específico y detallado - mínimo 3 líneas]
+
+## [Título Dinámico 5]
+[Contenido específico y detallado - mínimo 3 líneas]
 
 ## RESUMEN_EJECUTIVO
-[Lista con UN PUNTO CLAVE de cada sección anterior, máximo 15 palabras por punto]
-
-**EJEMPLO DE ESTRUCTURA:**
-
-## Patrones de Participación
-[Contenido detallado sobre cómo participan los estudiantes]
-
-## Calidad del Engagement  
-[Análisis detallado de la profundidad de las interacciones]
-
-## Distribución de Actividad
-[Análisis de cómo se distribuye la participación]
-
-## Aspectos Positivos Identificados
-[Elementos detallados que funcionan bien]
-
-## Áreas de Mejora
-[Oportunidades específicas de mejora detectadas]
-
-## Recomendaciones Docentes
-[Acciones concretas sugeridas para el profesor]
-
-## RESUMEN_EJECUTIVO
-- Participación baja con promedio de 1 post por estudiante
-- Interacciones superficiales sin profundización en temas
-- Actividad concentrada en pocas discusiones específicas
-- Buena estructura de foros pero poca interacción
-- Necesario incentivar participación con preguntas dirigidas
-- Implementar rúbricas claras para mejorar calidad
+- [Punto clave de la primera sección - máximo 15 palabras]
+- [Punto clave de la segunda sección - máximo 15 palabras]
+- [Punto clave de la tercera sección - máximo 15 palabras]
+- [Punto clave de la cuarta sección - máximo 15 palabras]
+- [Punto clave de la quinta sección - máximo 15 palabras]
 
 **IMPORTANTE**: 
-- Cada sección debe ser independiente y autocontenida
-- El RESUMEN_EJECUTIVO debe tener UN punto por cada sección anterior
-- Cada punto del resumen: máximo 15 palabras, directo y específico
+- Usa títulos específicos al contexto, NO genéricos
+- Cada sección debe tener contenido sustancial (mínimo 50 palabras)
+- El RESUMEN_EJECUTIVO debe reflejar exactamente las secciones creadas
+- Adapta el análisis al tipo específico de actividad educativa
 `
   } else {
-    // Prompt para foro general con múltiples discusiones
+    // Prompt para foro general con FORMATO ESTRUCTURADO DINÁMICO UNIVERSAL
     prompt = `
-Como experto en análisis educativo, analiza el siguiente FORO EDUCATIVO y proporciona insights profesionales basados en los datos disponibles:
+Eres un experto en análisis educativo. Analiza el siguiente FORO EDUCATIVO y genera un análisis con formato estructurado dinámico:
 
 ## PANORAMA DEL FORO:
 - **Nombre**: ${analysisData.name}
@@ -351,7 +354,7 @@ ${analysisData.discussions.slice(0, 5).map((d: any) => `
 - Contenido: ${d.message ? d.message.substring(0, 200) + '...' : 'Sin contenido inicial disponible'}
 `).join('\n')}
 
-## EJEMPLOS DE PARTICIPACIÓN ESTUDIANTIL:
+## EJEMPLOS DE PARTICIPACIÓN:
 ${analysisData.allPosts?.filter((p: any) => p.userId !== professorUserId).slice(0, 3).map((post: any) => `
 **En "${post.discussionName}":**
 "${post.message.substring(0, 200)}${post.message.length > 200 ? '...' : ''}"
@@ -359,59 +362,63 @@ ${analysisData.allPosts?.filter((p: any) => p.userId !== professorUserId).slice(
 
 ---
 
-**ESTRUCTURA TU ANÁLISIS EN SECCIONES CLARAS Y SEPARADAS**.
+**GENERA UN ANÁLISIS CON SECCIONES DINÁMICAS Y ESPECÍFICAS AL CONTEXTO**
 
-Proporciona entre 4-8 secciones independientes. Cada sección debe tener:
-1. Un título breve y descriptivo (sin números, máximo 5 palabras)
-2. Contenido específico para esa sección
+Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido real del foro. Evita títulos genéricos. Adapta los nombres según las características específicas del foro.
 
-**EJEMPLO DE ESTRUCTURA:**
+**EJEMPLOS DE TÍTULOS DINÁMICOS PARA FOROS:**
+- "Panorama General del Foro"
+- "Patrones de Participación"
+- "Calidad de Interacción"
+- "Distribución de Actividad" 
+- "Tendencias de Engagement"
+- "Dinámicas de Discusión"
+- "Análisis de Contenido"
+- "Comportamiento Estudiantil"
+- "Oportunidades de Mejora"
+- "Estrategias Pedagógicas"
 
-## Panorama General de Participación
-[Métricas y estadísticas generales del foro]
+**ESTRUCTURA REQUERIDA:**
 
-## Patrones de Participación
-[Cómo participan los estudiantes en las discusiones]
+## [Título Dinámico 1]
+[Contenido específico y detallado - mínimo 3 líneas]
 
-## Calidad del Engagement
-[Análisis de la profundidad de las interacciones]
+## [Título Dinámico 2]
+[Contenido específico y detallado - mínimo 3 líneas]
 
-## Distribución de Actividad
-[Cómo se distribuye la participación entre discusiones]
+## [Título Dinámico 3]
+[Contenido específico y detallado - mínimo 3 líneas]
 
-## Aspectos Positivos Identificados
-[Elementos que funcionan bien en el foro]
+## [Título Dinámico 4]
+[Contenido específico y detallado - mínimo 3 líneas]
 
-## Áreas de Mejora
-[Oportunidades de mejora detectadas]
-
-## Recomendaciones Docentes
-[Acciones sugeridas para mejorar el foro]
+## [Título Dinámico 5]
+[Contenido específico y detallado - mínimo 3 líneas]
 
 ## RESUMEN_EJECUTIVO
-- Participación general del foro con X estudiantes activos
-- Calidad de interacciones requiere mejora significativa
-- Distribución desigual entre las discusiones disponibles
-- Estructura del foro bien organizada y clara
-- Falta profundización en respuestas estudiantiles
-- Implementar estrategias de moderación activa
+- [Punto clave de la primera sección - máximo 15 palabras]
+- [Punto clave de la segunda sección - máximo 15 palabras]
+- [Punto clave de la tercera sección - máximo 15 palabras]
+- [Punto clave de la cuarta sección - máximo 15 palabras]
+- [Punto clave de la quinta sección - máximo 15 palabras]
 
 **IMPORTANTE**:
-- Cada sección debe ser independiente y autocontenida
-- El RESUMEN_EJECUTIVO debe tener UN punto por cada sección anterior
-- Cada punto del resumen: máximo 15 palabras, directo y específico
+- Usa títulos específicos al contexto del foro, NO genéricos
+- Cada sección debe tener contenido sustancial (mínimo 50 palabras)
+- El RESUMEN_EJECUTIVO debe reflejar exactamente las secciones creadas
+- Adapta el análisis a las características específicas de este foro educativo
 `
   }
 
   console.log(`🚀 ENVIANDO A OpenAI - ${analysisData.isSpecificDiscussion ? 'DISCUSIÓN' : 'FORO'}:`)
-  console.log(`   🔗 Modelo: gpt-4`)
+  console.log(`   🔗 Modelo: o3-mini`)
   console.log(`   📝 Tipo de contenido: ${analysisData.isSpecificDiscussion ? 'Discusión individual' : 'Foro con múltiples discusiones'}`)
   console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
-  console.log(`   ⚙️ Configuración: max_tokens=2500, temperature=0.4 (análisis flexible)`)
+  console.log(`   ⚙️ Configuración: max_completion_tokens=2500 (modelo o3-mini)`)
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "o3-mini",
       messages: [
         {
           role: "system",
@@ -422,8 +429,7 @@ Proporciona entre 4-8 secciones independientes. Cada sección debe tener:
           content: prompt
         }
       ],
-      max_tokens: 2500,
-      temperature: 0.4
+      max_completion_tokens: 2500
     })
 
     const analysisText = completion.choices[0]?.message?.content || ''
@@ -475,56 +481,81 @@ async function analyzeAssignment(client: MoodleAPIClient, assignmentData: any, o
   console.log(`   📊 Entregas: ${analysisData.stats.submissionCount}, Calificadas: ${analysisData.stats.gradeCount}`)
   console.log(`   📈 Progreso: ${analysisData.stats.gradingProgress}%, Promedio: ${analysisData.stats.avgGrade}`)
 
-  // Crear prompt específico para análisis de asignación
+  // Prompt ESTRUCTURADO DINÁMICO para asignaciones
   const prompt = `
-Analiza la siguiente asignación educativa y proporciona un análisis completo:
+Eres un experto en análisis educativo. Analiza la siguiente ASIGNACIÓN EDUCATIVA y genera un análisis con formato estructurado dinámico:
 
 ## DATOS DE LA ASIGNACIÓN:
-- Nombre: ${analysisData.name}
-- Descripción: ${analysisData.description}
-- Estado: ${analysisData.dates.status}
-- Entregas recibidas: ${analysisData.stats.submissionCount}
-- Calificaciones completadas: ${analysisData.stats.gradeCount}
-- Promedio de calificación: ${analysisData.stats.avgGrade}
-- Progreso de calificación: ${analysisData.stats.gradingProgress}%
+- **Nombre**: ${analysisData.name}
+- **Descripción**: ${analysisData.description}
+- **Estado**: ${analysisData.dates.status}
+- **Entregas recibidas**: ${analysisData.stats.submissionCount}
+- **Calificaciones completadas**: ${analysisData.stats.gradeCount}
+- **Promedio de calificación**: ${analysisData.stats.avgGrade}
+- **Progreso de calificación**: ${analysisData.stats.gradingProgress}%
 
 ## CONFIGURACIÓN:
-- Intentos máximos: ${analysisData.config.maxattempts === -1 ? 'Ilimitados' : analysisData.config.maxattempts}
-- Borradores permitidos: ${analysisData.config.submissiondrafts ? 'Sí' : 'No'}
-- Calificación ciega: ${analysisData.config.blindmarking ? 'Sí' : 'No'}
+- **Intentos máximos**: ${analysisData.config.maxattempts === -1 ? 'Ilimitados' : analysisData.config.maxattempts}
+- **Borradores permitidos**: ${analysisData.config.submissiondrafts ? 'Sí' : 'No'}
+- **Calificación ciega**: ${analysisData.config.blindmarking ? 'Sí' : 'No'}
 
-Por favor, proporciona un análisis estructurado con:
+---
 
-1. **RESUMEN DE ENTREGAS** (2-3 líneas):
-   - Estado general de las entregas
-   - Nivel de cumplimiento
+**GENERA UN ANÁLISIS CON SECCIONES DINÁMICAS Y ESPECÍFICAS AL CONTEXTO**
 
-2. **ASPECTOS POSITIVOS** (3-4 puntos):
-   - Elementos destacables
-   - Indicadores de éxito
+Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido real de la asignación. Evita títulos genéricos. Adapta los nombres según las características específicas de la asignación.
 
-3. **ALERTAS IMPORTANTES** (2-3 puntos):
-   - Problemas identificados
-   - Riesgos o preocupaciones
+**EJEMPLOS DE TÍTULOS DINÁMICOS PARA ASIGNACIONES:**
+- "Panorama de Entregas"
+- "Análisis de Cumplimiento"
+- "Patrones de Submission"
+- "Calidad de Trabajos"
+- "Tendencias de Calificación"
+- "Efectividad Pedagógica"
+- "Configuración Académica"
+- "Insights de Rendimiento"
+- "Oportunidades de Mejora"
+- "Estrategias Docentes"
 
-4. **ANÁLISIS PEDAGÓGICO** (2-3 puntos):
-   - Efectividad de la configuración
-   - Cumplimiento de objetivos de aprendizaje
+**ESTRUCTURA REQUERIDA:**
 
-5. **ACCIÓN RECOMENDADA**:
-   - Una estrategia específica para el profesor
+## [Título Dinámico 1]
+[Contenido específico y detallado - mínimo 3 líneas]
 
-El análisis debe ser profesional y orientado a la mejora del proceso educativo.
+## [Título Dinámico 2]
+[Contenido específico y detallado - mínimo 3 líneas]
+
+## [Título Dinámico 3]
+[Contenido específico y detallado - mínimo 3 líneas]
+
+## [Título Dinámico 4]
+[Contenido específico y detallado - mínimo 3 líneas]
+
+## [Título Dinámico 5]
+[Contenido específico y detallado - mínimo 3 líneas]
+
+## RESUMEN_EJECUTIVO
+- [Punto clave de la primera sección - máximo 15 palabras]
+- [Punto clave de la segunda sección - máximo 15 palabras]
+- [Punto clave de la tercera sección - máximo 15 palabras]
+- [Punto clave de la cuarta sección - máximo 15 palabras]
+- [Punto clave de la quinta sección - máximo 15 palabras]
+
+**IMPORTANTE**:
+- Usa títulos específicos al contexto de la asignación, NO genéricos
+- Cada sección debe tener contenido sustancial (mínimo 50 palabras)
+- El RESUMEN_EJECUTIVO debe reflejar exactamente las secciones creadas
+- Adapta el análisis a las características específicas de esta asignación educativa
 `
 
   console.log(`🚀 ENVIANDO A OpenAI - ASIGNACIÓN:`)
-  console.log(`   🔗 Modelo: gpt-4`)
+  console.log(`   🔗 Modelo: o3-mini`)
   console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
-  console.log(`   ⚙️ Configuración: max_tokens=2500, temperature=0.4 (análisis flexible)`)
+  console.log(`   ⚙️ Configuración: max_completion_tokens=2500 (modelo o3-mini)`)
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "o3-mini",
       messages: [
         {
           role: "system",
@@ -535,8 +566,7 @@ El análisis debe ser profesional y orientado a la mejora del proceso educativo.
           content: prompt
         }
       ],
-      max_tokens: 2500,
-      temperature: 0.4
+      max_completion_tokens: 2500
     })
 
     const analysisText = completion.choices[0]?.message?.content || ''
@@ -675,50 +705,75 @@ async function analyzeGenericActivity(client: MoodleAPIClient, activityData: any
   console.log(`   👥 Participantes: ${analysisData.participants}, Respuestas: ${analysisData.responses}`)
   console.log(`   📊 Estado: ${analysisData.status}`)
 
-  // Crear prompt genérico
+  // Prompt ESTRUCTURADO DINÁMICO para actividades genéricas
   const prompt = `
-Analiza la siguiente actividad educativa de tipo "${typeLabel}" y proporciona un análisis completo:
+Eres un experto en análisis educativo. Analiza la siguiente ACTIVIDAD EDUCATIVA y genera un análisis con formato estructurado dinámico:
 
 ## DATOS DE LA ACTIVIDAD:
-- Nombre: ${analysisData.name}
-- Tipo: ${analysisData.type}
-- Descripción: ${analysisData.description}
-- Estado: ${analysisData.status}
-- Participantes: ${analysisData.participants}
-- Respuestas: ${analysisData.responses}
+- **Nombre**: ${analysisData.name}
+- **Tipo**: ${analysisData.type}
+- **Descripción**: ${analysisData.description}
+- **Estado**: ${analysisData.status}
+- **Participantes**: ${analysisData.participants}
+- **Respuestas**: ${analysisData.responses}
 
-Por favor, proporciona un análisis estructurado con:
+---
 
-1. **RESUMEN DE PARTICIPACIÓN** (2-3 líneas):
-   - Estado general de la actividad
-   - Nivel de participación estudiantil
+**GENERA UN ANÁLISIS CON SECCIONES DINÁMICAS Y ESPECÍFICAS AL CONTEXTO**
 
-2. **ASPECTOS POSITIVOS** (3-4 puntos):
-   - Elementos destacables
-   - Indicadores de éxito
+Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido real de la actividad. Evita títulos genéricos. Adapta los nombres según el tipo específico de actividad (${typeLabel}).
 
-3. **ÁREAS DE MEJORA** (2-3 puntos):
-   - Problemas identificados
-   - Oportunidades de mejora
+**EJEMPLOS DE TÍTULOS DINÁMICOS PARA ${typeLabel.toUpperCase()}:**
+- "Panorama de Participación"
+- "Análisis de Respuestas"
+- "Patrones de Engagement"
+- "Calidad de Interacción"
+- "Tendencias de Actividad"
+- "Efectividad Pedagógica"
+- "Comportamiento Estudiantil"
+- "Insights de Aprendizaje"
+- "Oportunidades de Mejora"
+- "Estrategias Recomendadas"
 
-4. **INSIGHTS PEDAGÓGICOS** (2-3 puntos):
-   - Elementos relevantes para el aprendizaje
-   - Patrones de comportamiento estudiantil
+**ESTRUCTURA REQUERIDA:**
 
-5. **RECOMENDACIÓN DOCENTE**:
-   - Una acción específica para el profesor
+## [Título Dinámico 1]
+[Contenido específico y detallado - mínimo 3 líneas]
 
-El análisis debe ser profesional y orientado a la mejora pedagógica.
+## [Título Dinámico 2]
+[Contenido específico y detallado - mínimo 3 líneas]
+
+## [Título Dinámico 3]
+[Contenido específico y detallado - mínimo 3 líneas]
+
+## [Título Dinámico 4]
+[Contenido específico y detallado - mínimo 3 líneas]
+
+## [Título Dinámico 5]
+[Contenido específico y detallado - mínimo 3 líneas]
+
+## RESUMEN_EJECUTIVO
+- [Punto clave de la primera sección - máximo 15 palabras]
+- [Punto clave de la segunda sección - máximo 15 palabras]
+- [Punto clave de la tercera sección - máximo 15 palabras]
+- [Punto clave de la cuarta sección - máximo 15 palabras]
+- [Punto clave de la quinta sección - máximo 15 palabras]
+
+**IMPORTANTE**:
+- Usa títulos específicos al tipo de actividad (${typeLabel}), NO genéricos
+- Cada sección debe tener contenido sustancial (mínimo 50 palabras)
+- El RESUMEN_EJECUTIVO debe reflejar exactamente las secciones creadas
+- Adapta el análisis a las características específicas de esta actividad educativa
 `
 
   console.log(`🚀 ENVIANDO A OpenAI - ${typeLabel.toUpperCase()}:`)
-  console.log(`   🔗 Modelo: gpt-4`)
+  console.log(`   🔗 Modelo: o3-mini`)
   console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
-  console.log(`   ⚙️ Configuración: max_tokens=2500, temperature=0.4 (análisis flexible)`)
+  console.log(`   ⚙️ Configuración: max_completion_tokens=2500 (modelo o3-mini)`)
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "o3-mini",
       messages: [
         {
           role: "system",
@@ -729,8 +784,7 @@ El análisis debe ser profesional y orientado a la mejora pedagógica.
           content: prompt
         }
       ],
-      max_tokens: 2500,
-      temperature: 0.4
+      max_completion_tokens: 2500
     })
 
     const analysisText = completion.choices[0]?.message?.content || ''
