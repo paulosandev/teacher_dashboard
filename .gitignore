@@ -43,3 +43,33 @@ next-env.d.ts
 cesar_token.json
 contexto_proyecto/
 *.log
+
+# Debug and temporary files
+ReportDebug/
+debug-*.txt
+cookies.txt
+*.tmp
+*.temp
+
+# Test scripts (temporary - keep only essential ones)
+scripts/test-*.ts
+scripts/check-*.ts
+scripts/debug-*.ts
+scripts/investigate-*.ts
+scripts/resolve-*.ts
+scripts/setup-*.ts
+scripts/update-*.ts
+scripts/verify-*.ts
+scripts/create-test-*.ts
+scripts/init-*.ts
+scripts/generate-*.ts
+scripts/configure-*.ts
+!scripts/test-openai-models.ts
+!scripts/test-o3-mini-analysis.ts
+
+# Backup schemas
+prisma/schema-*.prisma
+!prisma/schema.prisma
+
+# Redis dump
+dump.rdb
