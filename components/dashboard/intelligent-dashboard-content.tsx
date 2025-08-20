@@ -415,6 +415,72 @@ export function IntelligentDashboardContent({
     setDetailView(null)
   }, [])
 
+  // Función para parsear el análisis en puntos individuales
+  const parseAnalysisIntoPoints = useCallback((analysis: any) => {
+    if (!analysis?.fullAnalysis) return []
+
+    const content = analysis.fullAnalysis
+    const points = []
+    
+    // Dividir por headers principales (## o ###) o por párrafos largos
+    const sections = content.split(/(?=##\s)|(?=###\s)|(?=\*\*[^*]+\*\*)|(?=\n\n(?=[A-ZÁÉÍÓÚ]))/g)
+      .map((section: string) => section.trim())
+      .filter((section: string) => section.length > 50)
+
+    if (sections.length <= 1) {
+      // Si no hay secciones claras, dividir por párrafos largos
+      const paragraphs = content.split(/\n\n+/)
+        .map((p: string) => p.trim())
+        .filter((p: string) => p.length > 100)
+      
+      paragraphs.forEach((paragraph: string, index: number) => {
+        points.push({
+          id: `point-${index}`,
+          title: extractTitleFromContent(paragraph),
+          content: paragraph,
+          type: detectContentType(paragraph)
+        })
+      })
+    } else {
+      sections.forEach((section: string, index: number) => {
+        points.push({
+          id: `section-${index}`,
+          title: extractTitleFromContent(section),
+          content: section,
+          type: detectContentType(section)
+        })
+      })
+    }
+
+    return points
+  }, [])
+
+  // Función auxiliar para extraer título del contenido
+  const extractTitleFromContent = (content: string) => {
+    // Buscar headers markdown
+    const headerMatch = content.match(/^(##?\s*(.+))$/m)
+    if (headerMatch) return headerMatch[2].trim()
+    
+    // Buscar texto en negrita al inicio
+    const boldMatch = content.match(/^\*\*([^*]+)\*\*/)
+    if (boldMatch) return boldMatch[1].trim()
+    
+    // Tomar las primeras palabras como título
+    const firstLine = content.split('\n')[0].trim()
+    const words = firstLine.split(' ').slice(0, 8).join(' ')
+    return words.length > 60 ? words.substring(0, 60) + '...' : words
+  }
+
+  // Función auxiliar para detectar el tipo de contenido
+  const detectContentType = (content: string) => {
+    if (content.includes('|') && content.includes('---')) return 'table'
+    if (content.match(/^\d+\./m)) return 'numbered-list'
+    if (content.match(/^[-*+]\s/m)) return 'bullet-list'
+    if (content.includes('```')) return 'code'
+    if (content.startsWith('>')) return 'quote'
+    return 'text'
+  }
+
   const getStatusIcon = () => {
     switch (connectionStatus) {
       case 'connected':
@@ -446,148 +512,173 @@ export function IntelligentDashboardContent({
 
   // Mostrar vista de detalle si está activa
   if (detailView?.isActive && detailView.activity) {
+    const activityKey = `${detailView.activity.type}_${detailView.activity.id}`
+    const analysis = analysisResults[activityKey]
+    const analysisPoints = analysis ? parseAnalysisIntoPoints(analysis) : []
+
     return (
       <div className="max-w-[1132px] mx-auto px-4 sm:px-6 lg:px-3">
         {/* Header de vista de detalle */}
         <section className="mb-8">
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-3xl font-bold text-gray-900">
-              {detailView.activity.name}
+              ¡Hola, {user.firstName}!
             </h1>
           </div>
           
-          <button 
-            onClick={navigateBackToDashboard}
-            className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 transition-colors mb-4"
-          >
-            <FontAwesomeIcon icon={faArrowLeft} className="text-sm" />
-            <span>Volver al dashboard general</span>
-          </button>
-        </section>
+          <div className="flex items-center justify-between">
+            <button 
+              onClick={navigateBackToDashboard}
+              className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 transition-colors mb-4"
+            >
+              <FontAwesomeIcon icon={faArrowLeft} className="text-sm" />
+              <span>Volver al dashboard general</span>
+            </button>
 
-        {/* Contenido de la vista de detalle */}
-        <section className="mb-8">
-          <div className="bg-white border border-gray-300 rounded-lg p-8 shadow-sm">
-            <div className="mb-6">
-              <div className="flex items-center space-x-3 mb-4">
-                <span className="text-3xl">
-                  {(() => {
-                    switch (detailView.activity.type) {
-                      case 'forum': return '💬'
-                      case 'assign': return '📝'
-                      case 'quiz': return '📊'
-                      case 'feedback': return '📋'
-                      case 'choice': return '🗳️'
-                      default: return '🎯'
-                    }
-                  })()}
-                </span>
-                <div>
-                  <h2 className="text-2xl font-bold text-primary-darker">
-                    {detailView.activity.name}
-                  </h2>
-                  <p className="text-gray-600">
-                    {(() => {
-                      switch (detailView.activity.type) {
-                        case 'forum': return 'Foro'
-                        case 'assign': return 'Tarea'
-                        case 'quiz': return 'Cuestionario'
-                        case 'feedback': return 'Encuesta'
-                        case 'choice': return 'Elección'
-                        default: return 'Actividad'
-                      }
-                    })()} • {detailView.activity.status === 'open' ? 'Disponible' : 'Estado: ' + detailView.activity.status}
-                  </p>
-                </div>
+            {/* Chip con fecha de análisis */}
+            {analysis && (
+              <div className="flex items-center space-x-2 bg-primary-light text-primary-darker px-3 py-2 rounded-full text-sm font-medium">
+                <span>📊</span>
+                <span>Análisis del {new Date(analysis.generatedAt).toLocaleDateString('es-ES', { 
+                  day: 'numeric', 
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}</span>
               </div>
-            </div>
-
-            {/* Análisis completo en vista de detalle */}
-            {(() => {
-              const activityKey = `${detailView.activity.type}_${detailView.activity.id}`
-              const analysis = analysisResults[activityKey]
-              
-              if (analysis) {
-                return (
-                  <div className="space-y-6">
-                    {/* Análisis principal */}
-                    <div className="bg-blue-50 rounded-lg p-6">
-                      <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center space-x-2">
-                        <FontAwesomeIcon icon={faBrain} />
-                        <span>Análisis Inteligente</span>
-                      </h3>
-                      <div className="prose prose-sm max-w-none prose-headings:text-blue-900 prose-strong:text-blue-900 prose-em:text-blue-700">
-                        {analysis.fullAnalysis ? (
-                          <ReactMarkdown 
-                            remarkPlugins={[remarkGfm]}
-                            components={{
-                              h1: ({children}) => <h1 className="text-xl font-bold text-blue-900 mb-3">{children}</h1>,
-                              h2: ({children}) => <h2 className="text-lg font-semibold text-blue-900 mb-2">{children}</h2>,
-                              h3: ({children}) => <h3 className="text-md font-medium text-blue-900 mb-2">{children}</h3>,
-                              ul: ({children}) => <ul className="list-disc list-inside space-y-1 ml-2 text-blue-800">{children}</ul>,
-                              ol: ({children}) => <ol className="list-decimal list-inside space-y-1 ml-2 text-blue-800">{children}</ol>,
-                              blockquote: ({children}) => <blockquote className="border-l-4 border-blue-300 pl-4 italic text-blue-700 my-3">{children}</blockquote>,
-                              table: ({children}) => <table className="w-full border-collapse border border-blue-300 my-3">{children}</table>,
-                              th: ({children}) => <th className="border border-blue-300 bg-blue-100 px-3 py-2 text-left font-semibold">{children}</th>,
-                              td: ({children}) => <td className="border border-blue-300 px-3 py-2">{children}</td>,
-                              code: ({children}) => <code className="bg-blue-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
-                              pre: ({children}) => <pre className="bg-blue-100 p-3 rounded overflow-x-auto">{children}</pre>,
-                              p: ({children}) => <p className="text-blue-800 mb-3">{children}</p>,
-                              strong: ({children}) => <strong className="font-semibold text-blue-900">{children}</strong>,
-                              em: ({children}) => <em className="italic text-blue-700">{children}</em>
-                            }}
-                          >
-                            {analysis.fullAnalysis}
-                          </ReactMarkdown>
-                        ) : (
-                          <div className="text-blue-800">
-                            <p className="mb-4">{analysis.summary}</p>
-                            {analysis.insights && analysis.insights.length > 0 && (
-                              <div className="space-y-2">
-                                {analysis.insights.map((insight: string, index: number) => (
-                                  <p key={index} className="text-sm">• {insight}</p>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Recomendación destacada */}
-                    {analysis.recommendation && (
-                      <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-6 border-l-4 border-green-500">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center space-x-2">
-                          <FontAwesomeIcon icon={faLightbulb} className="text-green-600" />
-                          <span>Recomendación Docente</span>
-                        </h3>
-                        <p className="text-gray-800 leading-relaxed">{analysis.recommendation}</p>
-                      </div>
-                    )}
-                  </div>
-                )
-              } else {
-                return (
-                  <div className="text-center py-12">
-                    <FontAwesomeIcon icon={faBrain} size="3x" className="text-gray-300 mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      Análisis no disponible
-                    </h3>
-                    <p className="text-gray-600 mb-4">
-                      Esta actividad aún no ha sido analizada
-                    </p>
-                    <button
-                      onClick={() => analyzeActivity(detailView.activity)}
-                      className="bg-primary hover:bg-primary-dark text-white px-6 py-2 rounded-lg transition-colors"
-                    >
-                      Generar análisis
-                    </button>
-                  </div>
-                )
-              }
-            })()}
+            )}
           </div>
         </section>
+
+        {/* Header de actividad */}
+        <section className="mb-8">
+          <div className="bg-white border border-gray-300 rounded-lg p-6 shadow-sm">
+            <div className="flex items-center space-x-3">
+              <span className="text-3xl">
+                {(() => {
+                  switch (detailView.activity.type) {
+                    case 'forum': return '💬'
+                    case 'assign': return '📝'
+                    case 'quiz': return '📊'
+                    case 'feedback': return '📋'
+                    case 'choice': return '🗳️'
+                    default: return '🎯'
+                  }
+                })()}
+              </span>
+              <div>
+                <h2 className="text-2xl font-bold text-primary-darker">
+                  {detailView.activity.name}
+                </h2>
+                <p className="text-gray-600">
+                  {(() => {
+                    switch (detailView.activity.type) {
+                      case 'forum': return 'Foro'
+                      case 'assign': return 'Tarea'
+                      case 'quiz': return 'Cuestionario'
+                      case 'feedback': return 'Encuesta'
+                      case 'choice': return 'Elección'
+                      default: return 'Actividad'
+                    }
+                  })()} • {detailView.activity.status === 'open' ? 'Disponible' : 'Estado: ' + detailView.activity.status}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Cards de puntos de análisis */}
+        {analysis && analysisPoints.length > 0 ? (
+          <section className="mb-8">
+            <div className={`grid gap-6 ${analysisPoints.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
+              {analysisPoints.map((point, index) => {
+                const getPointIcon = (type: string) => {
+                  switch (type) {
+                    case 'table': return '📊'
+                    case 'numbered-list': return '📝'
+                    case 'bullet-list': return '📋'
+                    case 'code': return '💻'
+                    case 'quote': return '💭'
+                    default: return '📄'
+                  }
+                }
+
+                const getPointTypeLabel = (type: string) => {
+                  switch (type) {
+                    case 'table': return 'Datos'
+                    case 'numbered-list': return 'Pasos'
+                    case 'bullet-list': return 'Puntos'
+                    case 'code': return 'Código'
+                    case 'quote': return 'Cita'
+                    default: return 'Insight'
+                  }
+                }
+
+                return (
+                  <div key={point.id} className="bg-white border border-gray-300 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
+                    {/* Header del point */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-2">
+                        <h3 className="text-lg font-semibold text-primary-darker font-inter line-clamp-2">
+                          {point.title}
+                        </h3>
+                      </div>
+                      <span className="bg-white border border-blue-500 text-blue-700 px-3 py-1 rounded-[100px] text-sm font-semibold flex items-center space-x-1 font-inter">
+                        <span className="text-md">{getPointIcon(point.type)}</span>
+                        <span>{getPointTypeLabel(point.type)}</span>
+                      </span>
+                    </div>
+                    
+                    {/* Contenido del point con Markdown */}
+                    <div className="mb-4">
+                      <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-strong:text-gray-900 prose-em:text-gray-700">
+                        <ReactMarkdown 
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            h1: ({children}) => <h1 className="text-lg font-bold text-gray-900 mb-2">{children}</h1>,
+                            h2: ({children}) => <h2 className="text-md font-semibold text-gray-900 mb-2">{children}</h2>,
+                            h3: ({children}) => <h3 className="text-sm font-medium text-gray-900 mb-2">{children}</h3>,
+                            ul: ({children}) => <ul className="list-disc list-inside space-y-1 ml-2 text-gray-700">{children}</ul>,
+                            ol: ({children}) => <ol className="list-decimal list-inside space-y-1 ml-2 text-gray-700">{children}</ol>,
+                            blockquote: ({children}) => <blockquote className="border-l-4 border-gray-300 pl-4 italic text-gray-600 my-3">{children}</blockquote>,
+                            table: ({children}) => <table className="w-full border-collapse border border-gray-300 my-3">{children}</table>,
+                            th: ({children}) => <th className="border border-gray-300 bg-gray-100 px-3 py-2 text-left font-semibold text-xs">{children}</th>,
+                            td: ({children}) => <td className="border border-gray-300 px-3 py-2 text-sm">{children}</td>,
+                            code: ({children}) => <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
+                            pre: ({children}) => <pre className="bg-gray-100 p-3 rounded overflow-x-auto text-sm">{children}</pre>,
+                            p: ({children}) => <p className="text-gray-700 mb-2 text-sm leading-relaxed">{children}</p>,
+                            strong: ({children}) => <strong className="font-semibold text-gray-900">{children}</strong>,
+                            em: ({children}) => <em className="italic text-gray-600">{children}</em>
+                          }}
+                        >
+                          {point.content}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        ) : (
+          <section className="mb-8">
+            <div className="text-center py-12">
+              <FontAwesomeIcon icon={faBrain} size="3x" className="text-gray-300 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                Análisis no disponible
+              </h3>
+              <p className="text-gray-600 mb-4">
+                Esta actividad aún no ha sido analizada
+              </p>
+              <button
+                onClick={() => analyzeActivity(detailView.activity)}
+                className="bg-primary hover:bg-primary-dark text-white px-6 py-2 rounded-lg transition-colors"
+              >
+                Generar análisis
+              </button>
+            </div>
+          </section>
+        )}
       </div>
     )
   }
