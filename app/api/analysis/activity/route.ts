@@ -81,6 +81,7 @@ export async function POST(request: NextRequest) {
           alerts: existingAnalysis.alerts,
           insights: existingAnalysis.insights,
           recommendation: existingAnalysis.recommendation,
+          fullAnalysis: existingAnalysis.fullAnalysis || existingAnalysis.summary,
           generatedAt: existingAnalysis.generatedAt.toISOString(),
           activityName: existingAnalysis.activityName,
           activityId: existingAnalysis.activityId,
@@ -152,6 +153,7 @@ export async function POST(request: NextRequest) {
             alerts: analysisResult.alerts,
             insights: analysisResult.insights,
             recommendation: analysisResult.recommendation,
+            fullAnalysis: analysisResult.fullAnalysis || analysisResult.summary,
             activityData: activityData,
             llmResponse: { model: 'gpt-4', generatedAt: new Date() },
             lastUpdated: new Date()
@@ -171,6 +173,7 @@ export async function POST(request: NextRequest) {
             alerts: analysisResult.alerts,
             insights: analysisResult.insights,
             recommendation: analysisResult.recommendation,
+            fullAnalysis: analysisResult.fullAnalysis || analysisResult.summary,
             activityData: activityData,
             llmResponse: { model: 'gpt-4', generatedAt: new Date() }
           }
@@ -292,31 +295,43 @@ Proporciona entre 4-8 secciones independientes. Cada sección debe tener:
 1. Un título breve y descriptivo (sin números, máximo 5 palabras)
 2. Contenido específico para esa sección
 
+**ADEMÁS, AL FINAL DEL ANÁLISIS, PROPORCIONA UN RESUMEN EJECUTIVO:**
+
+## RESUMEN_EJECUTIVO
+[Lista con UN PUNTO CLAVE de cada sección anterior, máximo 15 palabras por punto]
+
 **EJEMPLO DE ESTRUCTURA:**
 
 ## Patrones de Participación
-[Contenido sobre cómo participan los estudiantes]
+[Contenido detallado sobre cómo participan los estudiantes]
 
 ## Calidad del Engagement  
-[Análisis de la profundidad de las interacciones]
+[Análisis detallado de la profundidad de las interacciones]
 
 ## Distribución de Actividad
-[Cómo se distribuye la participación]
+[Análisis de cómo se distribuye la participación]
 
 ## Aspectos Positivos Identificados
-[Elementos que funcionan bien]
+[Elementos detallados que funcionan bien]
 
 ## Áreas de Mejora
-[Oportunidades de mejora detectadas]
+[Oportunidades específicas de mejora detectadas]
 
 ## Recomendaciones Docentes
-[Acciones sugeridas para el profesor]
+[Acciones concretas sugeridas para el profesor]
+
+## RESUMEN_EJECUTIVO
+- Participación baja con promedio de 1 post por estudiante
+- Interacciones superficiales sin profundización en temas
+- Actividad concentrada en pocas discusiones específicas
+- Buena estructura de foros pero poca interacción
+- Necesario incentivar participación con preguntas dirigidas
+- Implementar rúbricas claras para mejorar calidad
 
 **IMPORTANTE**: 
 - Cada sección debe ser independiente y autocontenida
-- Usa formato Markdown apropiado: listas numeradas, viñetas, tablas según el contenido
-- Los títulos deben ser descriptivos pero breves
-- Evita repetir información entre secciones
+- El RESUMEN_EJECUTIVO debe tener UN punto por cada sección anterior
+- Cada punto del resumen: máximo 15 palabras, directo y específico
 `
   } else {
     // Prompt para foro general con múltiples discusiones
@@ -373,11 +388,18 @@ Proporciona entre 4-8 secciones independientes. Cada sección debe tener:
 ## Recomendaciones Docentes
 [Acciones sugeridas para mejorar el foro]
 
+## RESUMEN_EJECUTIVO
+- Participación general del foro con X estudiantes activos
+- Calidad de interacciones requiere mejora significativa
+- Distribución desigual entre las discusiones disponibles
+- Estructura del foro bien organizada y clara
+- Falta profundización en respuestas estudiantiles
+- Implementar estrategias de moderación activa
+
 **IMPORTANTE**:
 - Cada sección debe ser independiente y autocontenida
-- Usa formato Markdown apropiado: listas numeradas, viñetas, tablas según el contenido
-- Los títulos deben ser descriptivos pero breves
-- Evita repetir información entre secciones
+- El RESUMEN_EJECUTIVO debe tener UN punto por cada sección anterior
+- Cada punto del resumen: máximo 15 palabras, directo y específico
 `
   }
 

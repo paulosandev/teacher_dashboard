@@ -64,22 +64,37 @@ export function IntelligentDashboardContent({
   const [visibleActivitiesCount, setVisibleActivitiesCount] = useState(5) // Número de actividades visibles
   const [isAnalyzingBatch, setIsAnalyzingBatch] = useState(false)
   const [isLoadingCourse, setIsLoadingCourse] = useState(true) // Nuevo estado para loader general, empieza en true
+  const [loadingPhase, setLoadingPhase] = useState<'loading' | 'analyzing'>('loading') // Fase actual de carga
   const [detailView, setDetailView] = useState<{isActive: boolean, activity: any} | null>(null) // Estado para vista de detalle
   const BATCH_SIZE = 5
 
   const loadAnalysisForCourse = useCallback(async (courseId: string) => {
     try {
       // Cargar análisis existentes para este curso desde cache
+      console.log(`🔍 Cargando análisis desde caché para curso: ${courseId}`)
       const response = await fetch(`/api/analysis/cache?courseId=${courseId}`)
       if (response.ok) {
         const data = await response.json()
         if (data.success && data.analysisResults) {
-          console.log(`📦 Cargados ${data.count} análisis desde cache`)
+          console.log(`📦 Cargados ${data.count} análisis desde cache:`, data.analysisResults)
+          
+          // Debug: verificar qué campos tienen los análisis cargados
+          Object.keys(data.analysisResults).forEach(key => {
+            const analysis = data.analysisResults[key]
+            console.log(`🔍 Análisis ${key}:`, {
+              hasFullAnalysis: !!analysis.fullAnalysis,
+              hasSummary: !!analysis.summary,
+              fromCache: analysis.fromCache
+            })
+          })
+          
           setAnalysisResults(data.analysisResults)
         } else {
+          console.log('⚠️ No se encontraron análisis en cache')
           setAnalysisResults({})
         }
       } else {
+        console.log('❌ Error en respuesta del cache:', response.status)
         setAnalysisResults({})
       }
     } catch (error) {
@@ -166,6 +181,8 @@ export function IntelligentDashboardContent({
       // Cargar nuevos datos
       const loadData = async () => {
         try {
+          setLoadingPhase('loading')
+          console.log('🔄 Fase: Cargando información del curso...')
           await loadOpenActivities(selectedCourse)
           await loadAnalysisForCourse(selectedCourse)
           
@@ -272,6 +289,8 @@ export function IntelligentDashboardContent({
     if (openActivities.length > 0 && !isAnalyzingBatch && isLoadingCourse) {
       // Analizar automáticamente las primeras actividades visibles
       const runAutoAnalysis = async () => {
+        setLoadingPhase('analyzing')
+        console.log('🤖 Fase: Analizando actividades con IA...')
         await analyzeVisibleActivities()
         setIsLoadingCourse(false) // Desactivar loader cuando termine el análisis
       }
@@ -417,10 +436,18 @@ export function IntelligentDashboardContent({
 
   // Función para parsear el análisis en puntos individuales
   const parseAnalysisIntoPoints = useCallback((analysis: any) => {
-    if (!analysis?.fullAnalysis) return []
+    if (!analysis?.fullAnalysis) {
+      console.log('⚠️ No se encontró fullAnalysis, intentando con summary')
+      // Fallback: usar el summary como resumen ejecutivo si no hay fullAnalysis
+      if (analysis?.summary) {
+        return { points: [], summary: [analysis.summary] }
+      }
+      return { points: [], summary: [] }
+    }
 
     const content = analysis.fullAnalysis
     const points = []
+    let summaryPoints = []
     
     // Dividir por headers ## (secciones principales)
     const sections = content.split(/(?=^##\s)/gm)
@@ -436,7 +463,17 @@ export function IntelligentDashboardContent({
         const title = headerLine.replace(/^##\s*/, '').trim()
         const sectionContent = lines.slice(1).join('\n').trim()
         
-        if (title && sectionContent) {
+        // Buscar si es el resumen ejecutivo (más flexible)
+        if (title === 'RESUMEN_EJECUTIVO' || title.includes('RESUMEN') || title.includes('EJECUTIVO')) {
+          // Extraer puntos del resumen
+          summaryPoints = sectionContent
+            .split('\n')
+            .filter(line => line.trim().startsWith('-') || line.trim().startsWith('•') || line.trim().startsWith('*'))
+            .map(line => line.replace(/^[-•*]\s*/, '').trim())
+            .filter(line => line.length > 10) // Filtrar líneas muy cortas
+          
+          console.log('📋 Resumen ejecutivo encontrado:', summaryPoints)
+        } else if (title && sectionContent) {
           points.push({
             id: `section-${index}`,
             title: title,
@@ -461,7 +498,12 @@ export function IntelligentDashboardContent({
       })
     }
 
-    return points
+    // Guardar el resumen en el análisis para uso posterior
+    if (analysis && summaryPoints.length > 0) {
+      analysis.executiveSummary = summaryPoints
+    }
+
+    return { points, summary: summaryPoints }
   }, [])
 
   // Función para generar títulos por defecto cuando no hay headers
@@ -524,7 +566,7 @@ export function IntelligentDashboardContent({
   if (detailView?.isActive && detailView.activity) {
     const activityKey = `${detailView.activity.type}_${detailView.activity.id}`
     const analysis = analysisResults[activityKey]
-    const analysisPoints = analysis ? parseAnalysisIntoPoints(analysis) : []
+    const { points: analysisPoints } = analysis ? parseAnalysisIntoPoints(analysis) : { points: [], summary: [] }
 
     return (
       <div className="max-w-[1132px] mx-auto px-4 sm:px-6 lg:px-3">
@@ -787,12 +829,20 @@ export function IntelligentDashboardContent({
             {isLoadingCourse ? (
               <div className="flex flex-col items-center justify-center py-16">
                 <div className="text-center">
-                  <FontAwesomeIcon icon={faSpinner} size="3x" className="text-blue-600 animate-spin mb-4" />
+                  <FontAwesomeIcon 
+                    icon={loadingPhase === 'loading' ? faSpinner : faBrain} 
+                    size="3x" 
+                    className={`${loadingPhase === 'loading' ? 'text-blue-600 animate-spin' : 'text-primary animate-pulse'} mb-4`} 
+                  />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">
-                    Cargando análisis inteligente...
+                    {loadingPhase === 'loading' 
+                      ? 'Cargando información...' 
+                      : 'Analizando actividades...'}
                   </h3>
                   <p className="text-gray-600">
-                    Obteniendo actividades y generando insights
+                    {loadingPhase === 'loading' 
+                      ? 'Obteniendo actividades del curso seleccionado' 
+                      : 'Generando insights inteligentes con IA'}
                   </p>
                 </div>
               </div>
@@ -890,20 +940,42 @@ export function IntelligentDashboardContent({
                           }
                           
                           if (analysisExtract) {
-                            // Mostrar resumen del análisis completo
+                            // Mostrar resumen ejecutivo como lista
                             const analysis = analysisResults[activityKey]
-                            const summaryText = analysis?.fullAnalysis || analysis?.summary || analysisExtract.summary
+                            
+                            // Parsear para obtener el resumen ejecutivo si no está ya extraído
+                            if (!analysis.executiveSummary && analysis.fullAnalysis) {
+                              const { summary } = parseAnalysisIntoPoints(analysis)
+                              analysis.executiveSummary = summary
+                            }
+                            
+                            const summaryPoints = analysis.executiveSummary || []
                             
                             return (
                               <div className="mb-4">
-                                <div className="bg-gray-50 rounded-lg p-4">
-                                  <p className="text-gray-700 text-sm leading-relaxed">
-                                    {/* Mostrar primeros 300 caracteres del análisis completo */}
-                                    {summaryText && summaryText.length > 300 
-                                      ? summaryText.substring(0, 300) + '...' 
-                                      : summaryText}
-                                  </p>
-                                </div>
+                                {summaryPoints.length > 0 ? (
+                                  <div className="space-y-2">
+                                    {summaryPoints.slice(0, 4).map((point: string, idx: number) => (
+                                      <div key={idx} className="flex items-start space-x-2">
+                                        <span className="text-primary-darker mt-1">•</span>
+                                        <p className="text-gray-700 text-sm leading-relaxed">
+                                          {point}
+                                        </p>
+                                      </div>
+                                    ))}
+                                    {summaryPoints.length > 4 && (
+                                      <p className="text-gray-500 text-xs italic pl-4">
+                                        +{summaryPoints.length - 4} puntos más...
+                                      </p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="bg-gray-50 rounded-lg p-4">
+                                    <p className="text-gray-700 text-sm leading-relaxed">
+                                      {analysis?.summary || 'Análisis disponible'}
+                                    </p>
+                                  </div>
+                                )}
                               </div>
                             )
                           } else {

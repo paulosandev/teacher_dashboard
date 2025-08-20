@@ -42,10 +42,12 @@ export async function GET(request: NextRequest) {
         alerts: analysis.alerts,
         insights: analysis.insights,
         recommendation: analysis.recommendation,
+        fullAnalysis: analysis.fullAnalysis || analysis.summary, // Incluir análisis completo
         generatedAt: analysis.generatedAt.toISOString(),
         activityName: analysis.activityName,
         activityId: analysis.activityId,
-        activityType: analysis.activityType
+        activityType: analysis.activityType,
+        fromCache: true // Marcar que viene del caché
       }
     }
 

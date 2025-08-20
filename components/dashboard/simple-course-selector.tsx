@@ -25,6 +25,7 @@ export default function SimpleCourseSelector({
   const [isOpen, setIsOpen] = useState(false)
   const [selectedCourse, setSelectedCourse] = useState<string | null>(selectedCourseId || null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const [hasAutoSelected, setHasAutoSelected] = useState(false)
 
   // Cerrar dropdown al hacer click fuera
   useEffect(() => {
@@ -44,6 +45,19 @@ export default function SimpleCourseSelector({
       setSelectedCourse(selectedCourseId)
     }
   }, [selectedCourseId])
+
+  // Auto-seleccionar el primer curso al cargar si no hay uno seleccionado
+  useEffect(() => {
+    if (!hasAutoSelected && courses && courses.length > 0 && !selectedCourse) {
+      const firstCourseId = courses[0].id
+      console.log('🎯 Auto-seleccionando primer curso:', courses[0].name || courses[0].fullname)
+      setSelectedCourse(firstCourseId)
+      setHasAutoSelected(true)
+      if (onSelectionChange) {
+        onSelectionChange(firstCourseId)
+      }
+    }
+  }, [courses, selectedCourse, onSelectionChange, hasAutoSelected])
 
   const handleCourseSelect = (courseId: string) => {
     setSelectedCourse(courseId)

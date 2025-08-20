@@ -115,6 +115,7 @@ model ActivityAnalysis {
   alerts          Json     // Array de alertas/problemas
   insights        Json     // Array de insights clave
   recommendation  String   // Recomendación principal
+  fullAnalysis    String?  // Análisis completo en formato Markdown
   
   // Análisis específico por tipo
   forumAnalysis   Json?    // Análisis específico de foros
