@@ -188,7 +188,7 @@ para cada grupo en grupos_con_miembros {
           debugReport += `  • Nombre: ${group.name}\n`
           debugReport += `  • Descripción: ${group.description || 'Sin descripción'}\n`
           
-          // Obtener miembros del grupo
+          // Obtener miembros del grupo (con manejo silencioso de errores de permisos)
           try {
             const groupMembers = await sessionClient.getGroupMembers(group.id.toString(), courseId)
             debugReport += `  • Total miembros: ${groupMembers?.length || 0}\n`
@@ -213,7 +213,12 @@ para cada grupo en grupos_con_miembros {
               debugReport += `  • Sin miembros\n`
             }
           } catch (error: any) {
-            debugReport += `  • ERROR obteniendo miembros: ${error.message}\n`
+            // Manejo silencioso para errores de permisos esperados
+            if (error.message?.includes('Excepción al control de acceso')) {
+              debugReport += `  • Sin permisos para ver miembros (privado)\n`
+            } else {
+              debugReport += `  • ERROR obteniendo miembros: ${error.message}\n`
+            }
           }
           
           debugReport += `\n`

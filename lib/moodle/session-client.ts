@@ -117,46 +117,46 @@ export class SessionMoodleClient {
   }
 
   /**
-   * Obtiene miembros de un grupo usando método alternativo
+   * Obtiene miembros de un grupo usando método ROBUSTO
+   * REEMPLAZADO: Ya no intenta core_group_get_group_members (que siempre falla)
+   * USA: core_enrol_get_enrolled_users + filtrado (método comprobado funcional)
    */
   async getGroupMembers(groupId: string, courseId?: string) {
     const client = await this.getClient()
     
     try {
-      console.log(`👥 [ALTERNATIVO] Obteniendo miembros del grupo: ${groupId}`)
+      console.log(`👥 [ROBUSTO] Obteniendo miembros del grupo: ${groupId}`)
       
-      // Método 1: Intentar core_group_get_group_members (puede fallar por permisos)
-      try {
-        const members = await client.callMoodleAPI('core_group_get_group_members', {
-          groupids: [parseInt(groupId)]
-        })
-        
-        const userIds = members?.[0]?.userids || []
-        if (userIds.length > 0) {
-          console.log(`✅ Método directo exitoso: ${userIds.length} miembros`)
-          return await this.getUsersDetails(client, userIds)
-        }
-      } catch (directError) {
-        console.log(`⚠️ Método directo falló (esperado): ${directError.message}`)
-      }
-      
-      // Método 2: Alternativo - Obtener todos los usuarios del curso y filtrar por grupos
+      // Verificar que tenemos courseId
       if (!courseId) {
-        console.log('⚠️ No se proporcionó courseId para método alternativo')
+        console.log('❌ courseId es requerido para método robusto')
         return []
       }
       
-      console.log(`🔄 Usando método alternativo con curso ${courseId}...`)
+      console.log(`🔧 Usando método robusto optimizado para curso ${courseId}...`)
       
-      // Obtener todos los usuarios inscritos en el curso
+      // MÉTODO ROBUSTO: Obtener todos los usuarios inscritos con información de grupos
       const enrolledUsers = await client.callMoodleAPI('core_enrol_get_enrolled_users', {
         courseid: parseInt(courseId)
       })
       
       console.log(`📚 Usuarios inscritos en curso: ${enrolledUsers.length}`)
       
+      // Filtrar usuarios que pertenecen al grupo específico
+      const targetGroupId = parseInt(groupId)
+      const groupMembers = enrolledUsers.filter((user: any) => {
+        return user.groups && user.groups.some((group: any) => group.id === targetGroupId)
+      })
+      
+      console.log(`👥 Miembros del grupo ${groupId}: ${groupMembers.length}`)
+      
+      if (groupMembers.length === 0) {
+        console.log(`ℹ️ No hay miembros en el grupo ${groupId} o el grupo no existe`)
+        return []
+      }
+      
       // Filtrar solo estudiantes (eliminar profesores y otros roles)
-      const students = enrolledUsers.filter((user: any) => {
+      const studentMembers = groupMembers.filter((user: any) => {
         const roles = user.roles || []
         return roles.some((role: any) => {
           const roleName = (role.shortname || role.name || '').toLowerCase()
@@ -164,25 +164,22 @@ export class SessionMoodleClient {
         })
       })
       
-      console.log(`👨‍🎓 Estudiantes encontrados: ${students.length}`)
+      console.log(`👨‍🎓 Estudiantes del grupo: ${studentMembers.length}`)
       
-      if (students.length === 0) {
-        console.log('ℹ️ No hay estudiantes en este curso')
-        return []
-      }
-      
-      // Retornar estudiantes formateados
-      const studentsFormatted = students.map((user: any) => ({
+      // Retornar miembros del grupo formateados
+      const membersFormatted = studentMembers.map((user: any) => ({
         id: user.id,
         username: user.username,
         firstname: user.firstname,
         lastname: user.lastname,
         fullname: user.fullname || `${user.firstname} ${user.lastname}`,
-        email: user.email
+        email: user.email,
+        groups: user.groups || [],
+        roles: user.roles?.map((r: any) => r.shortname) || []
       }))
       
-      console.log(`✅ Retornando ${studentsFormatted.length} estudiantes del curso`)
-      return studentsFormatted
+      console.log(`✅ MÉTODO ROBUSTO EXITOSO: ${membersFormatted.length} miembros del grupo ${groupId}`)
+      return membersFormatted
       
     } catch (error) {
       console.error(`❌ Error en método alternativo para grupo ${groupId}:`, error)

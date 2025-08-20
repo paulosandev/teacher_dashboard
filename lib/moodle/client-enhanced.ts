@@ -186,7 +186,12 @@ export class MoodleAPIClientEnhanced {
 
       return data;
     } catch (error) {
-      console.error(`❌ Error llamando Moodle API (${wsfunction}):`, error);
+      // Reducir ruido de logs para errores de permisos esperados
+      if (wsfunction === 'core_group_get_group_members' && error.message?.includes('Excepción al control de acceso')) {
+        console.log(`⚠️ ${wsfunction}: Sin permisos para acceder al grupo (esperado)`);
+      } else {
+        console.error(`❌ Error llamando Moodle API (${wsfunction}):`, error);
+      }
       throw error;
     }
   }
