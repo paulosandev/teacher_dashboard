@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPencilAlt, faBell, faGear, faKey, faSignOutAlt, faChevronDown } from '@fortawesome/free-solid-svg-icons'
+import { faPencilAlt, faBell, faGear, faKey, faSignOutAlt, faChevronDown, faTrashCan, faSpinner } from '@fortawesome/free-solid-svg-icons'
 import { signOut } from 'next-auth/react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -20,6 +20,7 @@ export default function DashboardHeader({
 }: HeaderProps) {
   const pathname = usePathname()
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
+  const [isClearingCache, setIsClearingCache] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Cerrar dropdown cuando se hace click fuera
@@ -38,6 +39,44 @@ export default function DashboardHeader({
 
   const handleLogout = () => {
     signOut({ callbackUrl: '/auth/login' })
+  }
+
+  const handleClearCache = async () => {
+    // Confirmación antes de limpiar
+    const confirmed = confirm(
+      '¿Estás seguro de que quieres limpiar el caché?\n\nEsto eliminará todos los análisis guardados y será necesario regenerarlos.'
+    )
+    
+    if (!confirmed) return
+
+    try {
+      setIsClearingCache(true)
+      
+      const response = await fetch('/api/analysis/cache/clear', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        // Mostrar mensaje de éxito
+        alert(`Caché limpiado exitosamente.\n${data.message}`)
+        // Cerrar dropdown
+        setIsProfileDropdownOpen(false)
+        // Recargar la página para reflejar los cambios
+        window.location.reload()
+      } else {
+        alert(`Error al limpiar caché: ${data.error || 'Error desconocido'}`)
+      }
+    } catch (error) {
+      console.error('Error limpiando caché:', error)
+      alert('Error de conexión al limpiar caché')
+    } finally {
+      setIsClearingCache(false)
+    }
   }
   
   return (
@@ -143,6 +182,21 @@ export default function DashboardHeader({
                       <FontAwesomeIcon icon={faGear} className="w-4 h-4" />
                       Configuración
                     </Link>
+                    <button
+                      onClick={handleClearCache}
+                      disabled={isClearingCache}
+                      className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors ${
+                        isClearingCache 
+                          ? 'text-gray-400 cursor-not-allowed' 
+                          : 'text-red-600 hover:bg-red-50'
+                      }`}
+                    >
+                      <FontAwesomeIcon 
+                        icon={isClearingCache ? faSpinner : faTrashCan} 
+                        className={`w-4 h-4 ${isClearingCache ? 'animate-spin' : ''}`} 
+                      />
+                      {isClearingCache ? 'Limpiando...' : 'Limpiar caché'}
+                    </button>
                     <div className="border-t border-gray-100 my-1"></div>
                     <button
                       onClick={handleLogout}
