@@ -84,10 +84,10 @@ export default function SimpleCourseSelector({
   }
 
   return (
-    <div className="relative w-full min-w-[350px] max-w-[350px]" ref={dropdownRef}>
+    <div className="relative w-full min-w-[350px] max-w-[550px]" ref={dropdownRef}>
       <button
         type="button"
-        className="relative w-full min-w-[350px] max-w-[350px] bg-white border border-gray-300 rounded-md shadow-sm pl-3 pr-10 py-3 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-sm"
+        className="relative w-full min-w-[350px] max-w-[550px] bg-white border border-gray-300 rounded-md shadow-sm pl-3 pr-10 py-3 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary text-sm"
         aria-haspopup="listbox"
         aria-expanded="true"
         onClick={() => setIsOpen(!isOpen)}

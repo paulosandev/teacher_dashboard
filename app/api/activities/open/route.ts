@@ -137,17 +137,17 @@ export async function GET(request: NextRequest) {
                   console.log(`🌍 ACCESO GENERAL: Incluyendo todas las ${discussions.discussions.length} discusiones`)
                 }
                 
-                // CAMBIO: Mostrar TODAS las discusiones del grupo donde el profesor tiene acceso
-                // En lugar de filtrar solo por autoría, incluir discusiones relevantes para el profesor
-                console.log(`👥 DISCUSIONES DISPONIBLES EN GRUPO ${groupId}: ${filteredDiscussions.length} discusiones`)
+                // SIMPLIFICADO: Mostrar todas las discusiones del grupo donde el profesor está enrolado
+                // Solo se requiere que el profesor esté enrolado al grupo para ver las actividades
+                console.log(`👥 DISCUSIONES DEL GRUPO ${groupId}: ${filteredDiscussions.length} discusiones disponibles`)
                 
                 filteredDiscussions.forEach((d: any) => {
                   const isAuthorProfesor = d.userid === professorUserId
-                  console.log(`   ${isAuthorProfesor ? '👨‍🏫' : '🤝'} "${d.name}" (autor: ${d.userid}${isAuthorProfesor ? ' - Julio Profe' : ''}, respuestas: ${d.numreplies})`)
+                  console.log(`   ${isAuthorProfesor ? '👨‍🏫' : '👥'} "${d.name}" (autor: ${d.userid}${isAuthorProfesor ? ' - Julio Profe' : ''}, respuestas: ${d.numreplies})`)
                 })
                 
-                // NO filtrar por autoría - mostrar todas las discusiones del grupo
-                // El profesor puede participar y analizar discusiones de otros profesores
+                // CRITERIO ÚNICO: Solo verificar enrolamiento del profesor al grupo
+                // Se muestran todas las actividades/discusiones del grupo sin filtrado adicional
                 
                 forumDiscussions = filteredDiscussions
                 
@@ -381,15 +381,10 @@ export async function GET(request: NextRequest) {
             let shouldIncludeAssignment = true
             
             if (groupId !== '0') {
-              // Si hay un grupo específico seleccionado, NO incluir asignaciones generales
-              // Las asignaciones generalmente son para todo el curso, no por grupo
-              console.log(`🎯 Verificando asignación "${assignment.name}" para grupo ${groupId}`)
-              
-              // EXCLUIR todas las asignaciones cuando se selecciona un grupo específico
-              // ya que las asignaciones son típicamente para todo el curso
-              shouldIncludeAssignment = false
-              
-              console.log(`   ❌ Asignación excluida en vista de grupo específico`)
+              // SIMPLIFICADO: Incluir asignaciones si el profesor tiene acceso al grupo
+              // Las asignaciones del curso son accesibles por el profesor enrolado al grupo
+              console.log(`🎯 Asignación "${assignment.name}" incluida para profesor con acceso al grupo ${groupId}`)
+              shouldIncludeAssignment = true // Siempre incluir si el profesor tiene acceso al grupo
             }
             
             if (!shouldIncludeAssignment) {
@@ -503,12 +498,11 @@ export async function GET(request: NextRequest) {
       Object.entries(moduleUrlMap).forEach(([key, url]) => {
         const [modname, name] = key.split('_', 2)
         
-        // Incluir otros tipos de actividades interactivas SOLO si es acceso general
+        // Incluir otros tipos de actividades interactivas si el profesor tiene acceso al grupo
         if (['feedback', 'quiz', 'choice', 'survey', 'lesson'].includes(modname)) {
-          // FILTRADO POR GRUPO: Excluir otras actividades cuando se selecciona grupo específico
+          // SIMPLIFICADO: Incluir actividades si el profesor está enrolado al grupo
           if (groupId !== '0') {
-            console.log(`⚠️ ACTIVIDAD "${modname}" EXCLUIDA: "${name}" no se muestra en vista de grupo específico`)
-            return // No incluir en vista de grupo
+            console.log(`✅ ACTIVIDAD "${modname}" INCLUIDA: "${name}" accesible para profesor del grupo ${groupId}`)
           }
           
           // Verificar que no sea una actividad ya agregada

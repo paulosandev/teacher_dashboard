@@ -328,20 +328,27 @@ export function IntelligentDashboardContent({
 
   // Ejecutar análisis automático cuando se cargan las actividades Y el cache
   useEffect(() => {
-    if (openActivities.length > 0 && cacheLoaded && !isAnalyzingBatch && isLoadingCourse) {
-      // Analizar automáticamente las primeras actividades visibles
-      const runAutoAnalysis = async () => {
-        setLoadingPhase('analyzing')
-        console.log('🤖 Fase: Analizando actividades con IA...')
-        console.log(`📋 Estado antes del análisis: ${Object.keys(analysisResults).length} análisis en cache`)
-        await analyzeVisibleActivities()
-        setIsLoadingCourse(false) // Desactivar loader cuando termine el análisis
+    if (cacheLoaded && !loadingActivities && selectedCourse && isLoadingCourse) {
+      if (openActivities.length > 0 && !isAnalyzingBatch) {
+        // Caso 1: Hay actividades abiertas - analizar automáticamente
+        const runAutoAnalysis = async () => {
+          setLoadingPhase('analyzing')
+          console.log('🤖 Fase: Analizando actividades con IA...')
+          console.log(`📋 Estado antes del análisis: ${Object.keys(analysisResults).length} análisis en cache`)
+          await analyzeVisibleActivities()
+          setIsLoadingCourse(false) // Desactivar loader cuando termine el análisis
+        }
+        runAutoAnalysis()
+      } else if (Object.keys(analysisResults).length > 0) {
+        // Caso 2: No hay actividades abiertas PERO hay análisis en cache - mostrar cache inmediatamente
+        console.log('📦 Mostrando análisis desde cache sin actividades abiertas')
+        console.log(`📋 Análisis disponibles en cache: ${Object.keys(analysisResults).length}`)
+        setIsLoadingCourse(false) // Desactivar loader y mostrar cache
+      } else {
+        // Caso 3: No hay actividades ni cache - desactivar loader
+        console.log('🙅‍♂️ No hay actividades abiertas ni análisis en cache para este grupo')
+        setIsLoadingCourse(false)
       }
-      runAutoAnalysis()
-    } else if (openActivities.length === 0 && cacheLoaded && !loadingActivities && selectedCourse) {
-      // Si no hay actividades y ya terminó de cargar, desactivar loader
-      console.log('🙅‍♂️ No hay actividades abiertas para este grupo')
-      setIsLoadingCourse(false)
     }
   }, [openActivities, cacheLoaded, analyzeVisibleActivities, isAnalyzingBatch, isLoadingCourse, loadingActivities, selectedCourse, analysisResults])
 
@@ -431,9 +438,30 @@ export function IntelligentDashboardContent({
     
     if (!analysis) return null
 
+    // ARREGLO: Extraer resumen real desde fullAnalysis en lugar de usar el campo summary
+    let realSummary = analysis.summary
+    if (analysis.fullAnalysis && analysis.fullAnalysis.length > 100) {
+      // Intentar extraer la primera sección con contenido real del fullAnalysis
+      const sections = analysis.fullAnalysis.split(/(?=^##\s)/gm)
+        .map((section: string) => section.trim())
+        .filter((section: string) => section.length > 50)
+      
+      if (sections.length > 0) {
+        // Tomar la primera sección y extraer el contenido sin el header
+        const firstSection = sections[0]
+        const lines = firstSection.split('\n')
+        const contentLines = lines.slice(1).filter(line => line.trim().length > 0)
+        
+        if (contentLines.length > 0) {
+          // Tomar las primeras 3-4 líneas de contenido real
+          realSummary = contentLines.slice(0, 4).join(' ').substring(0, 300) + '...'
+        }
+      }
+    }
+
     // Crear versiones resumidas específicas para card (oraciones completas)
     const extract = {
-      summary: createCardSummary(analysis.summary),
+      summary: createCardSummary(realSummary),
       positiveHighlight: analysis.positives && analysis.positives.length > 0 
         ? createCardSummary(analysis.positives[0]) 
         : null,
@@ -524,13 +552,17 @@ export function IntelligentDashboardContent({
             .filter(line => line.length > 10) // Filtrar líneas muy cortas
           
           console.log('📋 Resumen ejecutivo encontrado:', summaryPoints)
-        } else if (title && sectionContent) {
+        } else if (title && sectionContent && sectionContent.length > 50) {
+          // Solo incluir secciones con contenido sustancial (más de 50 caracteres)
           points.push({
             id: `section-${index}`,
             title: title,
             content: sectionContent,
             type: detectContentType(sectionContent)
           })
+          console.log(`📋 Sección incluida: "${title}" (${sectionContent.length} caracteres)`)
+        } else {
+          console.log(`⚠️ Sección excluida: "${title}" - contenido insuficiente (${sectionContent?.length || 0} caracteres)`)
         }
       })
     } else {
@@ -734,11 +766,31 @@ export function IntelligentDashboardContent({
                         // Diseño especial para listas numeradas como en el ejemplo
                         <div className="space-y-3">
                           {(() => {
-                            // Extraer elementos de lista del contenido
-                            const listItems = point.content
-                              .split(/\n\d+\.\s+|\n[-*+]\s+/)
+                            // Extraer elementos de lista del contenido con manejo mejorado
+                            let listItems = []
+                            
+                            // Primero intentar split por líneas que empiecen con números o bullets
+                            const potentialItems = point.content
+                              .split(/\n(?=\d+\.\s+|[-*+]\s+)/)
                               .filter(item => item.trim().length > 0)
-                              .slice(1); // Remover el primer elemento que suele ser el header
+                            
+                            if (potentialItems.length > 1) {
+                              // Hay elementos de lista identificados
+                              listItems = potentialItems.map(item => 
+                                item.replace(/^\d+\.\s+|^[-*+]\s+/, '').trim()
+                              ).filter(item => item.length > 0)
+                            } else {
+                              // Fallback: dividir por párrafos si no hay formato de lista
+                              listItems = point.content
+                                .split(/\n\n+/)
+                                .map(item => item.trim())
+                                .filter(item => item.length > 20) // Solo párrafos substanciales
+                            }
+
+                            // Si no hay elementos, mostrar el contenido completo como un solo punto
+                            if (listItems.length === 0) {
+                              listItems = [point.content.trim()]
+                            }
 
                             return listItems.map((item, index) => (
                               <div key={index} className="flex gap-3">
