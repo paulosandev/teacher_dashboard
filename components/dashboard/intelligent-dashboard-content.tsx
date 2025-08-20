@@ -436,7 +436,7 @@ export function IntelligentDashboardContent({
       paragraphs.forEach((paragraph: string, index: number) => {
         points.push({
           id: `point-${index}`,
-          title: extractTitleFromContent(paragraph),
+          title: extractTitleFromContent(paragraph, index),
           content: paragraph,
           type: detectContentType(paragraph)
         })
@@ -445,7 +445,7 @@ export function IntelligentDashboardContent({
       sections.forEach((section: string, index: number) => {
         points.push({
           id: `section-${index}`,
-          title: extractTitleFromContent(section),
+          title: extractTitleFromContent(section, index),
           content: section,
           type: detectContentType(section)
         })
@@ -456,19 +456,59 @@ export function IntelligentDashboardContent({
   }, [])
 
   // Función auxiliar para extraer título del contenido
-  const extractTitleFromContent = (content: string) => {
+  const extractTitleFromContent = (content: string, index: number) => {
     // Buscar headers markdown
     const headerMatch = content.match(/^(##?\s*(.+))$/m)
-    if (headerMatch) return headerMatch[2].trim()
+    if (headerMatch) {
+      const title = headerMatch[2].trim()
+      return simplifyTitle(title)
+    }
     
     // Buscar texto en negrita al inicio
     const boldMatch = content.match(/^\*\*([^*]+)\*\*/)
-    if (boldMatch) return boldMatch[1].trim()
+    if (boldMatch) {
+      return simplifyTitle(boldMatch[1].trim())
+    }
     
-    // Tomar las primeras palabras como título
-    const firstLine = content.split('\n')[0].trim()
-    const words = firstLine.split(' ').slice(0, 8).join(' ')
-    return words.length > 60 ? words.substring(0, 60) + '...' : words
+    // Detectar tipo de contenido para título automático
+    const type = detectContentType(content)
+    switch (type) {
+      case 'table':
+        return `${index + 1}. Panorama general de la participación`
+      case 'numbered-list':
+        return `${index + 1}. Aspectos clave identificados`
+      case 'bullet-list':
+        return `${index + 1}. Insights clave para la evaluación`
+      case 'quote':
+        return `${index + 1}. Observaciones destacadas`
+      default:
+        return `${index + 1}. Análisis detallado`
+    }
+  }
+
+  // Función auxiliar para simplificar títulos largos
+  const simplifyTitle = (title: string) => {
+    // Remover prefijos comunes
+    title = title.replace(/^(análisis|evaluación|revisión|estudio)\s+(de|del|sobre)\s+/i, '')
+    title = title.replace(/^(panorama|resumen|información)\s+(general|detallad[ao])\s+(de|del|sobre)\s+/i, '')
+    
+    // Simplificar palabras comunes
+    title = title.replace(/participación estudiantil/i, 'participación')
+    title = title.replace(/insights? clave para la evaluación/i, 'insights clave')
+    title = title.replace(/aspectos? positivos?/i, 'aspectos positivos')
+    title = title.replace(/recomendaciones? docente?/i, 'recomendaciones')
+    
+    // Limitar longitud
+    if (title.length > 40) {
+      const words = title.split(' ')
+      if (words.length > 5) {
+        title = words.slice(0, 5).join(' ') + '...'
+      } else {
+        title = title.substring(0, 40) + '...'
+      }
+    }
+    
+    return title.charAt(0).toUpperCase() + title.slice(1)
   }
 
   // Función auxiliar para detectar el tipo de contenido
@@ -522,19 +562,9 @@ export function IntelligentDashboardContent({
         <section className="mb-8">
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-3xl font-bold text-gray-900">
-              ¡Hola, {user.firstName}!
+              Información detallada - {detailView.activity.name}
             </h1>
-          </div>
-          
-          <div className="flex items-center justify-between">
-            <button 
-              onClick={navigateBackToDashboard}
-              className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 transition-colors mb-4"
-            >
-              <FontAwesomeIcon icon={faArrowLeft} className="text-sm" />
-              <span>Volver al dashboard general</span>
-            </button>
-
+            
             {/* Chip con fecha de análisis */}
             {analysis && (
               <div className="flex items-center space-x-2 bg-primary-light text-primary-darker px-3 py-2 rounded-full text-sm font-medium">
@@ -548,6 +578,14 @@ export function IntelligentDashboardContent({
               </div>
             )}
           </div>
+          
+          <button 
+            onClick={navigateBackToDashboard}
+            className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 transition-colors mb-4"
+          >
+            <FontAwesomeIcon icon={faArrowLeft} className="text-sm" />
+            <span>Volver al dashboard general</span>
+          </button>
         </section>
 
         {/* Header de actividad */}
@@ -629,31 +667,96 @@ export function IntelligentDashboardContent({
                       </span>
                     </div>
                     
-                    {/* Contenido del point con Markdown */}
+                    {/* Contenido del point con diseño adaptado */}
                     <div className="mb-4">
-                      <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-strong:text-gray-900 prose-em:text-gray-700">
-                        <ReactMarkdown 
-                          remarkPlugins={[remarkGfm]}
-                          components={{
-                            h1: ({children}) => <h1 className="text-lg font-bold text-gray-900 mb-2">{children}</h1>,
-                            h2: ({children}) => <h2 className="text-md font-semibold text-gray-900 mb-2">{children}</h2>,
-                            h3: ({children}) => <h3 className="text-sm font-medium text-gray-900 mb-2">{children}</h3>,
-                            ul: ({children}) => <ul className="list-disc list-inside space-y-1 ml-2 text-gray-700">{children}</ul>,
-                            ol: ({children}) => <ol className="list-decimal list-inside space-y-1 ml-2 text-gray-700">{children}</ol>,
-                            blockquote: ({children}) => <blockquote className="border-l-4 border-gray-300 pl-4 italic text-gray-600 my-3">{children}</blockquote>,
-                            table: ({children}) => <table className="w-full border-collapse border border-gray-300 my-3">{children}</table>,
-                            th: ({children}) => <th className="border border-gray-300 bg-gray-100 px-3 py-2 text-left font-semibold text-xs">{children}</th>,
-                            td: ({children}) => <td className="border border-gray-300 px-3 py-2 text-sm">{children}</td>,
-                            code: ({children}) => <code className="bg-gray-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
-                            pre: ({children}) => <pre className="bg-gray-100 p-3 rounded overflow-x-auto text-sm">{children}</pre>,
-                            p: ({children}) => <p className="text-gray-700 mb-2 text-sm leading-relaxed">{children}</p>,
-                            strong: ({children}) => <strong className="font-semibold text-gray-900">{children}</strong>,
-                            em: ({children}) => <em className="italic text-gray-600">{children}</em>
-                          }}
-                        >
-                          {point.content}
-                        </ReactMarkdown>
-                      </div>
+                      {point.type === 'table' ? (
+                        // Diseño especial para tablas como en el ejemplo
+                        <div className="space-y-3">
+                          <ReactMarkdown 
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              table: ({children}) => <table className="w-full">{children}</table>,
+                              thead: ({children}) => <thead>{children}</thead>,
+                              tbody: ({children}) => <tbody>{children}</tbody>,
+                              tr: ({children, ...props}) => {
+                                const isHeader = props.isheader || (props as any).isheader;
+                                return isHeader ? 
+                                  <tr className="bg-primary text-white">{children}</tr> :
+                                  <tr className="border-b border-gray-200">{children}</tr>
+                              },
+                              th: ({children}) => (
+                                <th className="bg-primary text-white px-4 py-3 text-left font-semibold text-sm">
+                                  {children}
+                                </th>
+                              ),
+                              td: ({children}) => (
+                                <td className="px-4 py-3 text-sm text-gray-700 border-r border-gray-200 last:border-r-0">
+                                  {children}
+                                </td>
+                              ),
+                              p: ({children}) => <>{children}</>,
+                              h1: () => null,
+                              h2: () => null,
+                              h3: () => null,
+                            }}
+                          >
+                            {point.content}
+                          </ReactMarkdown>
+                        </div>
+                      ) : point.type === 'numbered-list' || point.type === 'bullet-list' ? (
+                        // Diseño especial para listas numeradas como en el ejemplo
+                        <div className="space-y-3">
+                          {(() => {
+                            // Extraer elementos de lista del contenido
+                            const listItems = point.content
+                              .split(/\n\d+\.\s+|\n[-*+]\s+/)
+                              .filter(item => item.trim().length > 0)
+                              .slice(1); // Remover el primer elemento que suele ser el header
+
+                            return listItems.map((item, index) => (
+                              <div key={index} className="flex gap-3">
+                                <div className="flex-shrink-0 w-8 h-8 bg-primary-light text-primary-darker rounded-lg flex items-center justify-center font-semibold text-sm">
+                                  {index + 1}
+                                </div>
+                                <div className="flex-1 text-sm text-gray-700 leading-relaxed pt-1">
+                                  <ReactMarkdown 
+                                    remarkPlugins={[remarkGfm]}
+                                    components={{
+                                      p: ({children}) => <>{children}</>,
+                                      strong: ({children}) => <strong className="font-semibold text-gray-900">{children}</strong>,
+                                      em: ({children}) => <em className="italic text-gray-600">{children}</em>,
+                                    }}
+                                  >
+                                    {item.trim()}
+                                  </ReactMarkdown>
+                                </div>
+                              </div>
+                            ))
+                          })()}
+                        </div>
+                      ) : (
+                        // Diseño estándar para otros tipos de contenido
+                        <div className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-strong:text-gray-900 prose-em:text-gray-700">
+                          <ReactMarkdown 
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              h1: () => null, // Ocultar headers ya que están en el título
+                              h2: () => null,
+                              h3: () => null,
+                              ul: ({children}) => <ul className="list-disc list-inside space-y-2 ml-2 text-gray-700">{children}</ul>,
+                              ol: ({children}) => <ol className="list-decimal list-inside space-y-2 ml-2 text-gray-700">{children}</ol>,
+                              blockquote: ({children}) => <blockquote className="border-l-4 border-primary-light pl-4 italic text-gray-600 my-3 bg-gray-50 py-2">{children}</blockquote>,
+                              code: ({children}) => <code className="bg-gray-100 px-2 py-1 rounded text-sm font-mono">{children}</code>,
+                              pre: ({children}) => <pre className="bg-gray-100 p-4 rounded overflow-x-auto text-sm">{children}</pre>,
+                              p: ({children}) => <p className="text-gray-700 mb-3 text-sm leading-relaxed">{children}</p>,
+                              strong: ({children}) => <strong className="font-semibold text-gray-900">{children}</strong>,
+                              em: ({children}) => <em className="italic text-gray-600">{children}</em>
+                            }}
+                          >
+                            {point.content}
+                          </ReactMarkdown>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
