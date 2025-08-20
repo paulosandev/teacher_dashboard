@@ -210,7 +210,22 @@ export function IntelligentDashboardContent({
 
   // Función para analizar una actividad individual con información extendida
   const analyzeActivity = useCallback(async (activity: any, showVisualFeedback = true) => {
+    console.log('🚀 INICIANDO analyzeActivity con:', { activity, showVisualFeedback })
+    
+    if (!activity) {
+      console.error('❌ analyzeActivity: activity es null o undefined')
+      alert('Error: No se proporcionó información de la actividad')
+      return
+    }
+    
+    if (!activity.id || !activity.type) {
+      console.error('❌ analyzeActivity: activity no tiene id o type:', activity)
+      alert('Error: La actividad no tiene ID o tipo válido')
+      return
+    }
+    
     const activityKey = `${activity.type}_${activity.id}`
+    console.log('🔑 Activity key generada:', activityKey)
     
     try {
       // Solo mostrar estado de análisis si showVisualFeedback es true (análisis individual)
@@ -230,7 +245,22 @@ export function IntelligentDashboardContent({
         })
       })
 
+      console.log('📊 Response status:', response.status)
+      console.log('📊 Response headers:', response.headers)
+      
+      // Verificar si la respuesta es HTML (redirección a login)
+      const contentType = response.headers.get('content-type')
+      if (contentType && contentType.includes('text/html')) {
+        console.error('❌ La sesión ha expirado - redirigiendo a login')
+        if (showVisualFeedback) {
+          alert('Su sesión ha expirado. Por favor, recargue la página e inicie sesión nuevamente.')
+        }
+        window.location.reload()
+        return
+      }
+      
       const data = await response.json()
+      console.log('📊 Response data:', data)
 
       if (response.ok && data.success) {
         setAnalysisResults(prev => ({
@@ -426,6 +456,13 @@ export function IntelligentDashboardContent({
 
   // Función para navegar a la vista de detalle
   const navigateToDetail = useCallback((activity: any) => {
+    console.log('📦 NavigateToDetail llamado con activity:', activity)
+    console.log('🔍 Activity data:', {
+      id: activity?.id,
+      type: activity?.type,
+      name: activity?.name,
+      hasAllFields: !!(activity?.id && activity?.type && activity?.name)
+    })
     setDetailView({ isActive: true, activity })
   }, [])
 
@@ -750,10 +787,31 @@ export function IntelligentDashboardContent({
                 Esta actividad aún no ha sido analizada
               </p>
               <button
-                onClick={() => analyzeActivity(detailView.activity)}
-                className="bg-primary hover:bg-primary-dark text-white px-6 py-2 rounded-lg transition-colors"
+                onClick={() => {
+                  console.log('🔘 Botón Generar análisis presionado')
+                  console.log('🔍 detailView.activity:', detailView.activity)
+                  if (detailView.activity) {
+                    analyzeActivity(detailView.activity)
+                  } else {
+                    console.error('❌ detailView.activity es null o undefined')
+                    alert('Error: No se encontró la información de la actividad')
+                  }
+                }}
+                disabled={analyzingActivity === `${detailView.activity?.type}_${detailView.activity?.id}`}
+                className={`px-6 py-2 rounded-lg transition-colors ${
+                  analyzingActivity === `${detailView.activity?.type}_${detailView.activity?.id}` 
+                    ? 'bg-gray-400 cursor-not-allowed' 
+                    : 'bg-primary hover:bg-primary-dark text-white'
+                }`}
               >
-                Generar análisis
+                {analyzingActivity === `${detailView.activity?.type}_${detailView.activity?.id}` ? (
+                  <>
+                    <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" />
+                    Analizando...
+                  </>
+                ) : (
+                  'Generar análisis'
+                )}
               </button>
             </div>
           </section>
