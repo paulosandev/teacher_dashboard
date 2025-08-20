@@ -65,6 +65,7 @@ export function IntelligentDashboardContent({
   const [isAnalyzingBatch, setIsAnalyzingBatch] = useState(false)
   const [isLoadingCourse, setIsLoadingCourse] = useState(true) // Nuevo estado para loader general, empieza en true
   const [loadingPhase, setLoadingPhase] = useState<'loading' | 'analyzing'>('loading') // Fase actual de carga
+  const [cacheLoaded, setCacheLoaded] = useState(false) // Estado para saber si el cache ya se cargó
   const [detailView, setDetailView] = useState<{isActive: boolean, activity: any} | null>(null) // Estado para vista de detalle
   const BATCH_SIZE = 5
 
@@ -100,6 +101,9 @@ export function IntelligentDashboardContent({
     } catch (error) {
       console.error('Error cargando análisis desde cache:', error)
       setAnalysisResults({})
+    } finally {
+      setCacheLoaded(true)
+      console.log('🏁 Cache loading completed')
     }
   }, [])
 
@@ -175,6 +179,7 @@ export function IntelligentDashboardContent({
       // Limpiar datos anteriores para evitar flashes
       setOpenActivities([])
       setAnalysisResults({})
+      setCacheLoaded(false) // Resetear estado de cache
       setVisibleActivitiesCount(BATCH_SIZE) // Resetear a las primeras 5 actividades
       setIsLoadingCourse(true) // Activar loader
       
@@ -301,35 +306,44 @@ export function IntelligentDashboardContent({
     const activitiesToAnalyze = openActivities.slice(0, visibleActivitiesCount)
 
     console.log(`📦 Analizando ${activitiesToAnalyze.length} actividades visibles`)
+    console.log(`📋 Análisis en cache disponibles: ${Object.keys(analysisResults).length}`)
 
     for (const activity of activitiesToAnalyze) {
       const activityKey = `${activity.type}_${activity.id}`
-      // Solo analizar si no hay análisis previo o está desactualizado
-      if (!analysisResults[activityKey] || isAnalysisOutdated(analysisResults[activityKey])) {
-        // Pasar false para NO mostrar feedback visual (evitar tilteo)
+      const existingAnalysis = analysisResults[activityKey]
+      
+      if (!existingAnalysis) {
+        console.log(`🆕 ${activity.name} - No hay análisis previo, generando...`)
         await analyzeActivity(activity, false)
+      } else if (isAnalysisOutdated(existingAnalysis)) {
+        console.log(`⏰ ${activity.name} - Análisis desactualizado, regenerando...`)
+        await analyzeActivity(activity, false)
+      } else {
+        console.log(`✅ ${activity.name} - Usando análisis en caché (${existingAnalysis.fromCache ? 'desde BD' : 'desde sesión'})`)
       }
     }
 
     setIsAnalyzingBatch(false)
   }, [openActivities, visibleActivitiesCount, analysisResults, isAnalysisOutdated, analyzeActivity])
 
-  // Ejecutar análisis automático cuando se cargan las actividades
+  // Ejecutar análisis automático cuando se cargan las actividades Y el cache
   useEffect(() => {
-    if (openActivities.length > 0 && !isAnalyzingBatch && isLoadingCourse) {
+    if (openActivities.length > 0 && cacheLoaded && !isAnalyzingBatch && isLoadingCourse) {
       // Analizar automáticamente las primeras actividades visibles
       const runAutoAnalysis = async () => {
         setLoadingPhase('analyzing')
         console.log('🤖 Fase: Analizando actividades con IA...')
+        console.log(`📋 Estado antes del análisis: ${Object.keys(analysisResults).length} análisis en cache`)
         await analyzeVisibleActivities()
         setIsLoadingCourse(false) // Desactivar loader cuando termine el análisis
       }
       runAutoAnalysis()
-    } else if (openActivities.length === 0 && !loadingActivities && selectedCourse) {
+    } else if (openActivities.length === 0 && cacheLoaded && !loadingActivities && selectedCourse) {
       // Si no hay actividades y ya terminó de cargar, desactivar loader
+      console.log('🙅‍♂️ No hay actividades abiertas para este grupo')
       setIsLoadingCourse(false)
     }
-  }, [openActivities, analyzeVisibleActivities, isAnalyzingBatch, isLoadingCourse, loadingActivities, selectedCourse])
+  }, [openActivities, cacheLoaded, analyzeVisibleActivities, isAnalyzingBatch, isLoadingCourse, loadingActivities, selectedCourse, analysisResults])
 
   const generateNewAnalysis = useCallback(async () => {
     if (!selectedCourse) return
