@@ -9,6 +9,8 @@ import {
   faArrowRight,
   faBrain
 } from '@fortawesome/free-solid-svg-icons'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface AnalysisModalProps {
   isOpen: boolean
@@ -72,8 +74,26 @@ export function AnalysisModal({ isOpen, onClose, analysis, activityName, activit
                 <FontAwesomeIcon icon={faBrain} className="text-blue-600" />
                 <h3 className="text-lg font-semibold text-blue-900">Análisis Educativo Completo</h3>
               </div>
-              <div className="text-blue-800 leading-relaxed whitespace-pre-wrap">
-                {analysis.fullAnalysis}
+              <div className="text-blue-800 leading-relaxed prose prose-sm max-w-none prose-headings:text-blue-900 prose-strong:text-blue-900 prose-em:text-blue-700 prose-blockquote:text-blue-700 prose-blockquote:border-blue-300">
+                <ReactMarkdown 
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    // Personalizar estilos de componentes específicos
+                    h1: ({children}) => <h1 className="text-xl font-bold text-blue-900 mb-3">{children}</h1>,
+                    h2: ({children}) => <h2 className="text-lg font-semibold text-blue-900 mb-2">{children}</h2>,
+                    h3: ({children}) => <h3 className="text-md font-medium text-blue-900 mb-2">{children}</h3>,
+                    ul: ({children}) => <ul className="list-disc list-inside space-y-1 ml-2">{children}</ul>,
+                    ol: ({children}) => <ol className="list-decimal list-inside space-y-1 ml-2">{children}</ol>,
+                    blockquote: ({children}) => <blockquote className="border-l-4 border-blue-300 pl-4 italic text-blue-700 my-3">{children}</blockquote>,
+                    table: ({children}) => <table className="w-full border-collapse border border-blue-300 my-3">{children}</table>,
+                    th: ({children}) => <th className="border border-blue-300 bg-blue-100 px-3 py-2 text-left font-semibold">{children}</th>,
+                    td: ({children}) => <td className="border border-blue-300 px-3 py-2">{children}</td>,
+                    code: ({children}) => <code className="bg-blue-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
+                    pre: ({children}) => <pre className="bg-blue-100 p-3 rounded overflow-x-auto">{children}</pre>
+                  }}
+                >
+                  {analysis.fullAnalysis}
+                </ReactMarkdown>
               </div>
             </div>
           ) : (

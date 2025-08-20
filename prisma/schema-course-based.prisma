@@ -1,0 +1,118 @@
+// Esquema para el nuevo sistema course-based
+// Sin persistencia de usuarios - todo basado en cursos y sesiones
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modelo de Curso (sin usuario asociado)
+model Course {
+  id              String   @id @default(cuid())
+  moodleCourseId  String   @unique
+  name            String
+  shortName       String?
+  lastAnalyzedBy  String?  // Matrícula del último profesor que analizó
+  lastSync        DateTime?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relaciones
+  groups          Group[]
+  analysisResults AnalysisResult[]
+  
+  @@index([moodleCourseId])
+  @@index([lastAnalyzedBy])
+}
+
+// Modelo de Grupo dentro de un Curso
+model Group {
+  id              String   @id @default(cuid())
+  moodleGroupId   String   @unique
+  name            String
+  courseId        String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relaciones
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  analysisResults AnalysisResult[]
+  
+  @@index([courseId])
+  @@index([moodleGroupId])
+}
+
+// Modelo de Resultado de Análisis (course-based)
+model AnalysisResult {
+  id              String   @id @default(cuid())
+  
+  // Identificadores del curso y grupo
+  courseId        String
+  moodleCourseId  String   // Redundante pero útil para queries
+  groupId         String?
+  moodleGroupId   String?  // Redundante pero útil para queries
+  
+  // Profesor que realizó el análisis (sin FK, solo referencia)
+  analyzedBy      String   // Matrícula del profesor
+  analyzedByName  String?  // Nombre del profesor (cache)
+  
+  // Tipo de análisis
+  analysisType    String   // 'COURSE_OVERVIEW', 'ACTIVITY_ANALYSIS', etc.
+  
+  // Resultados del análisis
+  strengths       Json     // Array de fortalezas identificadas
+  alerts          Json     // Array de alertas o problemas
+  recommendations Json?    // Array de recomendaciones
+  nextStep        String   // Sugerencia de próximo paso
+  overallHealth   String?  // 'buena', 'regular', 'necesita atención'
+  studentsAtRisk  String?  // Descripción de estudiantes en riesgo
+  
+  // Datos adicionales
+  rawData         Json?    // Datos crudos de Moodle
+  llmResponse     Json?    // Respuesta completa del LLM
+  
+  // Métricas del análisis
+  studentsAnalyzed Int?    // Número de estudiantes analizados
+  activitiesCount  Int?    // Número de actividades analizadas
+  forumsCount      Int?    // Número de foros analizados
+  
+  // Metadatos
+  processedAt     DateTime @default(now())
+  isLatest        Boolean  @default(true)
+  confidence      Float?   // Nivel de confianza del análisis (0-1)
+  
+  // Relaciones
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  group           Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  
+  @@index([courseId])
+  @@index([groupId])
+  @@index([moodleCourseId])
+  @@index([analyzedBy])
+  @@index([isLatest])
+  @@index([processedAt])
+  @@index([analysisType])
+}
+
+// Modelo de Jobs para el sistema de colas
+model JobLog {
+  id              String   @id @default(cuid())
+  jobId           String   @unique
+  jobType         String   // 'scheduled' o 'on-demand'
+  status          String   // 'pending', 'processing', 'completed', 'failed'
+  courseId        String?
+  groupId         String?
+  analyzedBy      String?  // Matrícula del profesor
+  error           String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  
+  @@index([status])
+  @@index([createdAt])
+  @@index([analyzedBy])
+}

@@ -62,12 +62,18 @@ export async function POST(request: NextRequest) {
       }, { status: 401 })
     }
 
-    const { courseId, groupId } = await request.json()
+    const { courseId: courseGroupId } = await request.json()
 
-    if (!courseId || !groupId) {
+    if (!courseGroupId) {
       return NextResponse.json({ 
-        error: 'courseId y groupId son requeridos' 
+        error: 'courseId es requerido (formato: courseId|groupId)' 
       }, { status: 400 })
+    }
+
+    // Parsear courseId y groupId del formato "courseId|groupId"
+    const [courseId, groupId] = courseGroupId.split('|')
+    if (!courseId || !groupId) {
+      return NextResponse.json({ error: 'Formato inválido. Use: courseId|groupId' }, { status: 400 })
     }
 
     // Llenar datos iniciales del análisis

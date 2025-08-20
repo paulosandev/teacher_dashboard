@@ -55,12 +55,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
-    const { courseId, groupId, userMatricula } = await request.json()
+    const { courseId: courseGroupId, userMatricula } = await request.json()
 
-    if (!courseId || !groupId || !userMatricula) {
+    if (!courseGroupId || !userMatricula) {
       return NextResponse.json({ 
-        error: 'courseId, groupId y userMatricula son requeridos' 
+        error: 'courseId (formato: courseId|groupId) y userMatricula son requeridos' 
       }, { status: 400 })
+    }
+
+    // Parsear courseId y groupId del formato "courseId|groupId"
+    const [courseId, groupId] = courseGroupId.split('|')
+    if (!courseId || !groupId) {
+      return NextResponse.json({ error: 'Formato inválido. Use: courseId|groupId' }, { status: 400 })
     }
 
     // Llenar datos iniciales del análisis

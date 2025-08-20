@@ -12,7 +12,7 @@ const config: Config = {
         // Existing colors
         background: "var(--background)",
         foreground: "var(--foreground)",
-        'primary': '#22c55e',
+        'primary': '#048504',
         'primary-light': '#81C281',
         'primary-dark': '#048504',
         'primary-darker': '#176128',
@@ -49,6 +49,8 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/typography'),
+  ],
 };
 export default config;

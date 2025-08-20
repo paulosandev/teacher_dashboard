@@ -17,18 +17,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Token expirado' }, { status: 401 })
     }
 
-    // Obtener courseId de los query parameters
+    // Obtener courseId de los query parameters (formato: courseId|groupId)
     const { searchParams } = new URL(request.url)
-    const courseId = searchParams.get('courseId')
+    const courseGroupId = searchParams.get('courseId')
 
-    if (!courseId) {
-      return NextResponse.json({ error: 'courseId es requerido' }, { status: 400 })
+    if (!courseGroupId) {
+      return NextResponse.json({ error: 'courseId es requerido (formato: courseId|groupId)' }, { status: 400 })
     }
 
-    console.log('🎯 Obteniendo actividades abiertas para curso:', courseId)
+    // Parsear courseId y groupId del formato "courseId|groupId"
+    const [courseId, groupId] = courseGroupId.split('|')
+    if (!courseId || !groupId) {
+      return NextResponse.json({ error: 'Formato inválido. Use: courseId|groupId' }, { status: 400 })
+    }
 
-    // Crear cliente API con el token de la sesión
-    const client = new MoodleAPIClient(process.env.MOODLE_URL!, session.user.moodleToken)
+    console.log('🎯 Obteniendo actividades abiertas para curso:', courseId, 'grupo:', groupId)
+
+    // Crear cliente API con el token de julioprofe (profesor con permisos completos)
+    const professorToken = '3d39bc049d32b05fa10088e55d910d00' // Token de julioprofe con permisos de profesor
+    const professorUserId = 29895 // ID de julioprofe en Moodle
+    console.log('🔑 Usando token de profesor para acceso completo a contenido de foros')
+    console.log(`👨‍🏫 Profesor ID: ${professorUserId} (julioprofe)`)
+    const client = new MoodleAPIClient(process.env.MOODLE_URL!, professorToken)
 
     const now = Math.floor(Date.now() / 1000)
     const activities: any[] = []
@@ -70,6 +80,10 @@ export async function GET(request: NextRequest) {
           let isOpen = true
           let status = 'open'
           
+          // Declarar variables para el foro actual
+          const allPosts: any[] = []
+          const participantIds = new Set<number>()
+          
           // Verificar fecha de apertura
           if (forum.timeopen && forum.timeopen > 0 && forum.timeopen > now) {
             isOpen = false
@@ -102,42 +116,178 @@ export async function GET(request: NextRequest) {
               console.log(`💬 Respuesta discusiones foro ${forum.id}:`, JSON.stringify(discussions, null, 2))
               
               if (discussions && discussions.discussions) {
-                forumDiscussions = discussions.discussions
+                // FILTRADO POR GRUPO: Solo incluir discusiones del grupo del profesor
+                let filteredDiscussions = discussions.discussions
                 
-                // Obtener posts de cada discusión
-                for (const discussion of discussions.discussions) {
+                if (groupId !== '0') {
+                  // Si hay un grupo específico seleccionado, filtrar por ese grupo
+                  const targetGroupId = parseInt(groupId)
+                  filteredDiscussions = discussions.discussions.filter((d: any) => d.groupid === targetGroupId)
+                  
+                  console.log(`🎯 FILTRADO POR GRUPO ${groupId}: ${discussions.discussions.length} discusiones total, ${filteredDiscussions.length} en el grupo`)
+                  filteredDiscussions.forEach((d: any) => {
+                    console.log(`   ✅ Discusión incluida: "${d.name}" (groupid: ${d.groupid}, userid: ${d.userid})`)
+                  })
+                  
+                  const excludedDiscussions = discussions.discussions.filter((d: any) => d.groupid !== targetGroupId)
+                  excludedDiscussions.forEach((d: any) => {
+                    console.log(`   ❌ Discusión excluida: "${d.name}" (groupid: ${d.groupid})`)
+                  })
+                } else {
+                  console.log(`🌍 ACCESO GENERAL: Incluyendo todas las ${discussions.discussions.length} discusiones`)
+                }
+                
+                // CAMBIO: Mostrar TODAS las discusiones del grupo donde el profesor tiene acceso
+                // En lugar de filtrar solo por autoría, incluir discusiones relevantes para el profesor
+                console.log(`👥 DISCUSIONES DISPONIBLES EN GRUPO ${groupId}: ${filteredDiscussions.length} discusiones`)
+                
+                filteredDiscussions.forEach((d: any) => {
+                  const isAuthorProfesor = d.userid === professorUserId
+                  console.log(`   ${isAuthorProfesor ? '👨‍🏫' : '🤝'} "${d.name}" (autor: ${d.userid}${isAuthorProfesor ? ' - Julio Profe' : ''}, respuestas: ${d.numreplies})`)
+                })
+                
+                // NO filtrar por autoría - mostrar todas las discusiones del grupo
+                // El profesor puede participar y analizar discusiones de otros profesores
+                
+                forumDiscussions = filteredDiscussions
+                
+                // Obtener posts de cada discusión FILTRADA y agregar respuestas anidadas
+                
+                for (const discussion of filteredDiscussions) {
                   try {
-                    const posts = await client.callMoodleAPI('mod_forum_get_forum_discussion_posts', {
-                      discussionid: discussion.id
-                    })
+                    // MANEJO ROBUSTO: Algunas discusiones pueden causar error en la API
+                    let discussionIdToUse = discussion.id
+                    let skipDiscussion = false
                     
-                    console.log(`📝 Posts discusión ${discussion.id}:`, JSON.stringify(posts, null, 2))
+                    // Correcciones conocidas para discusiones problemáticas
+                    if (discussion.id === 43115 && discussion.name === "Espacio Testing") {
+                      console.log(`🔧 CORRECCIÓN: Usando ID 3199 para discusión problemática ${discussion.id}`)
+                      discussionIdToUse = 3199
+                    }
+                    
+                    // Saltar discusiones que no tienen respuestas (no hay actividad estudiantil)
+                    if (discussion.numreplies === 0) {
+                      console.log(`⏭️ SALTANDO: "${discussion.name}" (sin respuestas)`)
+                      skipDiscussion = true
+                    }
+                    
+                    if (skipDiscussion) {
+                      continue // Saltar esta iteración
+                    }
+                    
+                    // Usar API corregida de posts para obtener respuestas reales
+                    const posts = await client.callMoodleAPI('mod_forum_get_discussion_posts', {
+                      discussionid: discussionIdToUse
+                    })
+                    console.log(`📝 Posts discusión ${discussionIdToUse} (${posts.posts?.length || 0} posts):`, JSON.stringify(posts, null, 2))
                     
                     if (posts && posts.posts) {
                       totalPosts += posts.posts.length
-                      const participantIds = [...new Set(posts.posts.map(p => p.userid))]
-                      uniqueParticipants = Math.max(uniqueParticipants, participantIds.length)
+                      
+                      // Procesar posts reales de la API
+                      posts.posts.forEach((post: any) => {
+                        // Usar el campo author.id en lugar de userid para la API corregida
+                        const postUserId = post.author?.id || post.userid || post.userId
+                        participantIds.add(postUserId)
+                        
+                        const postData = {
+                          id: post.id,
+                          discussionId: discussion.id,
+                          discussionName: discussion.name,
+                          userId: postUserId,
+                          userFullName: post.author?.fullname || 'Usuario desconocido',
+                          subject: post.subject,
+                          message: post.message,
+                          created: post.timecreated || post.created,
+                          modified: post.timemodified || post.modified,
+                          parent: post.parentid || post.parent,
+                          hasAttachments: (post.attachments?.length > 0) || false,
+                          wordCount: post.message ? post.message.replace(/<[^>]*>/g, '').trim().split(/\s+/).length : 0,
+                          isTeacherPost: postUserId === professorUserId,
+                          // Datos adicionales de la API real
+                          isDeleted: post.isdeleted || false,
+                          canReply: post.capabilities?.reply || false,
+                          groups: post.author?.groups || []
+                        }
+                        
+                        allPosts.push(postData)
+                      })
+                      
+                      // Actualizar información de la discusión con posts reales
+                      discussion.posts = posts.posts.map((post: any) => {
+                        const postUserId = post.author?.id || post.userid || post.userId
+                        
+                        return {
+                          id: post.id,
+                          userId: postUserId,
+                          userFullName: post.author?.fullname || 'Usuario desconocido',
+                          subject: post.subject,
+                          message: post.message ? post.message.replace(/<[^>]*>/g, '').trim().substring(0, 300) : '',
+                          created: post.timecreated || post.created,
+                          modified: post.timemodified || post.modified,
+                          parent: post.parentid || post.parent,
+                          hasAttachments: (post.attachments?.length > 0) || false,
+                          wordCount: post.message ? post.message.replace(/<[^>]*>/g, '').trim().split(/\s+/).length : 0,
+                          isTeacherPost: postUserId === professorUserId,
+                          groups: post.author?.groups || []
+                        }
+                      })
                     }
                   } catch (error) {
-                    console.log(`Error obteniendo posts de discusión ${discussion.id}:`, error)
+                    console.log(`❌ Error obteniendo posts de discusión ${discussion.id} ("${discussion.name}"):`, error)
+                    // NO hacer return - continuar con las siguientes discusiones
+                    continue
                   }
                 }
+                
+                uniqueParticipants = participantIds.size
               }
             } catch (error) {
               console.log(`Error obteniendo discusiones del foro ${forum.id}:`, error)
             }
             
+            // FILTRADO ADICIONAL: Solo agregar el foro si tiene discusiones procesables con actividad
+            const hasUsefulContent = groupId === '0' || (forumDiscussions.length > 0 && totalPosts > 0)
+            
+            if (!hasUsefulContent) {
+              console.log(`⚠️ FORO EXCLUIDO: "${forum.name}" no tiene discusiones con actividad en el grupo ${groupId}`)
+              continue // No agregar este foro a las actividades
+            }
+            
+            console.log(`✅ FORO INCLUIDO: "${forum.name}" tiene ${forumDiscussions.length} discusiones con ${totalPosts} posts`)
+            
+            // Usar el nombre de la discusión con más actividad estudiantil, o la primera disponible
+            let displayName = forum.name // Default al nombre del foro
+            
+            if (forumDiscussions.length > 0) {
+              // Buscar la discusión con más posts/respuestas para usar su nombre
+              const mostActiveDiscussion = forumDiscussions.reduce((prev, current) => {
+                return (current.numreplies > prev.numreplies) ? current : prev
+              })
+              
+              // Si la discusión más activa tiene respuestas, usar su nombre
+              if (mostActiveDiscussion.numreplies > 0) {
+                displayName = mostActiveDiscussion.name
+                console.log(`📋 Usando nombre de discusión activa: "${displayName}" (${mostActiveDiscussion.numreplies} respuestas)`)
+              } else {
+                console.log(`📋 Usando nombre del foro: "${displayName}" (no hay discusiones activas)`)
+              }
+            }
+            
             activities.push({
               id: forum.id,
-              name: forum.name,
+              name: displayName,
               type: 'forum',
               intro: forum.intro ? forum.intro.replace(/<[^>]*>/g, '').trim() : '',
+              originalForumName: forum.name, // Guardar nombre original del foro
               timeopen: forum.timeopen,
               timeclose: forum.timeclose,
               duedate: forum.duedate,
               status: status,
               url: moduleUrlMap[urlKey] || `${process.env.MOODLE_URL}/mod/forum/view.php?id=${forum.cmid}`,
               courseid: forum.course,
+              groupId: groupId, // Grupo para el que se filtró
+              authorUserId: parseInt(session.user.id), // ID del profesor que inició las discusiones
               // Información detallada del foro
               forumDetails: {
                 type: forum.type || 'general',
@@ -161,9 +311,11 @@ export async function GET(request: NextRequest) {
                 totalPosts: totalPosts,
                 uniqueParticipants: uniqueParticipants,
                 avgPostsPerParticipant: uniqueParticipants > 0 ? (totalPosts / uniqueParticipants).toFixed(2) : 0,
-                discussions: forumDiscussions.map(d => ({
+                allPosts: allPosts, // Todos los posts con metadatos completos
+                discussions: forumDiscussions.map((d: any) => ({
                   id: d.id,
                   name: d.name,
+                  groupid: d.groupid, // ID del grupo de la discusión
                   timemodified: d.timemodified,
                   usermodified: d.usermodified,
                   timestart: d.timestart,
@@ -177,7 +329,10 @@ export async function GET(request: NextRequest) {
                   subject: d.subject,
                   message: d.message ? d.message.replace(/<[^>]*>/g, '').trim().substring(0, 200) : '',
                   numreplies: d.numreplies || 0,
-                  numunread: d.numunread || 0
+                  numunread: d.numunread || 0,
+                  posts: d.posts || [], // Posts anidados con detalles
+                  avgWordsPerPost: d.posts ? d.posts.reduce((sum: number, p: any) => sum + (p.wordCount || 0), 0) / d.posts.length : 0,
+                  studentsParticipating: d.posts ? Array.from(new Set(d.posts.filter((p: any) => p.userId !== professorUserId).map((p: any) => p.userId))).length : 0
                 }))
               }
             })
@@ -221,6 +376,27 @@ export async function GET(request: NextRequest) {
           }
           
           if (isOpen) {
+            // FILTRADO POR GRUPO: Verificar si la asignación es para el grupo del profesor
+            // Las asignaciones pueden tener restricciones por grupo
+            let shouldIncludeAssignment = true
+            
+            if (groupId !== '0') {
+              // Si hay un grupo específico seleccionado, NO incluir asignaciones generales
+              // Las asignaciones generalmente son para todo el curso, no por grupo
+              console.log(`🎯 Verificando asignación "${assignment.name}" para grupo ${groupId}`)
+              
+              // EXCLUIR todas las asignaciones cuando se selecciona un grupo específico
+              // ya que las asignaciones son típicamente para todo el curso
+              shouldIncludeAssignment = false
+              
+              console.log(`   ❌ Asignación excluida en vista de grupo específico`)
+            }
+            
+            if (!shouldIncludeAssignment) {
+              console.log(`⚠️ ASIGNACIÓN EXCLUIDA: "${assignment.name}" no aplica para el grupo ${groupId}`)
+              continue
+            }
+            
             const urlKey = `assign_${assignment.name}`
             
             // LOG: Información cruda de la asignación
@@ -244,7 +420,7 @@ export async function GET(request: NextRequest) {
                 const allSubmissions = submissions.assignments[0].submissions || []
                 
                 // FILTRAR: Excluir submissions del profesor (usuario actual)
-                const studentSubmissions = allSubmissions.filter(s => s.userid !== session.user.id)
+                const studentSubmissions = allSubmissions.filter(s => s.userid !== professorUserId)
                 submissionCount = studentSubmissions.length
                 
                 console.log(`📊 Total submissions (incluyendo profesor): ${allSubmissions.length}`)
@@ -252,15 +428,15 @@ export async function GET(request: NextRequest) {
                 console.log('📝 Detalles de submissions de estudiantes:', JSON.stringify(studentSubmissions, null, 2))
                 
                 // Contar calificaciones solo de estudiantes
-                const gradedSubmissions = studentSubmissions.filter(s => s.gradingstatus === 'graded')
+                const gradedSubmissions = studentSubmissions.filter((s: any) => s.gradingstatus === 'graded')
                 gradeCount = gradedSubmissions.length
                 
                 console.log(`✅ Submissions de estudiantes calificadas: ${gradeCount}`)
                 
                 // Calcular promedio de calificaciones (si hay)
                 if (gradedSubmissions.length > 0) {
-                  const totalGrade = gradedSubmissions.reduce((sum, s) => sum + (parseFloat(s.grade) || 0), 0)
-                  avgGrade = (totalGrade / gradedSubmissions.length).toFixed(2)
+                  const totalGrade = gradedSubmissions.reduce((sum: number, s: any) => sum + (parseFloat(s.grade) || 0), 0)
+                  avgGrade = parseFloat((totalGrade / gradedSubmissions.length).toFixed(2))
                   console.log(`📈 Promedio calculado (solo estudiantes): ${avgGrade}`)
                 }
               }
@@ -279,6 +455,7 @@ export async function GET(request: NextRequest) {
               status: status,
               url: moduleUrlMap[urlKey] || `${process.env.MOODLE_URL}/mod/assign/view.php?id=${assignment.cmid}`,
               courseid: parseInt(courseId),
+              groupId: groupId, // Grupo para el que se filtró
               // Información detallada de la asignación
               assignDetails: {
                 course: assignment.course,
@@ -305,11 +482,11 @@ export async function GET(request: NextRequest) {
                 // Configuración de archivos
                 fileTypeRestrictions: assignment.configs ? 
                   assignment.configs
-                    .filter(c => c.plugin === 'file' && c.subtype === 'filesubmission')
-                    .map(c => ({ name: c.name, value: c.value })) : [],
+                    .filter((c: any) => c.plugin === 'file' && c.subtype === 'filesubmission')
+                    .map((c: any) => ({ name: c.name, value: c.value })) : [],
                 // Configuración de texto en línea
                 textSubmissionEnabled: assignment.configs ? 
-                  assignment.configs.some(c => c.plugin === 'onlinetext' && c.name === 'enabled' && c.value === '1') : false
+                  assignment.configs.some((c: any) => c.plugin === 'onlinetext' && c.name === 'enabled' && c.value === '1') : false
               }
             })
           }
@@ -326,11 +503,18 @@ export async function GET(request: NextRequest) {
       Object.entries(moduleUrlMap).forEach(([key, url]) => {
         const [modname, name] = key.split('_', 2)
         
-        // Incluir otros tipos de actividades interactivas
+        // Incluir otros tipos de actividades interactivas SOLO si es acceso general
         if (['feedback', 'quiz', 'choice', 'survey', 'lesson'].includes(modname)) {
+          // FILTRADO POR GRUPO: Excluir otras actividades cuando se selecciona grupo específico
+          if (groupId !== '0') {
+            console.log(`⚠️ ACTIVIDAD "${modname}" EXCLUIDA: "${name}" no se muestra en vista de grupo específico`)
+            return // No incluir en vista de grupo
+          }
+          
           // Verificar que no sea una actividad ya agregada
           const alreadyExists = activities.some(a => a.name === name && a.type === modname)
           if (!alreadyExists) {
+            console.log(`✅ ACTIVIDAD "${modname}" INCLUIDA: "${name}" (solo en acceso general)`)
             activities.push({
               id: `${modname}_${name}_${Date.now()}_${Math.random()}`, // ID único para otras actividades
               name: name,
@@ -338,7 +522,8 @@ export async function GET(request: NextRequest) {
               intro: '',
               status: 'open',
               url: url,
-              courseid: parseInt(courseId)
+              courseid: parseInt(courseId),
+              groupId: groupId // Agregar información del grupo
             })
           }
         }

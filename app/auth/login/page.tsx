@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
-    login: '',
+    username: '',
     password: ''
   })
 
@@ -25,13 +25,13 @@ export default function LoginPage() {
 
     try {
       const result = await signIn('credentials', {
-        login: formData.login,
+        username: formData.username,
         password: formData.password,
         redirect: false,
       })
 
       if (result?.error) {
-        setError('Credenciales inválidas. Por favor verifique sus datos.')
+        setError('Credenciales inválidas. Verifique su usuario y contraseña de Moodle.')
       } else if (result?.ok) {
         router.push(callbackUrl)
         router.refresh()
@@ -85,7 +85,7 @@ export default function LoginPage() {
               Sistema de Análisis Académico
             </h2>
             <p className="mt-2 text-sm text-gray-600">
-              Ingrese sus credenciales para acceder al portal
+              Ingrese sus credenciales de Moodle para acceder al portal
             </p>
           </div>
           
@@ -99,28 +99,28 @@ export default function LoginPage() {
             
             <div className="space-y-4">
               <div>
-                <label htmlFor="login" className="block text-sm font-medium text-gray-700 mb-1">
-                  Email o Matrícula
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+                  Usuario Moodle
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <FontAwesomeIcon icon={faUser} className="h-5 w-5 text-gray-400" />
                   </div>
                   <input
-                    id="login"
-                    name="login"
+                    id="username"
+                    name="username"
                     type="text"
                     autoComplete="username"
                     required
-                    value={formData.login}
+                    value={formData.username}
                     onChange={handleChange}
                     className="appearance-none relative block w-full pl-10 pr-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary focus:z-10 sm:text-sm transition-colors duration-200"
-                    placeholder="cesar.espindola o profesor@ejemplo.com"
+                    placeholder="Matrícula"
                     disabled={loading}
                   />
                 </div>
                 <p className="mt-1 text-xs text-gray-500">
-                  Puedes usar tu matrícula de Moodle, email o nombre de usuario
+                  Usa tu nombre de usuario de Moodle (ejemplo: 112323)
                 </p>
               </div>
               
@@ -167,18 +167,7 @@ export default function LoginPage() {
           </form>
           
           {/* Credenciales de prueba para desarrollo */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="mt-6 p-4 bg-primary-selected rounded-lg border border-primary-light">
-              <p className="text-xs text-primary-darker font-semibold mb-2">Credenciales de prueba:</p>
-              <div className="text-xs text-primary-dark space-y-1">
-                <p>🔑 Login: paulo.cesar (o mail.paulo@gmail.com)</p>
-                <p>🔐 Password: admin1234</p>
-                <hr className="my-2 border-primary-light" />
-                <p>🔑 Login: cesar.espindola (o cesar.espindola@utel.edu.mx)</p>
-                <p>🔐 Password: admin1234</p>
-              </div>
-            </div>
-          )}
+          
         </div>
         
         {/* Footer */}

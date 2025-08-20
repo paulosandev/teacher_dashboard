@@ -7,6 +7,8 @@ declare module 'next-auth' {
     name?: string | null
     matricula: string
     username?: string
+    moodleToken?: string
+    tokenExpiry?: Date
   }
 
   interface Session {
@@ -16,6 +18,8 @@ declare module 'next-auth' {
       name?: string | null
       matricula: string
       username?: string
+      moodleToken?: string
+      tokenExpiry?: Date
     }
   }
 }
@@ -26,5 +30,7 @@ declare module 'next-auth/jwt' {
     email: string
     matricula: string
     username?: string
+    moodleToken?: string
+    tokenExpiry?: Date
   }
 }

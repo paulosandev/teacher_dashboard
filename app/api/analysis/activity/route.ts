@@ -286,9 +286,16 @@ ${discussion.posts?.slice(0, 5).map((post: any) => `
 
 ---
 
-Proporciona un análisis educativo completo y profesional de esta discusión. Determina los insights más relevantes según el contenido específico que observas. Tu análisis debe ser útil para un profesor universitario que busca entender el estado de la participación estudiantil y la calidad del aprendizaje.
+**Proporciona un análisis educativo completo y profesional** de esta discusión usando **formato Markdown** para organizar visualmente la información. 
 
-Incluye observaciones sobre patrones de participación, calidad de las respuestas, evidencia de comprensión, aspectos que funcionan bien, áreas que necesitan atención, y recomendaciones específicas basadas en lo que observas en esta discusión particular.
+**Organiza el contenido según consideres más apropiado**, por ejemplo:
+- Usa **encabezados** para secciones principales 
+- **Listas** para enumerar puntos clave
+- **Énfasis** para destacar aspectos importantes
+- **Citas** para observaciones relevantes
+- **Tablas** si necesitas comparar datos
+
+Incluye insights sobre: patrones de participación, calidad de respuestas, evidencia de comprensión, aspectos positivos, áreas de mejora, y recomendaciones específicas.
 `
   } else {
     // Prompt para foro general con múltiples discusiones
@@ -316,9 +323,16 @@ ${analysisData.allPosts?.filter((p: any) => p.userId !== professorUserId).slice(
 
 ---
 
-Proporciona un análisis educativo completo y profesional de este foro. Determina los insights más relevantes según el patrón de actividad y contenido que observas. Tu análisis debe ser útil para un profesor universitario que busca entender cómo están funcionando las discusiones en su curso.
+**Proporciona un análisis educativo completo y profesional** de este foro usando **formato Markdown** para organizar visualmente la información.
 
-Incluye observaciones sobre patrones de participación entre las diferentes discusiones, calidad del engagement estudiantil, distribución de la actividad, aspectos que están funcionando bien, áreas que necesitan atención, y recomendaciones específicas para optimizar el uso pedagógico de este foro.
+**Estructura el contenido dinámicamente**, por ejemplo:
+- **Encabezados** para organizar secciones clave
+- **Listas** para patrones identificados  
+- **Tablas** para comparar discusiones si es útil
+- **Énfasis** para destacar hallazgos importantes
+- **Citas** para observaciones destacables
+
+Incluye insights sobre: patrones de participación entre discusiones, calidad del engagement, distribución de actividad, aspectos que funcionan bien, áreas de mejora, y recomendaciones específicas.
 `
   }
 
@@ -334,7 +348,7 @@ Incluye observaciones sobre patrones de participación entre las diferentes disc
       messages: [
         {
           role: "system",
-          content: "Eres un experto en análisis educativo. Proporciona insights profesionales, naturales y útiles basados en los datos específicos que observes. No uses formatos rígidos - determina qué aspectos son más relevantes según el contenido y enfócate en esos. Tu análisis debe ser conversacional pero profesional, como el que daría un consultor educativo experimentado."
+          content: "Eres un experto en análisis educativo. Proporciona insights profesionales usando formato Markdown para mejorar la presentación visual. Según el tipo de información que quieras transmitir, elige el formato más apropiado:\n\n**Formatos disponibles:**\n- **Encabezados** (# ## ###) para secciones principales\n- **Énfasis** (*cursiva*, **negrita**) para destacar puntos clave\n- **Listas** (- 1.) para enumerar elementos\n- **Citas** (>) para destacar observaciones importantes\n- **Tablas** para datos comparativos\n- **Código** (`) para términos técnicos\n- **Casillas** (- [x]) para listas de verificación\n\nAdapta dinámicamente el formato según el contenido - no uses estructura rígida. Tu análisis debe ser conversacional, profesional y visualmente organizado."
         },
         {
           role: "user",

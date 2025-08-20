@@ -1,69 +1,61 @@
 import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import bcrypt from 'bcryptjs'
-import { prisma } from '@/lib/db/prisma'
+import { moodleAuthService } from './moodle-auth-service'
 
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: 'credentials',
       credentials: {
-        login: { 
-          label: "Email o Matrícula", 
+        username: { 
+          label: "Usuario/Matrícula Moodle", 
           type: "text", 
-          placeholder: "cesar.espindola o profesor@ejemplo.com" 
+          placeholder: "cesar.espindola" 
         },
         password: { 
-          label: "Contraseña", 
+          label: "Contraseña Moodle", 
           type: "password" 
         }
       },
       async authorize(credentials) {
-        if (!credentials?.login || !credentials?.password) {
-          throw new Error('Por favor ingrese login y contraseña')
+        if (!credentials?.username || !credentials?.password) {
+          throw new Error('Por favor ingrese usuario y contraseña de Moodle')
         }
 
         try {
-          // Buscar usuario por email, username O matrícula
-          const user = await prisma.user.findFirst({
-            where: {
-              OR: [
-                { email: credentials.login.toLowerCase() },
-                { username: credentials.login.toLowerCase() },
-                { matricula: credentials.login.toLowerCase() }
-              ]
-            }
-          })
+          console.log(`🔐 Intentando autenticación NextAuth para: ${credentials.username}`)
 
-          if (!user) {
-            console.log(`Usuario no encontrado: ${credentials.login}`)
-            throw new Error('Credenciales inválidas')
-          }
-
-          // Verificar contraseña
-          const isPasswordValid = await bcrypt.compare(
-            credentials.password,
-            user.password
+          // Autenticar directamente contra Moodle
+          const authResult = await moodleAuthService.authenticateUser(
+            credentials.username,
+            credentials.password
           )
 
-          if (!isPasswordValid) {
-            console.log(`Contraseña incorrecta para usuario: ${credentials.login}`)
-            throw new Error('Contraseña incorrecta')
+          if (!authResult.success || !authResult.user) {
+            console.log(`❌ Autenticación fallida: ${authResult.error}`)
+            throw new Error(authResult.error || 'Credenciales inválidas')
           }
 
-          console.log(`✅ Login exitoso para: ${user.name} (${user.matricula})`)
+          if (!authResult.isTeacher) {
+            console.log(`❌ Usuario no es profesor: ${credentials.username}`)
+            throw new Error('Acceso restringido a profesores únicamente')
+          }
+
+          console.log(`✅ Autenticación exitosa para profesor: ${authResult.user.fullname}`)
 
           // Retornar datos del usuario para la sesión
           return {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            matricula: user.matricula,
-            username: user.username
+            id: authResult.user.id.toString(),
+            email: authResult.user.email,
+            name: authResult.user.fullname,
+            matricula: authResult.user.username,
+            username: authResult.user.username,
+            moodleToken: authResult.token,
+            tokenExpiry: authResult.tokenExpiry
           }
-        } catch (error) {
-          console.error('Error en autenticación:', error)
-          return null
+        } catch (error: any) {
+          console.error('❌ Error en autenticación Moodle:', error)
+          throw new Error(error.message || 'Error de autenticación')
         }
       }
     })
@@ -76,37 +68,33 @@ export const authOptions: NextAuthOptions = {
         token.email = user.email
         token.matricula = user.matricula
         token.username = user.username
+        token.moodleToken = user.moodleToken
+        token.tokenExpiry = user.tokenExpiry
       }
+
+      // Validar expiración del token de Moodle
+      if (token.tokenExpiry && new Date() > new Date(token.tokenExpiry as string)) {
+        console.log(`⚠️ Token de Moodle expirado para usuario: ${token.username}`)
+        // El token ha expirado, se necesita re-autenticación
+        return null
+      }
+
+      // Opcionalmente, validar el token contra Moodle cada cierto tiempo
+      // (por ahora, confiamos en la expiración calculada)
+      
       return token
     },
     
     async session({ session, token }) {
       if (session.user && token.id) {
-        // Buscar los datos actuales del usuario en la BD para asegurar consistencia
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.id as string },
-          select: { 
-            id: true, 
-            email: true, 
-            matricula: true, 
-            username: true, 
-            name: true 
-          }
-        })
-
-        if (dbUser) {
-          session.user.id = dbUser.id
-          session.user.email = dbUser.email
-          session.user.matricula = dbUser.matricula
-          session.user.username = dbUser.username || ''
-          session.user.name = dbUser.name
-        } else {
-          // Si no se encuentra el usuario, usar datos del token como fallback
-          session.user.id = token.id as string
-          session.user.email = token.email as string
-          session.user.matricula = token.matricula as string
-          session.user.username = token.username as string
-        }
+        // No consultamos BD, usamos solo datos del token
+        session.user.id = token.id as string
+        session.user.email = token.email as string
+        session.user.matricula = token.matricula as string
+        session.user.username = token.username as string
+        session.user.name = token.name as string
+        session.user.moodleToken = token.moodleToken as string
+        session.user.tokenExpiry = token.tokenExpiry as Date
       }
       return session
     },

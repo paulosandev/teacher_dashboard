@@ -65,8 +65,13 @@ class MoodleAPIClient {
 
   constructor(baseUrl?: string, token?: string) {
     if (baseUrl && token) {
+      // Asegurar que la URL incluye el endpoint de webservice
+      const fullUrl = baseUrl.endsWith('/webservice/rest/server.php') 
+        ? baseUrl 
+        : `${baseUrl.replace(/\/$/, '')}/webservice/rest/server.php`
+      
       this.config = {
-        baseUrl,
+        baseUrl: fullUrl,
         token
       }
     }
@@ -85,7 +90,7 @@ class MoodleAPIClient {
   /**
    * Realiza una llamada a la API de Moodle
    */
-  private async callMoodleAPI(wsfunction: string, params: Record<string, any> = {}): Promise<any> {
+  async callMoodleAPI(wsfunction: string, params: Record<string, any> = {}): Promise<any> {
     // Obtener configuración
     const config = this.getConfig()
     
@@ -127,12 +132,20 @@ class MoodleAPIClient {
           'Accept': 'application/json',
         },
       })
+      
+      const responseText = await response.text()
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      const data = await response.json()
+      let data
+      try {
+        data = JSON.parse(responseText)
+      } catch (parseError) {
+        console.log(`❌ Error parsing JSON, response was: ${responseText}`)
+        throw parseError
+      }
 
       // Verificar si hay error de Moodle
       if (data.exception) {
