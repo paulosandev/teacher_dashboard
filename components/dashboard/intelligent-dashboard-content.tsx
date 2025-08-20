@@ -60,6 +60,7 @@ export function IntelligentDashboardContent({
   const [selectedActivityType, setSelectedActivityType] = useState('')
   const [visibleActivitiesCount, setVisibleActivitiesCount] = useState(5) // Número de actividades visibles
   const [isAnalyzingBatch, setIsAnalyzingBatch] = useState(false)
+  const [isLoadingCourse, setIsLoadingCourse] = useState(true) // Nuevo estado para loader general, empieza en true
   const BATCH_SIZE = 5
 
   const loadAnalysisForCourse = useCallback(async (courseId: string) => {
@@ -114,6 +115,68 @@ export function IntelligentDashboardContent({
     // La carga se hace en el useEffect, no aquí para evitar doble carga
   }, [])
 
+  // Selección automática del primer curso
+  useEffect(() => {
+    if (courses && courses.length > 0 && !selectedCourse) {
+      const firstCourse = courses[0]
+      setSelectedCourse(firstCourse.id)
+    }
+  }, [courses, selectedCourse])
+
+  // Función para generar reporte de debug del curso
+  const generateDebugReport = useCallback(async (courseId: string) => {
+    try {
+      console.log(`🐛 Generando reporte de debug para curso: ${courseId}`)
+      
+      const response = await fetch('/api/debug/course-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseGroupId: courseId // El courseId ya está en formato "courseId|groupId"
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        console.log(`✅ Reporte de debug generado exitosamente: ${data.reportPath}`)
+        console.log(`📄 ID del reporte: ${data.reportId}`)
+      } else {
+        console.error(`❌ Error generando reporte de debug:`, data.error)
+      }
+
+    } catch (error) {
+      console.error('Error generando reporte de debug:', error)
+    }
+  }, [])
+
+  // Cargar datos cuando cambie el curso seleccionado
+  useEffect(() => {
+    if (selectedCourse) {
+      // Limpiar datos anteriores para evitar flashes
+      setOpenActivities([])
+      setAnalysisResults({})
+      setVisibleActivitiesCount(BATCH_SIZE) // Resetear a las primeras 5 actividades
+      setIsLoadingCourse(true) // Activar loader
+      
+      // Cargar nuevos datos
+      const loadData = async () => {
+        try {
+          await loadOpenActivities(selectedCourse)
+          await loadAnalysisForCourse(selectedCourse)
+          
+          // Generar reporte de debug automáticamente
+          generateDebugReport(selectedCourse)
+        } finally {
+          // El loader se desactivará cuando termine el análisis automático
+          // setIsLoadingCourse(false) se hace en el análisis automático
+        }
+      }
+      
+      loadData()
+    }
+  }, [selectedCourse, loadOpenActivities, loadAnalysisForCourse, generateDebugReport])
+
   // Función para verificar si un análisis está desactualizado (>4 horas)
   const isAnalysisOutdated = useCallback((analysis: any) => {
     if (!analysis?.generatedAt) return true
@@ -123,58 +186,6 @@ export function IntelligentDashboardContent({
     
     return analysisAge > fourHoursInMs
   }, [])
-
-  // Selección automática del primer curso
-  useEffect(() => {
-    if (courses && courses.length > 0 && !selectedCourse) {
-      const firstCourse = courses[0]
-      setSelectedCourse(firstCourse.id)
-    }
-  }, [courses, selectedCourse])
-
-  // Cargar datos cuando cambie el curso seleccionado
-  useEffect(() => {
-    if (selectedCourse) {
-      // Limpiar datos anteriores para evitar flashes
-      setOpenActivities([])
-      setAnalysisResults({})
-      setVisibleActivitiesCount(BATCH_SIZE) // Resetear a las primeras 5 actividades
-      
-      // Cargar nuevos datos
-      loadOpenActivities(selectedCourse)
-      loadAnalysisForCourse(selectedCourse)
-    }
-  }, [selectedCourse, loadOpenActivities, loadAnalysisForCourse])
-
-  const generateNewAnalysis = useCallback(async () => {
-    if (!selectedCourse) return
-
-    try {
-      setIsGeneratingAnalysis(true)
-      
-      const response = await fetch('/api/analysis/generate-course-analysis', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          courseId: selectedCourse
-        })
-      })
-
-      const data = await response.json()
-
-      if (response.ok && data.success) {
-        await loadAnalysisForCourse(selectedCourse)
-      } else {
-        alert(`Error: ${data.error || 'No se pudo generar el análisis'}`)
-      }
-
-    } catch (error) {
-      console.error('Error generando análisis:', error)
-      alert('Error generando análisis')
-    } finally {
-      setIsGeneratingAnalysis(false)
-    }
-  }, [selectedCourse, loadAnalysisForCourse])
 
   // Función para analizar una actividad individual con información extendida
   const analyzeActivity = useCallback(async (activity: any, showVisualFeedback = true) => {
@@ -251,6 +262,51 @@ export function IntelligentDashboardContent({
 
     setIsAnalyzingBatch(false)
   }, [openActivities, visibleActivitiesCount, analysisResults, isAnalysisOutdated, analyzeActivity])
+
+  // Ejecutar análisis automático cuando se cargan las actividades
+  useEffect(() => {
+    if (openActivities.length > 0 && !isAnalyzingBatch && isLoadingCourse) {
+      // Analizar automáticamente las primeras actividades visibles
+      const runAutoAnalysis = async () => {
+        await analyzeVisibleActivities()
+        setIsLoadingCourse(false) // Desactivar loader cuando termine el análisis
+      }
+      runAutoAnalysis()
+    } else if (openActivities.length === 0 && !loadingActivities && selectedCourse) {
+      // Si no hay actividades y ya terminó de cargar, desactivar loader
+      setIsLoadingCourse(false)
+    }
+  }, [openActivities, analyzeVisibleActivities, isAnalyzingBatch, isLoadingCourse, loadingActivities, selectedCourse])
+
+  const generateNewAnalysis = useCallback(async () => {
+    if (!selectedCourse) return
+
+    try {
+      setIsGeneratingAnalysis(true)
+      
+      const response = await fetch('/api/analysis/generate-course-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId: selectedCourse
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        await loadAnalysisForCourse(selectedCourse)
+      } else {
+        alert(`Error: ${data.error || 'No se pudo generar el análisis'}`)
+      }
+
+    } catch (error) {
+      console.error('Error generando análisis:', error)
+      alert('Error generando análisis')
+    } finally {
+      setIsGeneratingAnalysis(false)
+    }
+  }, [selectedCourse, loadAnalysisForCourse])
 
   // Función para cargar más actividades (acumulativo)
   const loadMoreActivities = useCallback(() => {
@@ -435,55 +491,26 @@ export function IntelligentDashboardContent({
             {/* Información de actividades abiertas */}
             
 
-            {/* Controles de lotes */}
-            {openActivities.length > 0 && (
-              <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-semibold text-blue-900">Gestión de Actividades</h3>
-                    <p className="text-sm text-blue-700">
-                      Mostrando {stats.visibleCount} de {stats.totalCount} actividades
-                      {stats.hasMore && ` (${stats.remainingCount} más disponibles)`}
-                    </p>
-                  </div>
-                  <div className="flex space-x-3">
-                    <button
-                      onClick={analyzeVisibleActivities}
-                      disabled={isAnalyzingBatch}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
-                    >
-                      {isAnalyzingBatch ? (
-                        <>
-                          <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" />
-                          Analizando...
-                        </>
-                      ) : (
-                        <>
-                          <FontAwesomeIcon icon={faBrain} className="mr-2" />
-                          Analizar Visibles
-                        </>
-                      )}
-                    </button>
-                    
-                    {stats.hasMore && (
-                      <button
-                        onClick={loadMoreActivities}
-                        disabled={isAnalyzingBatch}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium"
-                      >
-                        <FontAwesomeIcon icon={faChevronDown} className="mr-2" />
-                        Cargar {Math.min(BATCH_SIZE, stats.remainingCount)} más
-                      </button>
-                    )}
-                  </div>
+
+            {/* Loader para cuando está cargando */}
+            {isLoadingCourse ? (
+              <div className="flex flex-col items-center justify-center py-16">
+                <div className="text-center">
+                  <FontAwesomeIcon icon={faSpinner} size="3x" className="text-blue-600 animate-spin mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    Cargando análisis inteligente...
+                  </h3>
+                  <p className="text-gray-600">
+                    Obteniendo actividades y generando insights
+                  </p>
                 </div>
               </div>
-            )}
-
-            {/* Cards de actividades abiertas - Acumulativas */}
-            {openActivities.length > 0 && (
-              <div className="mb-8">
-                <div className={`grid gap-6 ${getVisibleActivities.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-2'}`}>
+            ) : (
+              <>
+                {/* Cards de actividades abiertas - Acumulativas */}
+                {openActivities.length > 0 ? (
+                  <div className="mb-8">
+                    <div className={`grid gap-6 ${getVisibleActivities.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-2'}`}>
                   {getVisibleActivities.map((activity, index) => {
                     const getActivityIcon = (type: string) => {
                       switch (type) {
@@ -552,69 +579,39 @@ export function IntelligentDashboardContent({
                           const isAnalyzing = analyzingActivity === activityKey
                           const analysisExtract = getAnalysisExtract(activity)
                           
-                          if (isAnalyzing) {
+                          if (isAnalyzing || (isAnalyzingBatch && !analysisResults[activityKey])) {
                             // Mostrar loader durante análisis
                             return (
-                              <div className="mb-4 py-8">
-                                <div className="text-center text-purple-600">
-                                  <FontAwesomeIcon icon={faSpinner} size="2x" className="mb-3 animate-spin" />
-                                  <p className="text-sm font-medium">
-                                    Analizando actividad...
-                                  </p>
-                                  <p className="text-xs text-gray-500 mt-1">
-                                    Obteniendo insights inteligentes
-                                  </p>
+                              <div className="mb-4">
+                                <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
+                                  <div className="text-center">
+                                    <FontAwesomeIcon icon={faSpinner} size="2x" className="text-blue-600 mb-3 animate-spin" />
+                                    <p className="text-sm font-medium text-blue-900">
+                                      Generando análisis inteligente...
+                                    </p>
+                                    <p className="text-xs text-blue-700 mt-1">
+                                      Procesando información de la actividad
+                                    </p>
+                                  </div>
                                 </div>
                               </div>
                             )
                           }
                           
                           if (analysisExtract) {
-                            // Mostrar extractos del análisis con el diseño de referencia
+                            // Mostrar resumen del análisis completo
+                            const analysis = analysisResults[activityKey]
+                            const summaryText = analysis?.fullAnalysis || analysis?.summary || analysisExtract.summary
+                            
                             return (
-                              <div className="mb-4 space-y-3">
-                                {/* Actividad */}
-                                <div className="flex items-start space-x-3">
-                                  <span className="text-gray-700 text-lg mt-1">✏️</span>
-                                  <div>
-                                    <p className="text-gray-700 text-sm">
-                                      <span className="font-semibold">Actividad:</span> {analysisExtract.summary}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                {/* Fortalezas */}
-                                {analysisExtract.positiveHighlight && (
-                                  <div className="flex items-start space-x-3">
-                                    <span className="text-gray-700 text-lg mt-1">👥</span>
-                                    <div>
-                                      <p className="text-gray-700 text-sm">
-                                        <span className="font-semibold">Fortalezas:</span> {analysisExtract.positiveHighlight}
-                                      </p>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Alertas */}
-                                {analysisExtract.alertHighlight && (
-                                  <div className="flex items-start space-x-3">
-                                    <span className="text-gray-700 text-lg mt-1">👥</span>
-                                    <div>
-                                      <p className="text-gray-700 text-sm">
-                                        <span className="font-semibold">Alertas:</span> {analysisExtract.alertHighlight}
-                                      </p>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Próximo paso docente */}
-                                <div className="flex items-start space-x-3">
-                                  <span className="text-gray-700 text-lg mt-1">⚙️</span>
-                                  <div>
-                                    <p className="text-gray-700 text-sm">
-                                      <span className="font-semibold">Próximo paso docente:</span> {analysisExtract.recommendationHighlight}
-                                    </p>
-                                  </div>
+                              <div className="mb-4">
+                                <div className="bg-gray-50 rounded-lg p-4">
+                                  <p className="text-gray-700 text-sm leading-relaxed">
+                                    {/* Mostrar primeros 300 caracteres del análisis completo */}
+                                    {summaryText && summaryText.length > 300 
+                                      ? summaryText.substring(0, 300) + '...' 
+                                      : summaryText}
+                                  </p>
                                 </div>
                               </div>
                             )
@@ -688,126 +685,20 @@ export function IntelligentDashboardContent({
                   })}
                 </div>
               </div>
-            )}
-
-            {analysisCards.length > 0 ? (
-              <div className={`grid gap-6 ${analysisCards.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
-                {analysisCards.map((card, index) => (
-                  <div key={index} className="bg-white border border-gray-300 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
-                    {/* Header */}
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-500 font-inter">
-                        {card.analysisType === 'course_overview' ? 'Vista General del Curso' :
-                         card.analysisType === 'activity' ? card.title :
-                         card.analysisType === 'forum' ? card.title :
-                         card.title || 'Análisis'}
-                      </h3>
-                      <span className="bg-white border border-primary text-primary px-3 py-1 rounded-lg text-sm font-semibold flex items-center space-x-1 font-inter">
-                        <FontAwesomeIcon icon={faMagicWandSparkles} className="text-primary" />
-                        <span className="text-primary">
-                          {card.analysisType === 'course_overview' ? 'General' :
-                           card.analysisType === 'activity' ? 'Actividad' :
-                           card.analysisType === 'forum' ? 'Foro' :
-                           'Análisis'}
-                        </span>
-                      </span>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="text-gray-400 mb-4">
+                      <FontAwesomeIcon icon={faMagicWandSparkles} size="3x" />
                     </div>
-                    
-                    {/* Actividad */}
-                    {card.activity && (
-                      <div className="mb-4">
-                        <div className="flex items-start space-x-2">
-                          <span className="text-gray-500 mt-1">✏️</span>
-                          <div>
-                            <h4 className="font-semibold text-gray-500 text-sm font-inter">Actividad:</h4>
-                            <p className="text-gray-500 text-sm font-inter">{card.activity}</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Fortalezas */}
-                    {card.strengths && card.strengths.length > 0 && (
-                      <div className="mb-4">
-                        <div className="flex items-start space-x-2">
-                          <span className="text-gray-500 mt-1">👤</span>
-                          <div>
-                            <h4 className="font-semibold text-gray-500 text-sm font-inter">Fortalezas:</h4>
-                            <p className="text-gray-500 text-sm font-inter">
-                              {card.strengths.slice(0, 3).join(', ')}
-                              {card.strengths.length > 3 && '...'}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Alertas */}
-                    {card.alerts && card.alerts.length > 0 && (
-                      <div className="mb-4">
-                        <div className="flex items-start space-x-2">
-                          <span className="text-gray-500 mt-1">⚠️</span>
-                          <div>
-                            <h4 className="font-semibold text-gray-500 text-sm font-inter">Alertas:</h4>
-                            <p className="text-gray-500 text-sm font-inter">
-                              {card.alerts.slice(0, 3).join(', ')}
-                              {card.alerts.length > 3 && '...'}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Próximo paso docente */}
-                    {card.nextStep && (
-                      <div className="mb-4">
-                        <div className="flex items-start space-x-2">
-                          <span className="text-gray-500 mt-1">➡️</span>
-                          <div>
-                            <h4 className="font-semibold text-gray-500 text-sm font-inter">Próximo paso docente:</h4>
-                            <p className="text-gray-500 text-sm font-inter">{card.nextStep}</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Footer - Ver más */}
-                    <div className="flex justify-end mt-6 pt-4 border-t border-gray-200">
-                      <button className="text-primary font-semibold text-sm flex items-center space-x-1 hover:text-green-700 transition-colors font-inter">
-                        <span>Ver más</span>
-                        <FontAwesomeIcon icon={faChevronDown} className="text-primary rotate-[-90deg]" />
-                      </button>
-                    </div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                      No hay actividades disponibles
+                    </h3>
+                    <p className="text-gray-600">
+                      Este curso no tiene actividades abiertas en este momento
+                    </p>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <div className="text-gray-400 mb-4">
-                  <FontAwesomeIcon icon={faMagicWandSparkles} size="3x" />
-                </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  No hay análisis disponibles
-                </h3>
-                <p className="text-gray-600 mb-4">
-                  Selecciona un curso para generar tu primer análisis inteligente
-                </p>
-                {selectedCourse && (
-                  <button
-                    onClick={generateNewAnalysis}
-                    disabled={isGeneratingAnalysis}
-                    className="bg-white border border-primary text-gray-700 px-6 py-3 rounded-lg font-medium transition-all duration-300 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 mx-auto hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  >
-                    <FontAwesomeIcon 
-                      icon={isGeneratingAnalysis ? faSpinner : faMagicWandSparkles} 
-                      className={`${isGeneratingAnalysis ? 'animate-spin' : ''} text-primary`}
-                    />
-                    <span>
-                      {isGeneratingAnalysis ? 'Generando primer análisis...' : 'Generar Primer Análisis'}
-                    </span>
-                  </button>
                 )}
-              </div>
+              </>
             )}
           </section>
         </>

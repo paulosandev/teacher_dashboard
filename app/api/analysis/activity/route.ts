@@ -267,89 +267,58 @@ async function analyzeForum(client: MoodleAPIClient, forumData: any, openai: Ope
       : 'No se detectó participación de estudiantes'
     
     prompt = `
-Analiza la siguiente DISCUSIÓN EDUCATIVA (espacio dentro de un foro) y proporciona un análisis completo:
+Como experto en análisis educativo, analiza la siguiente DISCUSIÓN EDUCATIVA y proporciona insights profesionales basados en los datos disponibles:
 
-## DATOS DE LA DISCUSIÓN:
-- Título: "${discussion.name || discussion.subject}"
-- Descripción del foro: ${analysisData.description}
-- Posts totales: ${discussion.posts?.length || 0}
-- Mensaje inicial del profesor: ${discussion.message ? discussion.message.substring(0, 300) + '...' : 'Sin contenido inicial'}
+## CONTEXTO DE LA DISCUSIÓN:
+- **Título**: "${discussion.name || discussion.subject}"
+- **Descripción del foro**: ${analysisData.description}
+- **Posts totales**: ${discussion.posts?.length || 0}
+- **Contenido inicial del profesor**: ${discussion.message ? discussion.message.substring(0, 300) + '...' : 'Sin contenido inicial'}
 
-## ${studentResponseInfo}
+## DATOS DE PARTICIPACIÓN:
+${studentResponseInfo}
 
-Por favor, proporciona un análisis estructurado con:
+## CONTENIDO DE LA DISCUSIÓN:
+${discussion.posts?.slice(0, 5).map((post: any) => `
+**${post.userFullName}** (${post.isTeacherPost ? 'Profesor' : 'Estudiante'}):
+"${post.message.substring(0, 200)}${post.message.length > 200 ? '...' : ''}"
+`).join('\n') || 'No hay posts disponibles para mostrar'}
 
-1. **RESUMEN DE PARTICIPACIÓN EN LA DISCUSIÓN** (2-3 líneas):
-   - Nivel de engagement de los estudiantes
-   - Calidad de las respuestas
+---
 
-2. **ASPECTOS POSITIVOS** (3-4 puntos específicos):
-   - Elementos destacables de las aportaciones
-   - Profundidad del diálogo
-   - Evidencia de aprendizaje
+Proporciona un análisis educativo completo y profesional de esta discusión. Determina los insights más relevantes según el contenido específico que observas. Tu análisis debe ser útil para un profesor universitario que busca entender el estado de la participación estudiantil y la calidad del aprendizaje.
 
-3. **ÁREAS DE MEJORA** (2-3 alertas o recomendaciones):
-   - Patrones problemáticos identificados
-   - Oportunidades para incrementar participación
-
-4. **INSIGHTS PEDAGÓGICOS** (2-3 puntos):
-   - Elementos relevantes para la evaluación
-   - Indicadores de comprensión del tema
-
-5. **RECOMENDACIÓN DOCENTE INMEDIATA**:
-   - Una estrategia específica para mejorar esta discusión
-
-El análisis debe enfocarse en la calidad del diálogo y el aprendizaje evidenciado.
+Incluye observaciones sobre patrones de participación, calidad de las respuestas, evidencia de comprensión, aspectos que funcionan bien, áreas que necesitan atención, y recomendaciones específicas basadas en lo que observas en esta discusión particular.
 `
   } else {
     // Prompt para foro general con múltiples discusiones
     prompt = `
-Analiza el siguiente FORO EDUCATIVO con múltiples discusiones y proporciona un análisis completo:
+Como experto en análisis educativo, analiza el siguiente FORO EDUCATIVO y proporciona insights profesionales basados en los datos disponibles:
 
-## DATOS DEL FORO:
-- Nombre: ${analysisData.name}
-- Descripción: ${analysisData.description}
-- Discusiones totales: ${analysisData.stats.totalDiscussions}
-- Posts totales: ${analysisData.stats.totalPosts}
-- Participantes únicos: ${analysisData.stats.uniqueParticipants}
-- Promedio posts por participante: ${analysisData.stats.avgPostsPerParticipant}
+## PANORAMA DEL FORO:
+- **Nombre**: ${analysisData.name}
+- **Propósito**: ${analysisData.description}
+- **Actividad total**: ${analysisData.stats.totalDiscussions} discusiones, ${analysisData.stats.totalPosts} posts
+- **Participación**: ${analysisData.stats.uniqueParticipants} participantes únicos (promedio: ${analysisData.stats.avgPostsPerParticipant} posts por persona)
 
-## DISCUSIONES ACTIVAS:
+## DISCUSIONES PRINCIPALES:
 ${analysisData.discussions.slice(0, 5).map((d: any) => `
-- "${d.name || d.subject}"
-  Respuestas: ${d.numreplies} | Estudiantes: ${d.studentsParticipating || 0}
-  Contenido inicial: ${d.message ? d.message.substring(0, 200) + '...' : 'Sin contenido'}
+**"${d.name || d.subject}"**
+- Respuestas: ${d.numreplies} | Estudiantes participando: ${d.studentsParticipating || 0}
+- Contenido: ${d.message ? d.message.substring(0, 200) + '...' : 'Sin contenido inicial disponible'}
 `).join('\n')}
 
-## APORTACIONES DE ESTUDIANTES:
+## EJEMPLOS DE PARTICIPACIÓN ESTUDIANTIL:
 ${analysisData.allPosts?.filter((p: any) => p.userId !== professorUserId).slice(0, 3).map((post: any) => `
-- En "${post.discussionName}":
-  ${post.message.substring(0, 150)}${post.message.length > 150 ? '...' : ''}
-`).join('\n') || 'No hay posts de estudiantes disponibles'}
+**En "${post.discussionName}":**
+"${post.message.substring(0, 200)}${post.message.length > 200 ? '...' : ''}"
+`).join('\n') || 'No se encontraron posts de estudiantes para mostrar'}
 
-Por favor, proporciona un análisis estructurado con:
+---
 
-1. **RESUMEN GENERAL DEL FORO** (2-3 líneas):
-   - Nivel de actividad general
-   - Distribución de participación entre discusiones
+Proporciona un análisis educativo completo y profesional de este foro. Determina los insights más relevantes según el patrón de actividad y contenido que observas. Tu análisis debe ser útil para un profesor universitario que busca entender cómo están funcionando las discusiones en su curso.
 
-2. **ASPECTOS POSITIVOS** (3-4 puntos específicos):
-   - Elementos destacables de la participación
-   - Calidad de las interacciones
-   - Cumplimiento de objetivos pedagógicos
-
-3. **ÁREAS DE MEJORA** (2-3 alertas o recomendaciones):
-   - Problemas identificados
-   - Discusiones con baja participación
-
-4. **INSIGHTS CLAVE PARA EVALUACIÓN** (2-3 puntos):
-   - Elementos relevantes para la evaluación académica
-   - Patrones de comportamiento estudiantil
-
-5. **RECOMENDACIÓN DOCENTE INMEDIATA**:
-   - Una acción específica y práctica que el profesor puede tomar
-
-El análisis debe ser profesional, basado en datos pedagógicos y útil para un profesor universitario.
+Incluye observaciones sobre patrones de participación entre las diferentes discusiones, calidad del engagement estudiantil, distribución de la actividad, aspectos que están funcionando bien, áreas que necesitan atención, y recomendaciones específicas para optimizar el uso pedagógico de este foro.
 `
   }
 
@@ -357,7 +326,7 @@ El análisis debe ser profesional, basado en datos pedagógicos y útil para un 
   console.log(`   🔗 Modelo: gpt-4`)
   console.log(`   📝 Tipo de contenido: ${analysisData.isSpecificDiscussion ? 'Discusión individual' : 'Foro con múltiples discusiones'}`)
   console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
-  console.log(`   ⚙️ Configuración: max_tokens=1500, temperature=0.3`)
+  console.log(`   ⚙️ Configuración: max_tokens=2500, temperature=0.4 (análisis flexible)`)
 
   try {
     const completion = await openai.chat.completions.create({
@@ -365,23 +334,21 @@ El análisis debe ser profesional, basado en datos pedagógicos y útil para un 
       messages: [
         {
           role: "system",
-          content: analysisData.isSpecificDiscussion 
-            ? "Eres un experto en análisis educativo especializado en evaluar discusiones académicas individuales. Enfócate en la calidad del diálogo, profundidad de las respuestas y evidencia de aprendizaje en la conversación."
-            : "Eres un experto en análisis educativo y evaluación de participación estudiantil en foros académicos. Proporciona análisis detallados, prácticos y basados en evidencia pedagógica."
+          content: "Eres un experto en análisis educativo. Proporciona insights profesionales, naturales y útiles basados en los datos específicos que observes. No uses formatos rígidos - determina qué aspectos son más relevantes según el contenido y enfócate en esos. Tu análisis debe ser conversacional pero profesional, como el que daría un consultor educativo experimentado."
         },
         {
           role: "user",
           content: prompt
         }
       ],
-      max_tokens: 1500,
-      temperature: 0.3
+      max_tokens: 2500,
+      temperature: 0.4
     })
 
     const analysisText = completion.choices[0]?.message?.content || ''
     
-    // Parsear la respuesta en secciones estructuradas
-    const analysis = parseForumAnalysis(analysisText)
+    // Procesar la respuesta de forma flexible
+    const analysis = parseFlexibleAnalysis(analysisText)
     
     console.log(`✅ Análisis de foro completado para: ${forumData.name}`)
     
@@ -472,7 +439,7 @@ El análisis debe ser profesional y orientado a la mejora del proceso educativo.
   console.log(`🚀 ENVIANDO A OpenAI - ASIGNACIÓN:`)
   console.log(`   🔗 Modelo: gpt-4`)
   console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
-  console.log(`   ⚙️ Configuración: max_tokens=1500, temperature=0.3`)
+  console.log(`   ⚙️ Configuración: max_tokens=2500, temperature=0.4 (análisis flexible)`)
 
   try {
     const completion = await openai.chat.completions.create({
@@ -487,14 +454,14 @@ El análisis debe ser profesional y orientado a la mejora del proceso educativo.
           content: prompt
         }
       ],
-      max_tokens: 1500,
-      temperature: 0.3
+      max_tokens: 2500,
+      temperature: 0.4
     })
 
     const analysisText = completion.choices[0]?.message?.content || ''
     
-    // Parsear la respuesta en secciones estructuradas
-    const analysis = parseAssignmentAnalysis(analysisText)
+    // Procesar la respuesta de forma flexible
+    const analysis = parseFlexibleAnalysis(analysisText)
     
     console.log(`✅ Análisis de asignación completado para: ${assignmentData.name}`)
     
@@ -511,6 +478,37 @@ El análisis debe ser profesional y orientado a la mejora del proceso educativo.
   } catch (error) {
     console.error('❌ Error en análisis de asignación:', error)
     throw new Error('Error al generar análisis de la asignación')
+  }
+}
+
+function parseFlexibleAnalysis(text: string) {
+  // Procesar la respuesta de forma flexible - toda la respuesta como un análisis completo
+  // Dividir por párrafos si hay múltiples
+  const paragraphs = text
+    .split('\n\n')
+    .map(p => p.trim())
+    .filter(p => p.length > 20) // Filtrar párrafos muy cortos
+  
+  if (paragraphs.length <= 1) {
+    // Si es un solo bloque, usar todo como resumen
+    return {
+      summary: text.trim(),
+      positives: [],
+      alerts: [],
+      insights: [],
+      recommendation: '',
+      fullAnalysis: text.trim()
+    }
+  } else {
+    // Si hay múltiples párrafos, usar el primero como resumen y el resto como insights
+    return {
+      summary: paragraphs[0],
+      positives: [],
+      alerts: [],
+      insights: paragraphs.slice(1),
+      recommendation: '',
+      fullAnalysis: text.trim()
+    }
   }
 }
 
@@ -635,7 +633,7 @@ El análisis debe ser profesional y orientado a la mejora pedagógica.
   console.log(`🚀 ENVIANDO A OpenAI - ${typeLabel.toUpperCase()}:`)
   console.log(`   🔗 Modelo: gpt-4`)
   console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
-  console.log(`   ⚙️ Configuración: max_tokens=1500, temperature=0.3`)
+  console.log(`   ⚙️ Configuración: max_tokens=2500, temperature=0.4 (análisis flexible)`)
 
   try {
     const completion = await openai.chat.completions.create({
@@ -650,14 +648,14 @@ El análisis debe ser profesional y orientado a la mejora pedagógica.
           content: prompt
         }
       ],
-      max_tokens: 1500,
-      temperature: 0.3
+      max_tokens: 2500,
+      temperature: 0.4
     })
 
     const analysisText = completion.choices[0]?.message?.content || ''
     
-    // Parsear la respuesta en secciones estructuradas
-    const analysis = parseGenericAnalysis(analysisText)
+    // Procesar la respuesta de forma flexible
+    const analysis = parseFlexibleAnalysis(analysisText)
     
     console.log(`✅ Análisis de ${typeLabel} completado para: ${activityData.name}`)
     

@@ -65,14 +65,26 @@ export function AnalysisModal({ isOpen, onClose, analysis, activityName, activit
 
         {/* Content */}
         <div className="p-6 space-y-6">
-          {/* Resumen General */}
-          <div className="bg-blue-50 rounded-lg p-4">
-            <div className="flex items-center space-x-2 mb-3">
-              <FontAwesomeIcon icon={faLightbulb} className="text-blue-600" />
-              <h3 className="text-lg font-semibold text-blue-900">Resumen General</h3>
+          {/* Análisis Completo o Resumen General */}
+          {analysis.fullAnalysis ? (
+            <div className="bg-blue-50 rounded-lg p-4">
+              <div className="flex items-center space-x-2 mb-3">
+                <FontAwesomeIcon icon={faBrain} className="text-blue-600" />
+                <h3 className="text-lg font-semibold text-blue-900">Análisis Educativo Completo</h3>
+              </div>
+              <div className="text-blue-800 leading-relaxed whitespace-pre-wrap">
+                {analysis.fullAnalysis}
+              </div>
             </div>
-            <p className="text-blue-800 leading-relaxed">{analysis.summary}</p>
-          </div>
+          ) : (
+            <div className="bg-blue-50 rounded-lg p-4">
+              <div className="flex items-center space-x-2 mb-3">
+                <FontAwesomeIcon icon={faLightbulb} className="text-blue-600" />
+                <h3 className="text-lg font-semibold text-blue-900">Resumen General</h3>
+              </div>
+              <p className="text-blue-800 leading-relaxed">{analysis.summary}</p>
+            </div>
+          )}
 
           {/* Aspectos Positivos */}
           {analysis.positives && analysis.positives.length > 0 && (
