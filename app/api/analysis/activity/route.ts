@@ -56,40 +56,33 @@ export async function POST(request: NextRequest) {
 
     console.log(`🧠 Verificando análisis existente para ${activityType}: ${activityData.name}`)
 
+    // TEMPORALMENTE DESHABILITADO: No usar caché para forzar regeneración con formato nuevo
     // Verificar si ya existe un análisis reciente (menos de 4 horas)
-    const fourHoursAgo = new Date(Date.now() - (4 * 60 * 60 * 1000))
-    const existingAnalysis = await prisma.activityAnalysis.findFirst({
-      where: {
-        moodleCourseId: courseId,
-        activityId: activityId.toString(),
-        activityType: activityType,
-        lastUpdated: {
-          gte: fourHoursAgo
-        },
-        isValid: true
-      }
-    })
+    // const fourHoursAgo = new Date(Date.now() - (4 * 60 * 60 * 1000))
+    // const existingAnalysis = await prisma.activityAnalysis.findFirst({
+    //   where: {
+    //     moodleCourseId: courseId,
+    //     activityId: activityId.toString(),
+    //     activityType: activityType,
+    //     lastUpdated: {
+    //       gte: fourHoursAgo
+    //     },
+    //     isValid: true
+    //   }
+    // })
 
-    if (existingAnalysis) {
-      console.log(`♻️ Usando análisis en cache para ${activityData.name}`)
-      
-      return NextResponse.json({
-        success: true,
-        analysis: {
-          summary: existingAnalysis.summary,
-          positives: existingAnalysis.positives,
-          alerts: existingAnalysis.alerts,
-          insights: existingAnalysis.insights,
-          recommendation: existingAnalysis.recommendation,
-          fullAnalysis: existingAnalysis.fullAnalysis || existingAnalysis.summary,
-          generatedAt: existingAnalysis.generatedAt.toISOString(),
-          activityName: existingAnalysis.activityName,
-          activityId: existingAnalysis.activityId,
-          activityType: existingAnalysis.activityType,
-          fromCache: true
-        }
-      })
-    }
+    // if (existingAnalysis) {
+    //   console.log(`♻️ Usando análisis en cache para ${activityData.name}`)
+    //   
+    //   return NextResponse.json({
+    //     success: true,
+    //     analysis: {
+    //       // ... análisis en caché
+    //     }
+    //   })
+    // }
+
+    console.log(`🆕 FORZANDO NUEVO ANÁLISIS (caché deshabilitado temporalmente)`)
 
     console.log(`🧠 Generando nuevo análisis para ${activityType}: ${activityData.name}`)
 
@@ -155,7 +148,15 @@ export async function POST(request: NextRequest) {
             recommendation: analysisResult.recommendation,
             fullAnalysis: analysisResult.fullAnalysis || analysisResult.summary,
             activityData: activityData,
-            llmResponse: { model: 'o3-mini', generatedAt: new Date() },
+            llmResponse: {
+              model: 'o3-mini',
+              generatedAt: new Date(),
+              // Nuevo formato dinámico
+              sections: analysisResult.sections,
+              // Mantener compatibilidad con formato anterior
+              metricsTable: analysisResult.metricsTable,
+              structuredInsights: analysisResult.structuredInsights
+            },
             lastUpdated: new Date()
           }
         })
@@ -175,7 +176,15 @@ export async function POST(request: NextRequest) {
             recommendation: analysisResult.recommendation,
             fullAnalysis: analysisResult.fullAnalysis || analysisResult.summary,
             activityData: activityData,
-            llmResponse: { model: 'o3-mini', generatedAt: new Date() }
+            llmResponse: {
+              model: 'o3-mini',
+              generatedAt: new Date(),
+              // Nuevo formato dinámico
+              sections: analysisResult.sections,
+              // Mantener compatibilidad con formato anterior
+              metricsTable: analysisResult.metricsTable,
+              structuredInsights: analysisResult.structuredInsights
+            }
           }
         })
       }
@@ -306,35 +315,35 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
 - "Oportunidades de Mejora"
 - "Estrategias Recomendadas"
 
-**ESTRUCTURA REQUERIDA:**
+**INSTRUCCIONES PARA FORMATO DINÁMICO:**
+Como experto analista, decide la mejor forma de presentar cada aspecto del análisis. Puedes crear entre 3-6 secciones, cada una con el formato más apropiado:
 
-## [Título Dinámico 1]
-[Contenido específico y detallado - mínimo 3 líneas]
+**FORMATOS DISPONIBLES:**
+- **table**: Para datos comparativos (formato "Header1 | Header2\nRow1 | Row2")
+- **numbered-list**: Para pasos secuenciales o prioridades (array de strings)
+- **bullet-list**: Para puntos sin orden específico (array de strings)
+- **text**: Para explicaciones narrativas (string con markdown)
+- **cards**: Para métricas destacadas (array de {title, value, unit?, trend?})
+- **metrics**: Para indicadores clave (array de {label, value, unit?})
 
-## [Título Dinámico 2] 
-[Contenido específico y detallado - mínimo 3 líneas]
+**COLORES SUGERIDOS:** blue, green, yellow, red, purple, gray
+**ICONOS:** Usa emojis relevantes (📊 📈 📋 ⚠️ 💡 🎯 📝 etc.)
 
-## [Título Dinámico 3]
-[Contenido específico y detallado - mínimo 3 líneas]
-
-## [Título Dinámico 4]
-[Contenido específico y detallado - mínimo 3 líneas]
-
-## [Título Dinámico 5]
-[Contenido específico y detallado - mínimo 3 líneas]
-
-## RESUMEN_EJECUTIVO
-- [Punto clave de la primera sección - máximo 15 palabras]
-- [Punto clave de la segunda sección - máximo 15 palabras]
-- [Punto clave de la tercera sección - máximo 15 palabras]
-- [Punto clave de la cuarta sección - máximo 15 palabras]
-- [Punto clave de la quinta sección - máximo 15 palabras]
-
-**IMPORTANTE**: 
-- Usa títulos específicos al contexto, NO genéricos
-- Cada sección debe tener contenido sustancial (mínimo 50 palabras)
-- El RESUMEN_EJECUTIVO debe reflejar exactamente las secciones creadas
-- Adapta el análisis al tipo específico de actividad educativa
+**RESPONDE ÚNICAMENTE EN FORMATO JSON:**
+{
+  "summary": "Resumen ejecutivo conciso (1-2 líneas)",
+  "sections": [
+    {
+      "id": "section-1",
+      "title": "Título descriptivo y específico",
+      "format": "table|numbered-list|bullet-list|text|cards|metrics",
+      "content": "Contenido según el formato elegido",
+      "priority": 1,
+      "icon": "📊",
+      "color": "blue"
+    }
+  ]
+}
 `
   } else {
     // Prompt para foro general con FORMATO ESTRUCTURADO DINÁMICO UNIVERSAL
@@ -378,35 +387,38 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
 - "Oportunidades de Mejora"
 - "Estrategias Pedagógicas"
 
-**ESTRUCTURA REQUERIDA:**
+**INSTRUCCIONES PARA FORMATO DINÁMICO:**
+Como experto analista educativo, decide la mejor forma de presentar el análisis del foro. Crea entre 3-6 secciones con el formato más apropiado para cada tipo de información:
 
-## [Título Dinámico 1]
-[Contenido específico y detallado - mínimo 3 líneas]
+**FORMATOS DISPONIBLES:**
+- **table**: Para datos comparativos (formato "Header1 | Header2\nRow1 | Row2")
+- **numbered-list**: Para pasos secuenciales o prioridades (array de strings)
+- **bullet-list**: Para puntos sin orden específico (array de strings)
+- **text**: Para explicaciones narrativas (string con markdown)
+- **cards**: Para métricas destacadas (array de {title, value, unit?, trend?})
+- **metrics**: Para indicadores clave (array de {label, value, unit?})
 
-## [Título Dinámico 2]
-[Contenido específico y detallado - mínimo 3 líneas]
+**DATOS DISPONIBLES PARA MÉTRICAS:**
+- Discusiones: ${analysisData.stats.totalDiscussions}
+- Posts: ${analysisData.stats.totalPosts}
+- Participantes: ${analysisData.stats.uniqueParticipants}
+- Promedio posts/persona: ${analysisData.stats.avgPostsPerParticipant}
 
-## [Título Dinámico 3]
-[Contenido específico y detallado - mínimo 3 líneas]
-
-## [Título Dinámico 4]
-[Contenido específico y detallado - mínimo 3 líneas]
-
-## [Título Dinámico 5]
-[Contenido específico y detallado - mínimo 3 líneas]
-
-## RESUMEN_EJECUTIVO
-- [Punto clave de la primera sección - máximo 15 palabras]
-- [Punto clave de la segunda sección - máximo 15 palabras]
-- [Punto clave de la tercera sección - máximo 15 palabras]
-- [Punto clave de la cuarta sección - máximo 15 palabras]
-- [Punto clave de la quinta sección - máximo 15 palabras]
-
-**IMPORTANTE**:
-- Usa títulos específicos al contexto del foro, NO genéricos
-- Cada sección debe tener contenido sustancial (mínimo 50 palabras)
-- El RESUMEN_EJECUTIVO debe reflejar exactamente las secciones creadas
-- Adapta el análisis a las características específicas de este foro educativo
+**RESPONDE ÚNICAMENTE EN FORMATO JSON:**
+{
+  "summary": "Resumen ejecutivo del foro (1-2 líneas)",
+  "sections": [
+    {
+      "id": "section-1",
+      "title": "Título específico para esta información",
+      "format": "table|numbered-list|bullet-list|text|cards|metrics",
+      "content": "Contenido apropiado para el formato",
+      "priority": 1,
+      "icon": "📊",
+      "color": "blue"
+    }
+  ]
+}
 `
   }
 
@@ -422,7 +434,7 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
       messages: [
         {
           role: "system",
-          content: "Eres un experto en análisis educativo. Proporciona insights profesionales usando formato Markdown para mejorar la presentación visual. Según el tipo de información que quieras transmitir, elige el formato más apropiado:\n\n**Formatos disponibles:**\n- **Encabezados** (# ## ###) para secciones principales\n- **Énfasis** (*cursiva*, **negrita**) para destacar puntos clave\n- **Listas** (- 1.) para enumerar elementos\n- **Citas** (>) para destacar observaciones importantes\n- **Tablas** para datos comparativos\n- **Código** (`) para términos técnicos\n- **Casillas** (- [x]) para listas de verificación\n\nAdapta dinámicamente el formato según el contenido - no uses estructura rígida. Tu análisis debe ser conversacional, profesional y visualmente organizado."
+          content: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. Incluye datos cuantitativos en metricsTable cuando sea relevante, y separa insights en numerados (para orden específico) y bullets (para puntos generales). El fullAnalysis debe usar markdown con secciones ##."
         },
         {
           role: "user",
@@ -434,8 +446,42 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
 
     const analysisText = completion.choices[0]?.message?.content || ''
     
-    // Procesar la respuesta de forma flexible
-    const analysis = parseFlexibleAnalysis(analysisText)
+    console.log('📝 Respuesta de OpenAI (primeros 500 chars):', analysisText.substring(0, 500))
+    
+    // Procesar la respuesta JSON
+    let analysis
+    try {
+      analysis = JSON.parse(analysisText)
+      console.log('✅ JSON parseado correctamente')
+      console.log('📊 Campos presentes:')
+      console.log('  - summary:', analysis.summary ? '✅' : '❌')
+      console.log('  - sections:', analysis.sections ? `✅ (${analysis.sections.length} secciones)` : '❌')
+      if (analysis.sections) {
+        analysis.sections.forEach((section: any, i: number) => {
+          console.log(`    ${i+1}. "${section.title}" (${section.format}) ${section.icon || ''}`)
+        })
+      }
+      
+      // Mantener compatibilidad con formato anterior
+      if (!analysis.sections && (analysis.metricsTable || analysis.structuredInsights)) {
+        console.log('📋 Formato anterior detectado, manteniendo compatibilidad')
+        console.log('  - metricsTable:', analysis.metricsTable ? '✅' : '❌')
+        console.log('  - structuredInsights:', analysis.structuredInsights ? '✅' : '❌')
+      }
+      console.log('  - fullAnalysis:', analysis.fullAnalysis ? '✅' : '❌')
+    } catch (parseError) {
+      console.error('❌ Error parseando JSON de OpenAI:', parseError)
+      console.error('❌ Respuesta recibida no es JSON válido:', analysisText.substring(0, 200))
+      // Fallback a análisis básico si falla el parsing
+      analysis = {
+        summary: 'Análisis generado con formato de respaldo',
+        fullAnalysis: analysisText,
+        positives: ['Contenido disponible para revisión'],
+        alerts: ['Formato de respuesta no estructurado'],
+        insights: ['Requiere revisión manual'],
+        recommendation: 'Revisar configuración del análisis'
+      }
+    }
     
     console.log(`✅ Análisis de foro completado para: ${forumData.name}`)
     
@@ -517,35 +563,32 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
 - "Oportunidades de Mejora"
 - "Estrategias Docentes"
 
-**ESTRUCTURA REQUERIDA:**
+**INSTRUCCIONES PARA FORMATO DINÁMICO:**
+Como experto analista educativo, decide la mejor forma de presentar cada aspecto del análisis. Crea entre 3-6 secciones con el formato más apropiado:
 
-## [Título Dinámico 1]
-[Contenido específico y detallado - mínimo 3 líneas]
+**FORMATOS DISPONIBLES:**
+- **table**: Para datos comparativos (formato "Header1 | Header2\nRow1 | Row2")
+- **numbered-list**: Para pasos secuenciales o prioridades (array de strings)
+- **bullet-list**: Para puntos sin orden específico (array de strings)
+- **text**: Para explicaciones narrativas (string con markdown)
+- **cards**: Para métricas destacadas (array de {title, value, unit?, trend?})
+- **metrics**: Para indicadores clave (array de {label, value, unit?})
 
-## [Título Dinámico 2]
-[Contenido específico y detallado - mínimo 3 líneas]
-
-## [Título Dinámico 3]
-[Contenido específico y detallado - mínimo 3 líneas]
-
-## [Título Dinámico 4]
-[Contenido específico y detallado - mínimo 3 líneas]
-
-## [Título Dinámico 5]
-[Contenido específico y detallado - mínimo 3 líneas]
-
-## RESUMEN_EJECUTIVO
-- [Punto clave de la primera sección - máximo 15 palabras]
-- [Punto clave de la segunda sección - máximo 15 palabras]
-- [Punto clave de la tercera sección - máximo 15 palabras]
-- [Punto clave de la cuarta sección - máximo 15 palabras]
-- [Punto clave de la quinta sección - máximo 15 palabras]
-
-**IMPORTANTE**:
-- Usa títulos específicos al contexto de la asignación, NO genéricos
-- Cada sección debe tener contenido sustancial (mínimo 50 palabras)
-- El RESUMEN_EJECUTIVO debe reflejar exactamente las secciones creadas
-- Adapta el análisis a las características específicas de esta asignación educativa
+**RESPONDE ÚNICAMENTE EN FORMATO JSON:**
+{
+  "summary": "Resumen ejecutivo conciso (1-2 líneas)",
+  "sections": [
+    {
+      "id": "section-1",
+      "title": "Título descriptivo y específico",
+      "format": "table|numbered-list|bullet-list|text|cards|metrics",
+      "content": "Contenido según el formato elegido",
+      "priority": 1,
+      "icon": "📊",
+      "color": "blue"
+    }
+  ]
+}
 `
 
   console.log(`🚀 ENVIANDO A OpenAI - ASIGNACIÓN:`)
@@ -559,7 +602,7 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
       messages: [
         {
           role: "system",
-          content: "Eres un experto en evaluación educativa y análisis de asignaciones académicas. Proporciona análisis prácticos y orientados a la mejora pedagógica."
+          content: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. Incluye datos cuantitativos en metricsTable cuando sea relevante, y separa insights en numerados (para orden específico) y bullets (para puntos generales). El fullAnalysis debe usar markdown con secciones ##."
         },
         {
           role: "user",
@@ -571,8 +614,40 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
 
     const analysisText = completion.choices[0]?.message?.content || ''
     
-    // Procesar la respuesta de forma flexible
-    const analysis = parseFlexibleAnalysis(analysisText)
+    console.log('📝 Respuesta de OpenAI (primeros 500 chars):', analysisText.substring(0, 500))
+    
+    // Procesar la respuesta JSON
+    let analysis
+    try {
+      analysis = JSON.parse(analysisText)
+      console.log('✅ JSON parseado correctamente')
+      console.log('📊 Campos presentes:')
+      console.log('  - summary:', analysis.summary ? '✅' : '❌')
+      console.log('  - sections:', analysis.sections ? `✅ (${analysis.sections.length} secciones)` : '❌')
+      if (analysis.sections) {
+        analysis.sections.forEach((section: any, i: number) => {
+          console.log(`    ${i+1}. "${section.title}" (${section.format}) ${section.icon || ''}`)
+        })
+      }
+      
+      // Mantener compatibilidad con formato anterior
+      if (!analysis.sections && (analysis.metricsTable || analysis.structuredInsights)) {
+        console.log('📋 Formato anterior detectado, manteniendo compatibilidad')
+        console.log('  - metricsTable:', analysis.metricsTable ? '✅' : '❌')
+        console.log('  - structuredInsights:', analysis.structuredInsights ? '✅' : '❌')
+      }
+    } catch (parseError) {
+      console.error('❌ Error parseando JSON de OpenAI:', parseError)
+      // Fallback a análisis básico si falla el parsing
+      analysis = {
+        summary: 'Análisis generado con formato de respaldo',
+        fullAnalysis: analysisText,
+        positives: ['Contenido disponible para revisión'],
+        alerts: ['Formato de respuesta no estructurado'],
+        insights: ['Requiere revisión manual'],
+        recommendation: 'Revisar configuración del análisis'
+      }
+    }
     
     console.log(`✅ Análisis de asignación completado para: ${assignmentData.name}`)
     
@@ -735,35 +810,26 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
 - "Oportunidades de Mejora"
 - "Estrategias Recomendadas"
 
-**ESTRUCTURA REQUERIDA:**
+**INSTRUCCIONES ESPECIALES PARA PRESENTACIÓN VISUAL:**
+- Si tienes datos cuantitativos importantes (métricas, porcentajes, conteos), incluye una tabla en "metricsTable" usando formato "Indicador | Valor"
+- Para análisis complejos que requieren numeración específica, usa "structuredInsights.numbered"
+- Para puntos clave sin orden específico, usa "structuredInsights.bullets"
+- Incluir tanto formatos estructurados como tradicionales para compatibilidad
 
-## [Título Dinámico 1]
-[Contenido específico y detallado - mínimo 3 líneas]
-
-## [Título Dinámico 2]
-[Contenido específico y detallado - mínimo 3 líneas]
-
-## [Título Dinámico 3]
-[Contenido específico y detallado - mínimo 3 líneas]
-
-## [Título Dinámico 4]
-[Contenido específico y detallado - mínimo 3 líneas]
-
-## [Título Dinámico 5]
-[Contenido específico y detallado - mínimo 3 líneas]
-
-## RESUMEN_EJECUTIVO
-- [Punto clave de la primera sección - máximo 15 palabras]
-- [Punto clave de la segunda sección - máximo 15 palabras]
-- [Punto clave de la tercera sección - máximo 15 palabras]
-- [Punto clave de la cuarta sección - máximo 15 palabras]
-- [Punto clave de la quinta sección - máximo 15 palabras]
-
-**IMPORTANTE**:
-- Usa títulos específicos al tipo de actividad (${typeLabel}), NO genéricos
-- Cada sección debe tener contenido sustancial (mínimo 50 palabras)
-- El RESUMEN_EJECUTIVO debe reflejar exactamente las secciones creadas
-- Adapta el análisis a las características específicas de esta actividad educativa
+**RESPONDE ÚNICAMENTE EN FORMATO JSON:**
+{
+  "summary": "Resumen ejecutivo del análisis (2-3 líneas)",
+  "fullAnalysis": "Análisis completo en markdown con secciones ## dinámicas",
+  "positives": ["aspecto positivo 1", "aspecto positivo 2"],
+  "alerts": ["alerta importante 1", "alerta importante 2"],
+  "insights": ["insight clave 1", "insight clave 2"],
+  "recommendation": "Recomendación principal específica",
+  "metricsTable": "Indicador | Valor observado\nTipo de actividad | ${analysisData.name || 'Actividad educativa'}\nEstado | ${analysisData.status || 'Activa'}\nParticipantes | ${analysisData.participants}\nRespuestas | ${analysisData.responses}",
+  "structuredInsights": {
+    "numbered": ["1. Insight prioritario sobre la actividad", "2. Observación sobre configuración"],
+    "bullets": ["• Aspecto destacado", "• Área de atención", "• Recomendación específica"]
+  }
+}
 `
 
   console.log(`🚀 ENVIANDO A OpenAI - ${typeLabel.toUpperCase()}:`)
@@ -777,7 +843,7 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
       messages: [
         {
           role: "system",
-          content: `Eres un experto en análisis educativo especializado en actividades de ${typeLabel}. Proporciona análisis prácticos y orientados a la mejora pedagógica.`
+          content: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. Incluye datos cuantitativos en metricsTable cuando sea relevante, y separa insights en numerados (para orden específico) y bullets (para puntos generales). El fullAnalysis debe usar markdown con secciones ##."
         },
         {
           role: "user",
@@ -789,8 +855,40 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
 
     const analysisText = completion.choices[0]?.message?.content || ''
     
-    // Procesar la respuesta de forma flexible
-    const analysis = parseFlexibleAnalysis(analysisText)
+    console.log('📝 Respuesta de OpenAI (primeros 500 chars):', analysisText.substring(0, 500))
+    
+    // Procesar la respuesta JSON
+    let analysis
+    try {
+      analysis = JSON.parse(analysisText)
+      console.log('✅ JSON parseado correctamente')
+      console.log('📊 Campos presentes:')
+      console.log('  - summary:', analysis.summary ? '✅' : '❌')
+      console.log('  - sections:', analysis.sections ? `✅ (${analysis.sections.length} secciones)` : '❌')
+      if (analysis.sections) {
+        analysis.sections.forEach((section: any, i: number) => {
+          console.log(`    ${i+1}. "${section.title}" (${section.format}) ${section.icon || ''}`)
+        })
+      }
+      
+      // Mantener compatibilidad con formato anterior
+      if (!analysis.sections && (analysis.metricsTable || analysis.structuredInsights)) {
+        console.log('📋 Formato anterior detectado, manteniendo compatibilidad')
+        console.log('  - metricsTable:', analysis.metricsTable ? '✅' : '❌')
+        console.log('  - structuredInsights:', analysis.structuredInsights ? '✅' : '❌')
+      }
+    } catch (parseError) {
+      console.error('❌ Error parseando JSON de OpenAI:', parseError)
+      // Fallback a análisis básico si falla el parsing
+      analysis = {
+        summary: 'Análisis generado con formato de respaldo',
+        fullAnalysis: analysisText,
+        positives: ['Contenido disponible para revisión'],
+        alerts: ['Formato de respuesta no estructurado'],
+        insights: ['Requiere revisión manual'],
+        recommendation: 'Revisar configuración del análisis'
+      }
+    }
     
     console.log(`✅ Análisis de ${typeLabel} completado para: ${activityData.name}`)
     

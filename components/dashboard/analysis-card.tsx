@@ -10,15 +10,12 @@ import {
   faExclamationTriangle,
   faFileAlt,
   faChevronRight,
-  faSync,
-  faTimes
+  faSync
 } from '@fortawesome/free-solid-svg-icons'
 import { AnalysisCardData } from '@/types'
-import { ForumMetricsCard } from '@/components/analysis/ForumMetricsCard'
-import { AnalysisInsightsCard } from '@/components/analysis/AnalysisInsightsCard'
-import { CourseOverviewCard } from '@/components/analysis/CourseOverviewCard'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { ContentParser } from '@/components/ui/content-parser'
 
 interface AnalysisCardProps {
   data: AnalysisCardData
@@ -27,7 +24,6 @@ interface AnalysisCardProps {
 }
 
 export default function AnalysisCard({ data, onViewMore, onReanalyze }: AnalysisCardProps) {
-  const [showDetails, setShowDetails] = useState(false)
   const [isReanalyzing, setIsReanalyzing] = useState(false)
 
   const getTypeIcon = () => {
@@ -69,6 +65,20 @@ export default function AnalysisCard({ data, onViewMore, onReanalyze }: Analysis
     data.rawData.courseStructure || 
     data.rawData.overallStats
   )
+
+  // Verificar si tenemos datos de análisis estructurado (metricsTable, structuredInsights)
+  const hasStructuredAnalysis = data.llmResponse && (
+    data.llmResponse.metricsTable || 
+    data.llmResponse.structuredInsights
+  )
+
+  // Función para renderizar contenido mejorado con componentes visuales
+  const renderEnhancedContent = (content: string | any, type: 'insights' | 'recommendations' | 'general' = 'general') => {
+    if (typeof content === 'string') {
+      return <ContentParser content={content} />
+    }
+    return <span>{content}</span>
+  }
 
   return (
     <div className="space-y-4">
@@ -152,6 +162,37 @@ export default function AnalysisCard({ data, onViewMore, onReanalyze }: Analysis
                 {typeof data.nextStep === 'string' ? data.nextStep : data.nextStep.action}
               </p>
             </div>
+
+            {/* Análisis estructurado mejorado */}
+            {hasStructuredAnalysis && (
+              <div className="space-y-4 border-t pt-4">
+                {/* Tabla de métricas */}
+                {data.llmResponse.metricsTable && (
+                  <ContentParser content={data.llmResponse.metricsTable} />
+                )}
+                
+                {/* Insights estructurados */}
+                {data.llmResponse.structuredInsights && (
+                  <div className="space-y-4">
+                    {data.llmResponse.structuredInsights.numbered && (
+                      <AnalysisList
+                        title="Insights clave para la evaluación"
+                        items={data.llmResponse.structuredInsights.numbered}
+                        numbered={true}
+                      />
+                    )}
+                    
+                    {data.llmResponse.structuredInsights.bullets && (
+                      <AnalysisList
+                        title="Observaciones adicionales"
+                        items={data.llmResponse.structuredInsights.bullets}
+                        numbered={false}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           // Formato legacy
@@ -235,7 +276,7 @@ export default function AnalysisCard({ data, onViewMore, onReanalyze }: Analysis
             </Button>
           </div>
           <button
-            onClick={() => setShowDetails(true)}
+            onClick={onViewMore}
             className="text-primary-dark hover:text-green-700 font-medium flex items-center transition-colors text-sm"
             aria-label={`Ver más detalles de ${data.title}`}
           >
@@ -247,56 +288,6 @@ export default function AnalysisCard({ data, onViewMore, onReanalyze }: Analysis
           </button>
         </footer>
       </article>
-
-      {/* Modal de detalles */}
-      {showDetails && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-6xl max-h-[90vh] w-full overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="text-xl font-semibold">Análisis Detallado: {data.title}</h2>
-              <button
-                onClick={() => setShowDetails(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <FontAwesomeIcon icon={faTimes} className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-100px)]">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Panel izquierdo: Métricas y resumen */}
-                <div className="space-y-6">
-                  {hasEnrichedData && (
-                    <>
-                      <CourseOverviewCard courseData={data.rawData} />
-                      {data.rawData.forums && (
-                        <ForumMetricsCard 
-                          forums={data.rawData.forums}
-                          enrolledStudents={data.rawData.enrolledStudents || 0}
-                        />
-                      )}
-                    </>
-                  )}
-                </div>
-                
-                {/* Panel derecho: Insights y recomendaciones */}
-                <div>
-                  <AnalysisInsightsCard 
-                    analysisData={{
-                      strengths: data.strengths.map(s => typeof s === 'string' ? s : s.description),
-                      alerts: data.alerts.map(a => typeof a === 'string' ? a : a.description),
-                      studentsAtRisk: data.llmResponse?.studentsAtRisk,
-                      recommendations: data.llmResponse?.recommendations || [],
-                      nextStep: typeof data.nextStep === 'string' ? data.nextStep : data.nextStep.action,
-                      overallHealth: data.llmResponse?.overallHealth
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

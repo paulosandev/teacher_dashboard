@@ -577,6 +577,12 @@ Proporciona un análisis que incluya:
 5. **Próximo paso** (acción prioritaria)
 6. **Estado general** (salud del curso)
 
+INSTRUCCIONES ESPECIALES PARA PRESENTACIÓN VISUAL:
+- Si tienes datos cuantitativos importantes (métricas, porcentajes, conteos), incluye una tabla en "metricsTable" usando formato "Indicador | Valor"
+- Para análisis complejos que requieren numeración específica, usa "structuredInsights.numbered"
+- Para puntos clave sin orden específico, usa "structuredInsights.bullets"
+- Incluir tanto formatos estructurados como tradicionales para compatibilidad
+
 Responde ÚNICAMENTE en formato JSON:
 {
   "strengths": ["fortaleza 1", "fortaleza 2", "fortaleza 3"],
@@ -584,7 +590,12 @@ Responde ÚNICAMENTE en formato JSON:
   "studentsAtRisk": "${inactiveStudentsCount} estudiantes (${courseInfo.totalStudents > 0 ? Math.round((inactiveStudentsCount / courseInfo.totalStudents) * 100) : 0}%) sin participación",
   "recommendations": ["recomendación 1", "recomendación 2"],
   "nextStep": "acción prioritaria concreta",
-  "overallHealth": "buena/regular/necesita atención"
+  "overallHealth": "buena/regular/necesita atención",
+  "metricsTable": "Indicador | Valor observado\nEstudiantes totales | ${courseInfo.totalStudents}\nEstudiantes activos | ${activeStudentsCount} (${courseInfo.totalStudents > 0 ? Math.round((activeStudentsCount / courseInfo.totalStudents) * 100) : 0}%)\nForos analizados | ${overallMetrics.totalForums}\nDiscusiones totales | ${overallMetrics.totalDiscussions}\nPosts analizados | ${overallMetrics.totalPosts}",
+  "structuredInsights": {
+    "numbered": ["1. Análisis específico que requiere orden numerado", "2. Siguiente punto en orden de importancia"],
+    "bullets": ["• Punto clave sin orden específico", "• Otro insight importante", "• Observación adicional relevante"]
+  }
 }`
 
   details.prompt = prompt
@@ -615,7 +626,9 @@ Responde ÚNICAMENTE en formato JSON:
       studentsAtRisk: parsed.studentsAtRisk || "No calculado",
       recommendations: parsed.recommendations || [],
       nextStep: parsed.nextStep || "Continuar monitoreo",
-      overallHealth: parsed.overallHealth || 'regular'
+      overallHealth: parsed.overallHealth || 'regular',
+      metricsTable: parsed.metricsTable || undefined,
+      structuredInsights: parsed.structuredInsights || undefined
     }
   } catch (error) {
     console.error('Error con OpenAI:', error)

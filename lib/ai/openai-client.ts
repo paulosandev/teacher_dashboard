@@ -8,6 +8,11 @@ export interface AnalysisResult {
   engagementScore: number; // 0-100
   keyTopics: string[];
   riskStudents?: string[];
+  metricsTable?: string;
+  structuredInsights?: {
+    numbered?: string[];
+    bullets?: string[];
+  };
 }
 
 export interface ForumAnalysisInput {
@@ -113,8 +118,19 @@ Por favor, proporciona un análisis estructurado en formato JSON con los siguien
   "participationLevel": "Alto|Medio|Bajo", // basado en cantidad y calidad de participaciones
   "engagementScore": 85, // número entre 0-100 basado en la calidad de interacciones
   "keyTopics": ["Tema 1", "Tema 2", "Tema 3"], // máximo 5 temas principales
-  "riskStudents": ["Estudiante 1", "Estudiante 2"] // estudiantes con baja participación (opcional)
+  "riskStudents": ["Estudiante 1", "Estudiante 2"], // estudiantes con baja participación (opcional)
+  "metricsTable": "Indicador | Valor observado\nMensajes totales | 45\nParticipantes únicos | 12\nPromedio de intervenciones por estudiante | 2.6\nRespuestas con réplicas sustantivas | 71%\nEntradas con cita y referencia en formato APA | 43%", // tabla de métricas cuando sea apropiado
+  "structuredInsights": {
+    "numbered": ["1. Dominio conceptual básico logrado: Todos los participantes pueden enumerar las 4-5 funciones administrativas y diferencian eficacia/eficiencia; evidencia de logro del OE1 de la unidad.", "2. Análisis crítico emergente: 60% de los estudiantes demuestran capacidad para relacionar teoría con casos prácticos."],
+    "bullets": ["• Alta participación inicial que decrece hacia el final", "• Uso efectivo de referencias académicas", "• Buena interacción entre pares"]
+  }
 }
+
+INSTRUCCIONES ESPECIALES PARA PRESENTACIÓN VISUAL:
+- Si tienes datos cuantitativos (números, porcentajes, conteos), incluye una tabla en "metricsTable" usando formato "Indicador | Valor"
+- Para insights complejos que requieren numeración, usa "structuredInsights.numbered" 
+- Para puntos clave que no requieren orden específico, usa "structuredInsights.bullets"
+- El campo "insights" mantenlo para compatibilidad, pero prioriza "structuredInsights" cuando sea apropiado
 
 Considera en tu análisis:
 - Nivel de participación de los estudiantes
@@ -151,6 +167,8 @@ Responde ÚNICAMENTE con el JSON, sin texto adicional.`;
           : 50,
         keyTopics: Array.isArray(parsed.keyTopics) ? parsed.keyTopics.slice(0, 5) : [],
         riskStudents: Array.isArray(parsed.riskStudents) ? parsed.riskStudents : undefined,
+        metricsTable: parsed.metricsTable || undefined,
+        structuredInsights: parsed.structuredInsights || undefined,
       };
     } catch (error) {
       console.error('❌ Error parseando respuesta de OpenAI:', error);

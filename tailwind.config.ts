@@ -8,6 +8,9 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        inter: ['Inter', 'system-ui', 'sans-serif'],
+      },
       colors: {
         // Existing colors
         background: "var(--background)",
@@ -15,12 +18,14 @@ const config: Config = {
         'primary': '#048504',
         'primary-light': '#81C281',
         'primary-dark': '#048504',
+        'primary-detail': '#036903',
         'primary-darker': '#176128',
         'primary-selected': '#dcfce7',
         'logo-lime': '#C3EA1B',
         'logo-green': '#45AB0F',
         'icon-dark': '#064506',
         'neutral-dark': '#343A40',
+        'button-light': '#F2F9F2',
         // New UI component colors
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

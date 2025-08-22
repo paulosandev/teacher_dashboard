@@ -3,6 +3,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle, AlertTriangle, Users, Target, TrendingUp } from "lucide-react"
+import { AnalysisList } from "@/components/ui/analysis-list"
+import { ContentParser } from "@/components/ui/content-parser"
 
 interface AnalysisInsightsProps {
   analysisData: {
@@ -12,6 +14,11 @@ interface AnalysisInsightsProps {
     recommendations?: string[]
     nextStep?: string
     overallHealth?: 'buena' | 'regular' | 'necesita atención'
+    metricsTable?: string
+    structuredInsights?: {
+      numbered?: string[]
+      bullets?: string[]
+    }
   }
 }
 
@@ -22,7 +29,9 @@ export function AnalysisInsightsCard({ analysisData }: AnalysisInsightsProps) {
     studentsAtRisk = 'No determinado',
     recommendations = [],
     nextStep = 'Continuar monitoreo',
-    overallHealth = 'regular'
+    overallHealth = 'regular',
+    metricsTable,
+    structuredInsights
   } = analysisData
 
   const getHealthColor = (health: string) => {
@@ -53,6 +62,43 @@ export function AnalysisInsightsCard({ analysisData }: AnalysisInsightsProps) {
 
   return (
     <div className="space-y-6">
+      {/* Tabla de métricas mejorada */}
+      {metricsTable && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Panorama general de la participación</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ContentParser content={metricsTable} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Insights estructurados */}
+      {structuredInsights && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Insights clave para la evaluación</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {structuredInsights.numbered && (
+              <AnalysisList
+                items={structuredInsights.numbered}
+                numbered={true}
+              />
+            )}
+            
+            {structuredInsights.bullets && (
+              <AnalysisList
+                title={structuredInsights.numbered ? "Observaciones adicionales" : undefined}
+                items={structuredInsights.bullets}
+                numbered={false}
+              />
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Estado general del curso */}
       <Card>
         <CardHeader>
@@ -95,14 +141,10 @@ export function AnalysisInsightsCard({ analysisData }: AnalysisInsightsProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {strengths.map((strength, index) => (
-                <div key={index} className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0"></div>
-                  <p className="text-sm text-gray-700">{strength}</p>
-                </div>
-              ))}
-            </div>
+            <AnalysisList
+              items={strengths}
+              numbered={false}
+            />
           </CardContent>
         </Card>
       )}
@@ -117,14 +159,10 @@ export function AnalysisInsightsCard({ analysisData }: AnalysisInsightsProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {alerts.map((alert, index) => (
-                <div key={index} className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-red-500 rounded-full mt-2 flex-shrink-0"></div>
-                  <p className="text-sm text-gray-700">{alert}</p>
-                </div>
-              ))}
-            </div>
+            <AnalysisList
+              items={alerts}
+              numbered={false}
+            />
           </CardContent>
         </Card>
       )}
@@ -139,18 +177,10 @@ export function AnalysisInsightsCard({ analysisData }: AnalysisInsightsProps) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {recommendations.map((recommendation, index) => (
-                <div key={index} className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
-                  <div className="flex items-start gap-3">
-                    <div className="bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-medium flex-shrink-0 mt-0.5">
-                      {index + 1}
-                    </div>
-                    <p className="text-sm text-blue-800">{recommendation}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <AnalysisList
+              items={recommendations}
+              numbered={true}
+            />
           </CardContent>
         </Card>
       )}

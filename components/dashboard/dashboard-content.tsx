@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import CourseSelector from '@/components/dashboard/course-selector'
 import AnalysisCard from '@/components/dashboard/analysis-card'
 import { AnalysisCardData } from '@/types'
@@ -37,6 +38,7 @@ export default function DashboardContent({
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
   const [analysisCards, setAnalysisCards] = useState(initialCards)
   const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState(false)
+  const router = useRouter()
   
   // Hook para obtener datos de Moodle - siempre habilitado
   const { courses: moodleCourses, loading, error, refetch } = useMoodleData(true)
@@ -166,7 +168,7 @@ export default function DashboardContent({
   }
 
   const handleViewMore = (cardId: string) => {
-    console.log('Ver más detalles:', cardId)
+    router.push(`/dashboard/analysis/${cardId}`)
   }
 
   const handleReanalyze = async (card: AnalysisCardData) => {

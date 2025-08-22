@@ -20,6 +20,9 @@ import SimpleCourseSelector from '@/components/dashboard/simple-course-selector'
 import { AnalysisModal } from '@/components/dashboard/analysis-modal'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { ContentParser } from '@/components/ui/content-parser'
+import { AnalysisList } from '@/components/ui/analysis-list'
+import { DynamicSectionRenderer } from '@/components/ui/dynamic-section'
 
 interface User {
   id: string
@@ -61,12 +64,13 @@ export function IntelligentDashboardContent({
   const [selectedAnalysis, setSelectedAnalysis] = useState<any>(null)
   const [selectedActivityName, setSelectedActivityName] = useState('')
   const [selectedActivityType, setSelectedActivityType] = useState('')
-  const [visibleActivitiesCount, setVisibleActivitiesCount] = useState(5) // Número de actividades visibles
+  const [visibleActivitiesCount, setVisibleActivitiesCount] = useState(50) // Número de actividades visibles - mostrar todas
   const [isAnalyzingBatch, setIsAnalyzingBatch] = useState(false)
   const [isLoadingCourse, setIsLoadingCourse] = useState(true) // Nuevo estado para loader general, empieza en true
   const [loadingPhase, setLoadingPhase] = useState<'loading' | 'analyzing'>('loading') // Fase actual de carga
   const [cacheLoaded, setCacheLoaded] = useState(false) // Estado para saber si el cache ya se cargó
   const [detailView, setDetailView] = useState<{isActive: boolean, activity: any} | null>(null) // Estado para vista de detalle
+  const [courseAnalysisId, setCourseAnalysisId] = useState<string | null>(null) // ID del análisis del curso
   const BATCH_SIZE = 5
 
   const loadAnalysisForCourse = useCallback(async (courseId: string) => {
@@ -180,7 +184,7 @@ export function IntelligentDashboardContent({
       setOpenActivities([])
       setAnalysisResults({})
       setCacheLoaded(false) // Resetear estado de cache
-      setVisibleActivitiesCount(BATCH_SIZE) // Resetear a las primeras 5 actividades
+      setVisibleActivitiesCount(50) // Mostrar todas las actividades disponibles
       setIsLoadingCourse(true) // Activar loader
       
       // Cargar nuevos datos
@@ -353,11 +357,18 @@ export function IntelligentDashboardContent({
   }, [openActivities, cacheLoaded, analyzeVisibleActivities, isAnalyzingBatch, isLoadingCourse, loadingActivities, selectedCourse, analysisResults])
 
   const generateNewAnalysis = useCallback(async () => {
-    if (!selectedCourse) return
+    if (!selectedCourse) {
+      console.error('❌ No hay curso seleccionado')
+      return
+    }
+
+    console.log('🚀 INICIANDO ANÁLISIS DE CURSO')
+    console.log('📋 Curso seleccionado:', selectedCourse)
 
     try {
       setIsGeneratingAnalysis(true)
       
+      console.log('📤 Enviando solicitud a /api/analysis/generate-course-analysis')
       const response = await fetch('/api/analysis/generate-course-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -366,19 +377,33 @@ export function IntelligentDashboardContent({
         })
       })
 
+      console.log('📥 Respuesta recibida:', response.status, response.statusText)
       const data = await response.json()
+      console.log('📊 Datos de respuesta:', data)
 
       if (response.ok && data.success) {
+        console.log('✅ Análisis generado exitosamente')
+        console.log('🔄 Recargando análisis del curso...')
         await loadAnalysisForCourse(selectedCourse)
+        
+        // Navegar a la página de detalle del análisis del curso
+        if (data.analysis?.id) {
+          console.log('🔗 Navegando a análisis detalle:', data.analysis.id)
+          window.open(`/dashboard/analysis/${data.analysis.id}`, '_blank')
+        } else {
+          console.warn('⚠️ No se recibió ID del análisis en la respuesta')
+        }
       } else {
+        console.error('❌ Error en respuesta del servidor:', data)
         alert(`Error: ${data.error || 'No se pudo generar el análisis'}`)
       }
 
     } catch (error) {
-      console.error('Error generando análisis:', error)
+      console.error('❌ Error en catch generando análisis:', error)
       alert('Error generando análisis')
     } finally {
       setIsGeneratingAnalysis(false)
+      console.log('🏁 Proceso de análisis finalizado')
     }
   }, [selectedCourse, loadAnalysisForCourse])
 
@@ -391,7 +416,7 @@ export function IntelligentDashboardContent({
 
   // Resetear actividades visibles cuando cambia el curso
   useEffect(() => {
-    setVisibleActivitiesCount(BATCH_SIZE) // Mostrar solo las primeras 5 al cambiar de curso
+    setVisibleActivitiesCount(50) // Mostrar todas las actividades disponibles al cambiar de curso
   }, [selectedCourse])
 
   // Función para obtener las actividades visibles (optimizada con useMemo)
@@ -438,43 +463,70 @@ export function IntelligentDashboardContent({
     
     if (!analysis) return null
 
-    // ARREGLO: Extraer resumen real desde fullAnalysis en lugar de usar el campo summary
-    let realSummary = analysis.summary
-    if (analysis.fullAnalysis && analysis.fullAnalysis.length > 100) {
-      // Intentar extraer la primera sección con contenido real del fullAnalysis
+    // Extraer puntos clave del análisis dinámico
+    let summaryPoints = []
+    
+    // Si hay secciones dinámicas, extraer los puntos principales
+    if (analysis.sections && analysis.sections.length > 0) {
+      analysis.sections.forEach((section: any) => {
+        // Extraer puntos según el formato de cada sección
+        if (section.format === 'numbered-list' || section.format === 'bullet-list') {
+          // Si es una lista, tomar los primeros elementos
+          if (Array.isArray(section.content)) {
+            summaryPoints.push(...section.content.slice(0, 2).map((item: string) => 
+              item.length > 100 ? item.substring(0, 100) + '...' : item
+            ))
+          }
+        } else if (section.format === 'text' && section.content) {
+          // Si es texto, extraer la primera oración o párrafo
+          const firstParagraph = section.content.split('\n')[0]
+          if (firstParagraph && firstParagraph.length > 20) {
+            summaryPoints.push(
+              firstParagraph.length > 100 
+                ? firstParagraph.substring(0, 100) + '...' 
+                : firstParagraph
+            )
+          }
+        } else if (section.format === 'metrics' && Array.isArray(section.content)) {
+          // Si son métricas, crear un resumen de las más importantes
+          const keyMetrics = section.content.slice(0, 2).map((metric: any) => 
+            `${metric.label}: ${metric.value}${metric.unit || ''}`
+          )
+          if (keyMetrics.length > 0) {
+            summaryPoints.push(`Métricas clave: ${keyMetrics.join(', ')}`)
+          }
+        }
+      })
+    }
+    
+    // Si no hay puntos de las secciones, intentar con el formato anterior
+    if (summaryPoints.length === 0 && analysis.fullAnalysis) {
       const sections = analysis.fullAnalysis.split(/(?=^##\s)/gm)
         .map((section: string) => section.trim())
         .filter((section: string) => section.length > 50)
       
-      if (sections.length > 0) {
-        // Tomar la primera sección y extraer el contenido sin el header
-        const firstSection = sections[0]
-        const lines = firstSection.split('\n')
-        const contentLines = lines.slice(1).filter(line => line.trim().length > 0)
-        
-        if (contentLines.length > 0) {
-          // Tomar las primeras 3-4 líneas de contenido real
-          realSummary = contentLines.slice(0, 4).join(' ').substring(0, 300) + '...'
+      sections.forEach((section: string) => {
+        const lines = section.split('\n').filter((line: string) => line.trim().length > 0)
+        if (lines.length > 1) {
+          const content = lines.slice(1, 3).join(' ')
+          if (content.length > 20) {
+            summaryPoints.push(
+              content.length > 100 ? content.substring(0, 100) + '...' : content
+            )
+          }
         }
-      }
+      })
+    }
+    
+    // Fallback al summary si no hay puntos extraidos
+    if (summaryPoints.length === 0 && analysis.summary) {
+      summaryPoints = [analysis.summary]
     }
 
-    // Crear versiones resumidas específicas para card (oraciones completas)
-    const extract = {
-      summary: createCardSummary(realSummary),
-      positiveHighlight: analysis.positives && analysis.positives.length > 0 
-        ? createCardSummary(analysis.positives[0]) 
-        : null,
-      alertHighlight: analysis.alerts && analysis.alerts.length > 0 
-        ? createCardSummary(analysis.alerts[0]) 
-        : null,
-      keyInsight: analysis.insights && analysis.insights.length > 0 
-        ? createCardSummary(analysis.insights[0]) 
-        : null,
-      recommendationHighlight: createCardSummary(analysis.recommendation)
+    return {
+      summaryPoints: summaryPoints.slice(0, 5), // Máximo 5 puntos
+      hasAnalysis: true
     }
-
-    return extract
   }, [analysisResults])
 
   // Función auxiliar para crear resúmenes coherentes para cards
@@ -649,7 +701,6 @@ export function IntelligentDashboardContent({
   if (detailView?.isActive && detailView.activity) {
     const activityKey = `${detailView.activity.type}_${detailView.activity.id}`
     const analysis = analysisResults[activityKey]
-    const { points: analysisPoints } = analysis ? parseAnalysisIntoPoints(analysis) : { points: [], summary: [] }
 
     return (
       <div className="max-w-[1132px] mx-auto px-4 sm:px-6 lg:px-3">
@@ -686,11 +737,123 @@ export function IntelligentDashboardContent({
           </div>
         </section>
 
-        {/* Cards de puntos de análisis */}
-        {analysis && analysisPoints.length > 0 ? (
-          <section className="mb-8">
-            <div className={`grid gap-6 ${analysisPoints.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
-              {analysisPoints.map((point, index) => {
+        {/* Mostrar componentes visuales dinámicos */}
+        {analysis ? (
+          <div className="space-y-6">
+            {/* Secciones dinámicas (nuevo formato) */}
+            {analysis.sections && analysis.sections.length > 0 ? (
+              <div className="space-y-6">
+                {(() => {
+                  const sortedSections = analysis.sections.sort((a: any, b: any) => (a.priority || 999) - (b.priority || 999));
+                  const elements: React.ReactNode[] = [];
+                  let i = 0;
+                  
+                  while (i < sortedSections.length) {
+                    const currentSection = sortedSections[i];
+                    
+                    // Si es formato 'cards', ocupar ancho completo
+                    if (currentSection.format === 'cards') {
+                      elements.push(
+                        <DynamicSectionRenderer
+                          key={currentSection.id || `section-${i}`}
+                          section={currentSection}
+                          className=""
+                        />
+                      );
+                      i++;
+                    } else {
+                      // Verificar si hay otro elemento para hacer par
+                      const nextSection = sortedSections[i + 1];
+                      
+                      if (nextSection && nextSection.format !== 'cards') {
+                        // Crear fila con dos elementos
+                        elements.push(
+                          <div key={`row-${i}`} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <DynamicSectionRenderer
+                              section={currentSection}
+                              className=""
+                            />
+                            <DynamicSectionRenderer
+                              section={nextSection}
+                              className=""
+                            />
+                          </div>
+                        );
+                        i += 2;
+                      } else {
+                        // Elemento solo, ancho completo
+                        elements.push(
+                          <DynamicSectionRenderer
+                            key={currentSection.id || `section-${i}`}
+                            section={currentSection}
+                            className=""
+                          />
+                        );
+                        i++;
+                      }
+                    }
+                  }
+                  
+                  return elements;
+                })()}
+              </div>
+            ) : (
+              // Formato anterior para compatibilidad
+              <div className="space-y-6">
+                {/* Tabla de métricas si existe */}
+                {analysis.metricsTable && (
+                  <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Panorama General</h3>
+                    <ContentParser content={analysis.metricsTable} />
+                  </div>
+                )}
+
+                {/* Insights estructurados si existen */}
+                {analysis.structuredInsights && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {analysis.structuredInsights.numbered && analysis.structuredInsights.numbered.length > 0 && (
+                      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Insights Clave</h3>
+                        <AnalysisList
+                          items={analysis.structuredInsights.numbered}
+                          numbered={true}
+                        />
+                      </div>
+                    )}
+                    
+                    {analysis.structuredInsights.bullets && analysis.structuredInsights.bullets.length > 0 && (
+                      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Observaciones</h3>
+                        <AnalysisList
+                          items={analysis.structuredInsights.bullets}
+                          numbered={false}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Análisis completo como fallback */}
+                {analysis.fullAnalysis && !analysis.metricsTable && !analysis.structuredInsights && (
+                  <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Análisis Detallado</h3>
+                    <div className="prose prose-sm max-w-none">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {analysis.fullAnalysis}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Puntos parseados del análisis anterior (mantener compatibilidad) */}
+            {(() => {
+              const { points: analysisPoints } = parseAnalysisIntoPoints(analysis)
+              if (analysisPoints.length > 0 && !analysis.metricsTable && !analysis.structuredInsights) {
+                return (
+                  <div className={`grid gap-6 ${analysisPoints.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
+                    {analysisPoints.map((point, index) => {
                 const getPointIcon = (type: string) => {
                   switch (type) {
                     case 'table': return '📊'
@@ -838,10 +1001,14 @@ export function IntelligentDashboardContent({
                       )}
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          </section>
+                    )
+                  })}
+                </div>
+              )
+            }
+            return null
+          })()}
+          </div>
         ) : (
           <section className="mb-8">
             <div className="text-center py-12">
@@ -1063,40 +1230,27 @@ export function IntelligentDashboardContent({
                             )
                           }
                           
-                          if (analysisExtract) {
-                            // Mostrar resumen ejecutivo como lista
-                            const analysis = analysisResults[activityKey]
-                            
-                            // Parsear para obtener el resumen ejecutivo si no está ya extraído
-                            if (!analysis.executiveSummary && analysis.fullAnalysis) {
-                              const { summary } = parseAnalysisIntoPoints(analysis)
-                              analysis.executiveSummary = summary
-                            }
-                            
-                            const summaryPoints = analysis.executiveSummary || []
+                          if (analysisExtract && analysisExtract.summaryPoints) {
+                            // Mostrar puntos del análisis como lista no numerada
+                            const { summaryPoints } = analysisExtract
                             
                             return (
                               <div className="mb-4">
                                 {summaryPoints.length > 0 ? (
-                                  <div className="space-y-2">
-                                    {summaryPoints.slice(0, 4).map((point: string, idx: number) => (
+                                  <div className="space-y-3">
+                                    {summaryPoints.map((point: string, idx: number) => (
                                       <div key={idx} className="flex items-start space-x-2">
-                                        <span className="text-primary-darker mt-1">•</span>
-                                        <p className="text-gray-700 text-sm leading-relaxed">
+                                        <span className="text-primary-darker mt-1 flex-shrink-0">•</span>
+                                        <p className="text-neutral-dark font-inter text-sm leading-relaxed">
                                           {point}
                                         </p>
                                       </div>
                                     ))}
-                                    {summaryPoints.length > 4 && (
-                                      <p className="text-gray-500 text-xs italic pl-4">
-                                        +{summaryPoints.length - 4} puntos más...
-                                      </p>
-                                    )}
                                   </div>
                                 ) : (
-                                  <div className="bg-gray-50 rounded-lg p-4">
-                                    <p className="text-gray-700 text-sm leading-relaxed">
-                                      {analysis?.summary || 'Análisis disponible'}
+                                  <div className="bg-white rounded-lg p-4">
+                                    <p className="text-neutral-dark font-inter text-sm leading-relaxed">
+                                      Análisis disponible
                                     </p>
                                   </div>
                                 )}
@@ -1118,33 +1272,30 @@ export function IntelligentDashboardContent({
                         })()}
 
                         
-                        {/* Footer - Ver más como en el diseño */}
+                        {/* Footer con botones de acción */}
                         <div className="flex justify-between items-center mt-6">
-                          {/* Botones de análisis ocultos para funcionalidad */}
-                          <div className="flex space-x-2 opacity-0">
-                            <button
-                              onClick={() => analyzeActivity(activity)}
-                              disabled={analyzingActivity === `${activity.type}_${activity.id}`}
-                              className="bg-purple-500 hover:bg-purple-600 text-white px-2 py-1 rounded text-xs"
-                            >
-                              {analyzingActivity === `${activity.type}_${activity.id}` ? 'Analizando...' : 'Analizar'}
-                            </button>
-                            
-                            {analysisResults[`${activity.type}_${activity.id}`] && (
-                              <button
-                                onClick={() => {
-                                  const analysis = analysisResults[`${activity.type}_${activity.id}`]
-                                  setSelectedAnalysis(analysis)
-                                  setSelectedActivityName(activity.name)
-                                  setSelectedActivityType(activity.type)
-                                  setModalOpen(true)
-                                }}
-                                className="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-xs"
-                              >
-                                Ver análisis
-                              </button>
+                          {/* Botón de análisis forzado */}
+                          <button
+                            onClick={() => analyzeActivity(activity)}
+                            disabled={analyzingActivity === `${activity.type}_${activity.id}`}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium font-inter transition-all flex items-center space-x-2 ${
+                              analyzingActivity === `${activity.type}_${activity.id}`
+                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                : 'bg-button-light text-icon-dark hover:shadow-[0_4px_10px_0_rgba(0,0,0,0.20)] shadow-[0_2px_6px_0_rgba(0,0,0,0.10)]'
+                            }`}
+                          >
+                            {analyzingActivity === `${activity.type}_${activity.id}` ? (
+                              <>
+                                <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
+                                <span>Analizando...</span>
+                              </>
+                            ) : (
+                              <>
+                                <FontAwesomeIcon icon={faBrain} />
+                                <span>Analizar</span>
+                              </>
                             )}
-                          </div>
+                          </button>
                           
                           {/* Ver más como en el diseño de referencia */}
                           <button 
@@ -1152,7 +1303,7 @@ export function IntelligentDashboardContent({
                               // Navegar a la vista de detalle
                               navigateToDetail(activity)
                             }}
-                            className="text-green-600 font-semibold text-sm flex items-center space-x-1 hover:text-green-700 transition-colors"
+                            className="text-primary-darker font-semibold font-inter text-sm flex items-center space-x-1 hover:text-primary transition-colors"
                           >
                             <span>Ver más</span>
                             <FontAwesomeIcon icon={faChevronDown} className="rotate-[-90deg]" />
