@@ -46,6 +46,18 @@ interface IntelligentDashboardContentProps {
   error?: string | null
 }
 
+// Caché en memoria para mantener los datos de cursos visitados durante la sesión
+interface CourseCache {
+  activities: any[]
+  analysisResults: {[key: string]: any}
+  activitiesSummary: any
+  lastFetched: number
+  courseAnalysisId?: string
+}
+
+const courseDataCache: {[courseId: string]: CourseCache} = {}
+const CACHE_DURATION = 60 * 60 * 1000 // 1 hora de caché
+
 export function IntelligentDashboardContent({
   user,
   courses,
@@ -71,45 +83,103 @@ export function IntelligentDashboardContent({
   const [cacheLoaded, setCacheLoaded] = useState(false) // Estado para saber si el cache ya se cargó
   const [detailView, setDetailView] = useState<{isActive: boolean, activity: any} | null>(null) // Estado para vista de detalle
   const [courseAnalysisId, setCourseAnalysisId] = useState<string | null>(null) // ID del análisis del curso
+  const [batchProgress, setBatchProgress] = useState<{current: number, total: number}>({current: 0, total: 0}) // Progreso del análisis batch
   const BATCH_SIZE = 5
+
+  // Define functions before useEffect that references them
+  
+  // Función para guardar datos en caché persistente
+  const saveToPersistentCache = useCallback(async (courseId: string, data: {
+    activities: any[], 
+    analysisResults: any, 
+    activitiesSummary: any, 
+    courseAnalysisId?: string
+  }) => {
+    try {
+      console.log('💾 Guardando datos en caché persistente para curso:', courseId)
+      await fetch('/api/analysis/cache', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId,
+          activities: data.activities,
+          analysisResults: data.analysisResults,
+          activitiesSummary: data.activitiesSummary,
+          courseAnalysisId: data.courseAnalysisId
+        })
+      })
+    } catch (error) {
+      console.error('Error guardando caché persistente:', error)
+    }
+  }, [])
 
   const loadAnalysisForCourse = useCallback(async (courseId: string) => {
     try {
-      // Cargar análisis existentes para este curso desde cache
-      console.log(`🔍 Cargando análisis desde caché para curso: ${courseId}`)
+      // Cargar análisis existentes para este curso desde caché persistente
+      console.log(`🔍 Cargando análisis desde caché persistente para curso: ${courseId}`)
       const response = await fetch(`/api/analysis/cache?courseId=${courseId}`)
+      
+      console.log(`📡 Respuesta de caché persistente: ${response.status}`)
+      
+      if (response.status === 401 || response.status === 403) {
+        console.log('🔐 Sin autenticación para caché persistente, continuando sin caché')
+        setAnalysisResults({})
+        return false
+      }
+      
       if (response.ok) {
         const data = await response.json()
+        console.log('📦 Datos recibidos del caché persistente:', data)
+        
         if (data.success && data.analysisResults) {
-          console.log(`📦 Cargados ${data.count} análisis desde cache:`, data.analysisResults)
+          console.log(`📦 Cargados ${data.count} análisis desde caché persistente`)
+          console.log(`⏰ Caché válido hasta: ${data.expiresAt}`)
           
-          // Debug: verificar qué campos tienen los análisis cargados
-          Object.keys(data.analysisResults).forEach(key => {
-            const analysis = data.analysisResults[key]
-            console.log(`🔍 Análisis ${key}:`, {
-              hasFullAnalysis: !!analysis.fullAnalysis,
-              hasSummary: !!analysis.summary,
-              fromCache: analysis.fromCache
-            })
-          })
-          
+          // Cargar todos los datos del caché persistente
           setAnalysisResults(data.analysisResults)
+          if (data.activities) {
+            setOpenActivities(data.activities)
+            console.log(`📋 Cargadas ${data.activities.length} actividades desde caché`)
+          }
+          if (data.activitiesSummary) {
+            setActivitiesSummary(data.activitiesSummary)
+          }
+          if (data.courseAnalysisId) {
+            setCourseAnalysisId(data.courseAnalysisId)
+          }
+          
+          // También guardarlo en caché de memoria para acceso rápido
+          courseDataCache[courseId] = {
+            activities: data.activities || [],
+            analysisResults: data.analysisResults,
+            activitiesSummary: data.activitiesSummary,
+            lastFetched: new Date(data.lastFetched).getTime(),
+            courseAnalysisId: data.courseAnalysisId
+          }
+          
+          console.log('✅ Datos cargados desde caché persistente')
+          return true // Indica que se cargaron datos del caché
         } else {
-          console.log('⚠️ No se encontraron análisis en cache')
+          console.log('⚠️ Respuesta exitosa pero sin datos válidos en caché persistente')
           setAnalysisResults({})
+          return false
         }
       } else {
-        console.log('❌ Error en respuesta del cache:', response.status)
+        console.log(`❌ Error en respuesta del caché persistente: ${response.status}`)
+        const errorText = await response.text()
+        console.log(`❌ Detalles del error: ${errorText}`)
         setAnalysisResults({})
+        return false
       }
     } catch (error) {
-      console.error('Error cargando análisis desde cache:', error)
+      console.error('Error cargando análisis desde caché persistente:', error)
       setAnalysisResults({})
+      return false
     } finally {
       setCacheLoaded(true)
       console.log('🏁 Cache loading completed')
     }
-  }, [])
+  }, [saveToPersistentCache])
 
   const loadOpenActivities = useCallback(async (courseId: string) => {
     try {
@@ -135,20 +205,6 @@ export function IntelligentDashboardContent({
       setLoadingActivities(false)
     }
   }, [])
-
-  const handleCourseChange = useCallback(async (courseId: string) => {
-    setSelectedCourse(courseId)
-    console.log('🎯 Curso seleccionado:', courseId)
-    // La carga se hace en el useEffect, no aquí para evitar doble carga
-  }, [])
-
-  // Selección automática del primer curso
-  useEffect(() => {
-    if (courses && courses.length > 0 && !selectedCourse) {
-      const firstCourse = courses[0]
-      setSelectedCourse(firstCourse.id)
-    }
-  }, [courses, selectedCourse])
 
   // Función para generar reporte de debug del curso
   const generateDebugReport = useCallback(async (courseId: string) => {
@@ -177,30 +233,132 @@ export function IntelligentDashboardContent({
     }
   }, [])
 
+  // Efecto para actualización automática cada hora para usuarios activos
+  useEffect(() => {
+    const updateInterval = setInterval(() => {
+      // Solo actualizar si el usuario está activo (pestaña visible)
+      if (document.visibilityState === 'visible' && selectedCourse) {
+        const cached = courseDataCache[selectedCourse]
+        if (cached) {
+          const now = Date.now()
+          const timeSinceLastUpdate = now - cached.lastFetched
+          
+          // Si han pasado más de 50 minutos (un poco antes de que expire)
+          if (timeSinceLastUpdate >= 50 * 60 * 1000) {
+            console.log('🕐 Actualizando datos automáticamente por tiempo (1 hora):', selectedCourse)
+            // Forzar actualización silenciosa
+            delete courseDataCache[selectedCourse]
+            setIsLoadingCourse(true)
+            const loadData = async () => {
+              try {
+                setLoadingPhase('loading')
+                await loadOpenActivities(selectedCourse)
+                await loadAnalysisForCourse(selectedCourse)
+                generateDebugReport(selectedCourse)
+              } catch (error) {
+                console.error('Error en actualización automática:', error)
+              }
+            }
+            loadData()
+          }
+        }
+      }
+    }, 10 * 60 * 1000) // Verificar cada 10 minutos
+
+    return () => clearInterval(updateInterval)
+  }, [selectedCourse, loadOpenActivities, loadAnalysisForCourse, generateDebugReport])
+
+  const handleCourseChange = useCallback(async (courseId: string) => {
+    setSelectedCourse(courseId)
+    console.log('🎯 Curso seleccionado:', courseId)
+    
+    // Verificar si tenemos datos en caché para este curso
+    const cached = courseDataCache[courseId]
+    const now = Date.now()
+    
+    if (cached && (now - cached.lastFetched) < CACHE_DURATION) {
+      console.log('✅ Usando datos del caché en memoria para el curso:', courseId)
+      // Restaurar datos desde el caché
+      setOpenActivities(cached.activities)
+      setAnalysisResults(cached.analysisResults)
+      setActivitiesSummary(cached.activitiesSummary)
+      if (cached.courseAnalysisId) {
+        setCourseAnalysisId(cached.courseAnalysisId)
+      }
+      setIsLoadingCourse(false)
+      setCacheLoaded(true)
+    } else {
+      console.log('🔄 No hay caché válido, se cargarán datos frescos para el curso:', courseId)
+      // Si no hay caché o expiró, el useEffect se encargará de cargar los datos
+    }
+  }, [])
+
+  // Auto-selection removed - user must select manually
+
   // Cargar datos cuando cambie el curso seleccionado
   useEffect(() => {
     if (selectedCourse) {
-      // Limpiar datos anteriores para evitar flashes
-      setOpenActivities([])
-      setAnalysisResults({})
-      setCacheLoaded(false) // Resetear estado de cache
-      setVisibleActivitiesCount(50) // Mostrar todas las actividades disponibles
-      setIsLoadingCourse(true) // Activar loader
+      // 1. Verificar caché de memoria primero (más rápido)
+      const cached = courseDataCache[selectedCourse]
+      const now = Date.now()
       
-      // Cargar nuevos datos
+      if (cached && (now - cached.lastFetched) < CACHE_DURATION) {
+        console.log('📦 Restaurando datos del caché de memoria para curso:', selectedCourse)
+        // Usar datos del caché directamente sin limpiar
+        setOpenActivities(cached.activities)
+        setAnalysisResults(cached.analysisResults)
+        setActivitiesSummary(cached.activitiesSummary)
+        if (cached.courseAnalysisId) {
+          setCourseAnalysisId(cached.courseAnalysisId)
+        }
+        setCacheLoaded(true)
+        setIsLoadingCourse(false)
+        setVisibleActivitiesCount(50)
+        return // No cargar datos nuevos
+      }
+      
+      // 2. Si no hay caché de memoria, intentar cargar desde caché persistente
+      console.log('🔍 No hay caché de memoria válido, intentando caché persistente...')
+      setIsLoadingCourse(true)
+      setVisibleActivitiesCount(50)
+      
       const loadData = async () => {
+        let hasPeristentCache = false
+        
         try {
           setLoadingPhase('loading')
-          console.log('🔄 Fase: Cargando información del curso...')
+          console.log('🔄 Fase: Verificando caché persistente...')
+          
+          // Intentar cargar desde caché persistente
+          hasPeristentCache = await loadAnalysisForCourse(selectedCourse)
+          
+          if (hasPeristentCache) {
+            console.log('✅ Datos cargados desde caché persistente, finalizando carga')
+            // El useEffect de análisis automático se encargará de desactivar el loader
+            // cuando detecte que tenemos datos y cacheLoaded = true
+            return
+          }
+          
+          // 3. Si no hay caché persistente, cargar datos frescos
+          console.log('🔄 Fase: Cargando datos frescos del servidor...')
+          setOpenActivities([])
+          setAnalysisResults({})
+          
           await loadOpenActivities(selectedCourse)
-          await loadAnalysisForCourse(selectedCourse)
+          // loadAnalysisForCourse ya se ejecutó arriba, solo necesitamos actividades
+          // cacheLoaded ya está en true por el finally de loadAnalysisForCourse
+          
+          // El useEffect de análisis automático se encargará de desactivar el loader
+          // cuando detecte que tenemos actividades y cacheLoaded = true
           
           // Generar reporte de debug automáticamente
           generateDebugReport(selectedCourse)
-        } finally {
-          // El loader se desactivará cuando termine el análisis automático
-          // setIsLoadingCourse(false) se hace en el análisis automático
+          
+        } catch (error) {
+          console.error('Error en loadData:', error)
+          setIsLoadingCourse(false)
         }
+        // No necesitamos finally aquí
       }
       
       loadData()
@@ -330,19 +488,117 @@ export function IntelligentDashboardContent({
     setIsAnalyzingBatch(false)
   }, [openActivities, visibleActivitiesCount, analysisResults, isAnalysisOutdated, analyzeActivity])
 
+  // Direct analysis functionality (removed queue-based approach)
+  
+  // Función para forzar actualización del curso/grupo actual
+  const forceRefreshCurrentCourse = async () => {
+    if (!selectedCourse || !openActivities.length) return
+    
+    const confirmed = confirm(
+      `¿Actualizar análisis del curso actual?\n\nEsto volverá a analizar todas las ${openActivities.length} actividades del curso/grupo seleccionado.`
+    )
+    
+    if (!confirmed) return
+    
+    try {
+      console.log(`🔄 Forzando re-análisis de ${openActivities.length} actividades del curso ${selectedCourse}`)
+      
+      // Limpiar caché del curso actual
+      delete courseDataCache[selectedCourse]
+      setAnalysisResults({})
+      
+      // Configurar estado de análisis
+      setIsAnalyzingBatch(true)
+      setLoadingPhase('analyzing')
+      setBatchProgress({current: 0, total: openActivities.length})
+      
+      // Analizar todas las actividades secuencialmente
+      for (let i = 0; i < openActivities.length; i++) {
+        const activity = openActivities[i]
+        console.log(`🔄 Re-analizando actividad ${i + 1}/${openActivities.length}: ${activity.name}`)
+        
+        // Actualizar progreso
+        setBatchProgress({current: i + 1, total: openActivities.length})
+        
+        // Forzar análisis usando la misma función que los botones individuales
+        await analyzeActivity(activity, false)
+      }
+      
+      console.log('✅ Re-análisis completo del curso terminado')
+      
+      // Recargar los análisis desde la BD
+      await loadAnalysisForCourse(selectedCourse)
+      
+    } catch (error) {
+      console.error('❌ Error forzando actualización:', error)
+      setError('Error al actualizar análisis. Por favor intente nuevamente.')
+    } finally {
+      setIsAnalyzingBatch(false)
+      setLoadingPhase(null)
+      setBatchProgress(null)
+    }
+  }
+
   // Ejecutar análisis automático cuando se cargan las actividades Y el cache
   useEffect(() => {
+    console.log('🔍 useEffect análisis automático - Estado:', {
+      cacheLoaded,
+      loadingActivities,
+      selectedCourse: !!selectedCourse,
+      isLoadingCourse,
+      openActivitiesCount: openActivities.length,
+      analysisCount: Object.keys(analysisResults).length
+    })
+    
     if (cacheLoaded && !loadingActivities && selectedCourse && isLoadingCourse) {
       if (openActivities.length > 0 && !isAnalyzingBatch) {
-        // Caso 1: Hay actividades abiertas - analizar automáticamente
-        const runAutoAnalysis = async () => {
-          setLoadingPhase('analyzing')
-          console.log('🤖 Fase: Analizando actividades con IA...')
-          console.log(`📋 Estado antes del análisis: ${Object.keys(analysisResults).length} análisis en cache`)
-          await analyzeVisibleActivities()
-          setIsLoadingCourse(false) // Desactivar loader cuando termine el análisis
+        // Verificar si ya tenemos análisis para las actividades
+        const hasAnalysisForActivities = openActivities.some(activity => {
+          const activityKey = `${activity.type}_${activity.id}`
+          return analysisResults[activityKey]
+        })
+        
+        // Identificar actividades que NO tienen análisis
+        const activitiesWithoutAnalysis = openActivities.filter(activity => {
+          const activityKey = `${activity.type}_${activity.id}`
+          return !analysisResults[activityKey]
+        })
+        
+        console.log(`📊 Estado del análisis: ${Object.keys(analysisResults).length} analizadas, ${activitiesWithoutAnalysis.length} sin analizar de ${openActivities.length} totales`)
+        
+        if (activitiesWithoutAnalysis.length > 0) {
+          // Analizar directamente las actividades que faltan (como el botón individual)
+          const startDirectAnalysisForMissing = async () => {
+            setLoadingPhase('analyzing')
+            setIsAnalyzingBatch(true)
+            console.log(`🧠 Iniciando análisis directo de ${activitiesWithoutAnalysis.length} actividades sin analizar`)
+            
+            // Configurar progreso
+            setBatchProgress({current: 0, total: activitiesWithoutAnalysis.length})
+            
+            // Analizar secuencialmente cada actividad que falta
+            for (let i = 0; i < activitiesWithoutAnalysis.length; i++) {
+              const activity = activitiesWithoutAnalysis[i]
+              console.log(`📊 Analizando actividad ${i + 1}/${activitiesWithoutAnalysis.length}: ${activity.name}`)
+              
+              // Actualizar progreso
+              setBatchProgress({current: i + 1, total: activitiesWithoutAnalysis.length})
+              
+              // Usar la misma función que el botón individual
+              await analyzeActivity(activity, false) // sin feedback visual individual
+            }
+            
+            setIsAnalyzingBatch(false)
+            setIsLoadingCourse(false)
+            setBatchProgress({current: 0, total: 0}) // Limpiar progreso
+            console.log('✅ Análisis directo completado para todas las actividades faltantes')
+          }
+          startDirectAnalysisForMissing()
+        } else {
+          // Todas las actividades ya tienen análisis
+          console.log('✅ Todas las actividades ya tienen análisis, desactivando loader')
+          setIsLoadingCourse(false)
         }
-        runAutoAnalysis()
       } else if (Object.keys(analysisResults).length > 0) {
         // Caso 2: No hay actividades abiertas PERO hay análisis en cache - mostrar cache inmediatamente
         console.log('📦 Mostrando análisis desde cache sin actividades abiertas')
@@ -354,7 +610,58 @@ export function IntelligentDashboardContent({
         setIsLoadingCourse(false)
       }
     }
-  }, [openActivities, cacheLoaded, analyzeVisibleActivities, isAnalyzingBatch, isLoadingCourse, loadingActivities, selectedCourse, analysisResults])
+  }, [openActivities, cacheLoaded, isAnalyzingBatch, isLoadingCourse, loadingActivities, selectedCourse, analysisResults])
+  
+  // Queue polling removed - now using direct analysis approach
+
+  // Timeout de seguridad para desactivar el loader si se queda atascado
+  useEffect(() => {
+    if (isLoadingCourse) {
+      console.log('⏰ Iniciando timeout de seguridad para el loader (10 segundos)')
+      const timeoutId = setTimeout(() => {
+        console.log('🚨 Timeout de seguridad activado - desactivando loader forzosamente')
+        console.log('📊 Estado al momento del timeout:', {
+          cacheLoaded,
+          loadingActivities,
+          openActivitiesCount: openActivities.length,
+          analysisCount: Object.keys(analysisResults).length,
+          selectedCourse
+        })
+        setIsLoadingCourse(false)
+      }, 10000) // 10 segundos para test más rápido
+      
+      return () => {
+        clearTimeout(timeoutId)
+      }
+    }
+  }, [isLoadingCourse, cacheLoaded, loadingActivities, openActivities, analysisResults, selectedCourse])
+
+  // Guardar datos en caché cuando se actualicen
+  useEffect(() => {
+    if (selectedCourse && !isLoadingCourse && !loadingActivities && cacheLoaded) {
+      // Solo guardar en caché cuando tengamos datos completos
+      if (openActivities.length > 0 || Object.keys(analysisResults).length > 0) {
+        console.log('💾 Guardando datos en caché de memoria y persistente para curso:', selectedCourse)
+        
+        // Guardar en caché de memoria
+        courseDataCache[selectedCourse] = {
+          activities: openActivities,
+          analysisResults: analysisResults,
+          activitiesSummary: activitiesSummary,
+          lastFetched: Date.now(),
+          courseAnalysisId: courseAnalysisId || undefined
+        }
+        
+        // Guardar en caché persistente (base de datos)
+        saveToPersistentCache(selectedCourse, {
+          activities: openActivities,
+          analysisResults: analysisResults,
+          activitiesSummary: activitiesSummary,
+          courseAnalysisId: courseAnalysisId || undefined
+        })
+      }
+    }
+  }, [selectedCourse, openActivities, analysisResults, activitiesSummary, isLoadingCourse, loadingActivities, cacheLoaded, courseAnalysisId, saveToPersistentCache])
 
   const generateNewAnalysis = useCallback(async () => {
     if (!selectedCourse) {
@@ -703,7 +1010,7 @@ export function IntelligentDashboardContent({
     const analysis = analysisResults[activityKey]
 
     return (
-      <div className="max-w-[1132px] mx-auto px-4 sm:px-6 lg:px-3">
+      <div className="max-w-[1132px] mx-auto mb-4 px-4 sm:px-6 lg:px-3">
         {/* Header de seguimiento */}
         <section className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">
@@ -1065,9 +1372,36 @@ export function IntelligentDashboardContent({
           
         </div>
         
-        <p className="text-gray-600 mb-4">
+        <p className="text-gray-600 mb-2">
         Te mostramos un resumen de las actividades de tus cursos
         </p>
+        
+        {/* Indicador de caché sutil debajo del texto principal */}
+        {selectedCourse && (() => {
+          const cached = courseDataCache[selectedCourse]
+          if (cached) {
+            const now = Date.now()
+            const timeSinceLastUpdate = now - cached.lastFetched
+            const timeUntilUpdate = CACHE_DURATION - timeSinceLastUpdate
+            const minutesUntilUpdate = Math.max(0, Math.ceil(timeUntilUpdate / (60 * 1000)))
+            
+            return (
+              <div className="flex items-center gap-2 mb-4">
+                <p className="text-xs text-gray-400">
+                  📦 Datos en caché {minutesUntilUpdate > 0 && `(actualización automática en ${minutesUntilUpdate}min)`}
+                </p>
+                <button
+                  onClick={() => forceRefreshCurrentCourse()}
+                  className="text-xs text-blue-600 hover:text-blue-700 hover:underline"
+                  disabled={isAnalyzingBatch || isLoadingCourse}
+                >
+                  actualizar
+                </button>
+              </div>
+            )
+          }
+          return <div className="mb-4"></div>
+        })()}
         
         {/* Estado de conexión */}
         
@@ -1100,9 +1434,27 @@ export function IntelligentDashboardContent({
           {/* Sección de análisis */}
           <section className="mb-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">
-                Resumen de actividades
-              </h2>
+              <div className="flex items-center gap-4">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  Resumen de actividades
+                </h2>
+                {/* Indicador de caché */}
+                {selectedCourse && courseDataCache[selectedCourse] && !isLoadingCourse && (
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const cached = courseDataCache[selectedCourse]
+                      const now = Date.now()
+                      const timeSinceLastUpdate = now - cached.lastFetched
+                      const timeUntilUpdate = CACHE_DURATION - timeSinceLastUpdate
+                      const minutesUntilUpdate = Math.max(0, Math.ceil(timeUntilUpdate / (60 * 1000)))
+                      
+                      return null
+                    })()}
+                  </div>
+                )}
+                
+                {/* Queue status indicator removed - now using direct analysis with progress tracking */}
+              </div>
               
               {/* Selector de curso simplificado */}
               <SimpleCourseSelector
@@ -1112,12 +1464,37 @@ export function IntelligentDashboardContent({
               />
             </div>
 
-            {/* Información de actividades abiertas */}
-            
+            {/* Mostrar contenido basado en si hay curso seleccionado */}
+            {!selectedCourse ? (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
+                <div className="flex flex-col items-center justify-center py-12">
+                  <div className="mb-6">
+                    <svg className="w-20 h-20 text-gray-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} 
+                        d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                  </div>
+                  <p className="text-xl font-medium text-gray-700 mb-2">
+                    No hay curso seleccionado
+                  </p>
+                  <p className="text-gray-600 mb-6 max-w-md">
+                    Selecciona un curso del menú superior para ver el análisis de actividades y participación estudiantil.
+                  </p>
+                  <div className="flex items-center space-x-2 text-sm text-gray-500">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Los análisis se generan automáticamente al seleccionar un curso</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Contenido cuando hay curso seleccionado */}
 
-
-            {/* Loader para cuando está cargando */}
-            {isLoadingCourse ? (
+                {/* Loader para cuando está cargando */}
+                {isLoadingCourse ? (
               <div className="flex flex-col items-center justify-center py-16">
                 <div className="text-center">
                   <FontAwesomeIcon 
@@ -1133,8 +1510,22 @@ export function IntelligentDashboardContent({
                   <p className="text-gray-600">
                     {loadingPhase === 'loading' 
                       ? 'Obteniendo actividades del curso seleccionado' 
-                      : 'Generando insights inteligentes con IA'}
+                      : `Generando insights inteligentes con IA ${batchProgress.total > 0 ? `(${batchProgress.current}/${batchProgress.total})` : ''}`}
                   </p>
+                  {/* Barra de progreso para análisis batch */}
+                  {loadingPhase === 'analyzing' && batchProgress.total > 0 && (
+                    <div className="mt-4 w-full max-w-md">
+                      <div className="bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out" 
+                          style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-2 text-center">
+                        {batchProgress.current} de {batchProgress.total} actividades analizadas
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -1142,7 +1533,7 @@ export function IntelligentDashboardContent({
                 {/* Cards de actividades abiertas - Acumulativas */}
                 {openActivities.length > 0 ? (
                   <div className="mb-8">
-                    <div className={`grid gap-6 ${getVisibleActivities.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-2'}`}>
+                    <div className={`grid gap-6 ${getVisibleActivities.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-2'} auto-rows-fr`}>
                   {getVisibleActivities.map((activity, index) => {
                     const getActivityIcon = (type: string) => {
                       switch (type) {
@@ -1191,8 +1582,8 @@ export function IntelligentDashboardContent({
                     }
 
                     return (
-                      <div key={activity.id} className="bg-white border border-gray-300 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
-                        {/* Header */}
+                      <div key={activity.id} className="bg-white border border-gray-300 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col h-full">
+                        {/* Header - siempre en la parte superior */}
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center space-x-2">
                             
@@ -1205,74 +1596,76 @@ export function IntelligentDashboardContent({
                           </span>
                         </div>
                         
-                        {/* Análisis inteligente, loader o indicador sin análisis */}
-                        {(() => {
-                          const activityKey = `${activity.type}_${activity.id}`
-                          const isAnalyzing = analyzingActivity === activityKey
-                          const analysisExtract = getAnalysisExtract(activity)
-                          
-                          if (isAnalyzing || (isAnalyzingBatch && !analysisResults[activityKey])) {
-                            // Mostrar loader durante análisis
-                            return (
-                              <div className="mb-4">
-                                <div className="bg-blue-50 rounded-lg p-6 border border-blue-200">
-                                  <div className="text-center">
-                                    <FontAwesomeIcon icon={faSpinner} size="2x" className="text-blue-600 mb-3 animate-spin" />
-                                    <p className="text-sm font-medium text-blue-900">
-                                      Generando análisis inteligente...
-                                    </p>
-                                    <p className="text-xs text-blue-700 mt-1">
-                                      Procesando información de la actividad
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                            )
-                          }
-                          
-                          if (analysisExtract && analysisExtract.summaryPoints) {
-                            // Mostrar puntos del análisis como lista no numerada
-                            const { summaryPoints } = analysisExtract
+                        {/* Contenido con flex-grow para ocupar el espacio disponible */}
+                        <div className="flex-grow flex flex-col">
+                          {/* Análisis inteligente, loader o indicador sin análisis */}
+                          {(() => {
+                            const activityKey = `${activity.type}_${activity.id}`
+                            const isAnalyzing = analyzingActivity === activityKey
+                            const analysisExtract = getAnalysisExtract(activity)
                             
-                            return (
-                              <div className="mb-4">
-                                {summaryPoints.length > 0 ? (
-                                  <div className="space-y-3">
-                                    {summaryPoints.map((point: string, idx: number) => (
-                                      <div key={idx} className="flex items-start space-x-2">
-                                        <span className="text-primary-darker mt-1 flex-shrink-0">•</span>
-                                        <p className="text-neutral-dark font-inter text-sm leading-relaxed">
-                                          {point}
-                                        </p>
-                                      </div>
-                                    ))}
+                            if (isAnalyzing || (isAnalyzingBatch && !analysisResults[activityKey])) {
+                              // Mostrar loader durante análisis
+                              return (
+                                <div className="flex-grow flex items-center justify-center">
+                                  <div className="bg-blue-50 rounded-lg p-6 border border-blue-200 w-full">
+                                    <div className="text-center">
+                                      <FontAwesomeIcon icon={faSpinner} size="2x" className="text-blue-600 mb-3 animate-spin" />
+                                      <p className="text-sm font-medium text-blue-900">
+                                        Generando análisis inteligente...
+                                      </p>
+                                      <p className="text-xs text-blue-700 mt-1">
+                                        Procesando información de la actividad
+                                      </p>
+                                    </div>
                                   </div>
-                                ) : (
-                                  <div className="bg-white rounded-lg p-4">
-                                    <p className="text-neutral-dark font-inter text-sm leading-relaxed">
-                                      Análisis disponible
+                                </div>
+                              )
+                            }
+                            
+                            if (analysisExtract && analysisExtract.summaryPoints) {
+                              // Mostrar puntos del análisis como lista no numerada
+                              const { summaryPoints } = analysisExtract
+                              
+                              return (
+                                <div className="flex-grow overflow-y-auto">
+                                  {summaryPoints.length > 0 ? (
+                                    <div className="space-y-3">
+                                      {summaryPoints.map((point: string, idx: number) => (
+                                        <div key={idx} className="flex items-start space-x-2">
+                                          <span className="text-primary-darker mt-1 flex-shrink-0">•</span>
+                                          <p className="text-neutral-dark font-inter text-sm leading-relaxed">
+                                            {point}
+                                          </p>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="bg-white rounded-lg p-4">
+                                      <p className="text-neutral-dark font-inter text-sm leading-relaxed">
+                                        Análisis disponible
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            } else {
+                              // Solo mostrar indicador de análisis pendiente
+                              return (
+                                <div className="flex-grow flex items-center justify-center">
+                                  <div className="text-center text-gray-400">
+                                    <FontAwesomeIcon icon={faBrain} size="2x" className="mb-3" />
+                                    <p className="text-sm">
+                                      Actividad sin analizar
                                     </p>
                                   </div>
-                                )}
-                              </div>
-                            )
-                          } else {
-                            // Solo mostrar indicador de análisis pendiente
-                            return (
-                              <div className="mb-4 py-8">
-                                <div className="text-center text-gray-400">
-                                  <FontAwesomeIcon icon={faBrain} size="2x" className="mb-3" />
-                                  <p className="text-sm">
-                                    Actividad sin analizar
-                                  </p>
                                 </div>
-                              </div>
-                            )
-                          }
-                        })()}
-
+                              )
+                            }
+                          })()}
+                        </div>
                         
-                        {/* Footer con botones de acción */}
+                        {/* Footer con botones de acción - siempre en la parte inferior */}
                         <div className="flex justify-between items-center mt-6">
                           {/* Botón de análisis forzado */}
                           <button
@@ -1327,6 +1720,8 @@ export function IntelligentDashboardContent({
                     </p>
                   </div>
                 )}
+              </>
+            )}
               </>
             )}
           </section>
