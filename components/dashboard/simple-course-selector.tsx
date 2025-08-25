@@ -46,18 +46,7 @@ export default function SimpleCourseSelector({
     }
   }, [selectedCourseId])
 
-  // Auto-seleccionar el primer curso al cargar si no hay uno seleccionado
-  useEffect(() => {
-    if (!hasAutoSelected && courses && courses.length > 0 && !selectedCourse) {
-      const firstCourseId = courses[0].id
-      console.log('🎯 Auto-seleccionando primer curso:', courses[0].name || courses[0].fullname)
-      setSelectedCourse(firstCourseId)
-      setHasAutoSelected(true)
-      if (onSelectionChange) {
-        onSelectionChange(firstCourseId)
-      }
-    }
-  }, [courses, selectedCourse, onSelectionChange, hasAutoSelected])
+  // Auto-selection removed - user must select manually
 
   const handleCourseSelect = (courseId: string) => {
     setSelectedCourse(courseId)
@@ -69,7 +58,7 @@ export default function SimpleCourseSelector({
   }
 
   const getSelectedCourseName = () => {
-    if (!selectedCourse) return 'Seleccionar curso'
+    if (!selectedCourse) return 'Selecciona un curso'
     
     const course = courses.find(c => c.id === selectedCourse)
     return course ? (course.name || course.fullname || `Curso ${course.id}`) : 'Curso no encontrado'

@@ -34,8 +34,15 @@ export default function DashboardContent({
   initialCourseId,
   initialGroupId
 }: DashboardContentProps) {
-  const [selectedCourse, setSelectedCourse] = useState<string | null>(null)
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
+  // Debug: verificar valores iniciales
+  console.log('🔍 DashboardContent - Props iniciales:', {
+    initialCourseId,
+    initialGroupId,
+    coursesWithGroupsCount: coursesWithGroups.length
+  })
+  
+  const [selectedCourse, setSelectedCourse] = useState<string | null>(initialCourseId || null)
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(initialGroupId || null)
   const [analysisCards, setAnalysisCards] = useState(initialCards)
   const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState(false)
   const router = useRouter()
@@ -46,21 +53,7 @@ export default function DashboardContent({
   // Siempre usamos datos de Moodle
   const displayCourses = moodleCourses
 
-  // Selección automática del primer curso y grupo disponible
-  useEffect(() => {
-    if (moodleCourses && moodleCourses.length > 0 && !selectedCourse) {
-      const firstCourse = moodleCourses[0];
-      if (firstCourse.groups && firstCourse.groups.length > 0) {
-        const firstGroup = firstCourse.groups[0];
-        setSelectedCourse(firstCourse.id);
-        setSelectedGroup(firstGroup.id);
-        // Disparar la selección para cargar el análisis inicial
-        setTimeout(() => {
-          handleSelectionChange(firstCourse.id, firstGroup.id);
-        }, 100);
-      }
-    }
-  }, [moodleCourses]);
+  // Ya no hay selección automática - el usuario debe elegir manualmente
 
   const handleSelectionChange = async (courseId: string, groupId: string) => {
     setSelectedCourse(courseId)
@@ -299,6 +292,29 @@ export default function DashboardContent({
                   Estamos analizando las actividades y foros del curso.
                   Esto puede tomar unos momentos.
                 </p>
+              </div>
+            ) : !selectedCourse || !selectedGroup ? (
+              // Estado: No hay curso seleccionado
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="mb-6">
+                  <svg className="w-20 h-20 text-gray-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} 
+                      d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                </div>
+                <p className="text-xl font-medium text-gray-700 mb-2">
+                  No hay curso seleccionado
+                </p>
+                <p className="text-gray-600 mb-6 max-w-md">
+                  Selecciona un curso y grupo del menú superior para ver el análisis de actividades y participación estudiantil.
+                </p>
+                <div className="flex items-center space-x-2 text-sm text-gray-500">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Los análisis se generan automáticamente al seleccionar un curso</span>
+                </div>
               </div>
             ) : selectedCourse && selectedGroup ? (
               // Estado: Curso y grupo seleccionados pero sin análisis

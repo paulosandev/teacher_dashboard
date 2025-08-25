@@ -157,3 +157,66 @@ model JobLog {
   @@index([createdAt])
   @@index([analyzedBy])
 }
+
+// Modelo de Caché Persistente para mantener datos entre sesiones
+model CourseCache {
+  id                  String   @id @default(cuid())
+  courseId            String   // ID del curso en formato "courseId|groupId"
+  
+  // Datos cacheados
+  activities          Json     // Actividades abiertas
+  analysisResults     Json     // Resultados de análisis
+  activitiesSummary   Json?    // Resumen de actividades
+  courseAnalysisId    String?  // ID del análisis del curso
+  
+  // Metadatos del caché
+  lastFetched         DateTime // Timestamp de la última actualización
+  expiresAt           DateTime // Cuándo expira este caché (1 hora después de lastFetched)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  // Para limpiezas automáticas
+  isActive            Boolean  @default(true)
+  
+  @@unique([courseId])
+  @@index([expiresAt])
+  @@index([lastFetched])
+  @@index([isActive])
+}
+
+// Modelo de Cola de Análisis para procesamiento en background
+model AnalysisQueue {
+  id              String   @id @default(cuid())
+  courseId        String   // ID del curso en formato "courseId|groupId"
+  activityId      String   // ID de la actividad en Moodle
+  activityType    String   // Tipo: 'assign', 'forum', etc.
+  activityName    String   // Nombre de la actividad
+  
+  // Estado del análisis
+  status          String   // 'pending', 'processing', 'completed', 'failed'
+  priority        Int      @default(0) // Prioridad (mayor número = mayor prioridad)
+  
+  // Datos de la actividad para el análisis
+  activityData    Json     // Datos completos de la actividad
+  
+  // Resultados (si completado)
+  analysisResult  Json?    // Resultado del análisis
+  
+  // Control de intentos
+  attempts        Int      @default(0)
+  maxAttempts     Int      @default(3)
+  lastError       String?
+  
+  // Metadatos
+  requestedBy     String?  // Quién solicitó el análisis
+  requestedAt     DateTime @default(now())
+  startedAt       DateTime?
+  completedAt     DateTime?
+  
+  // Índices para optimización
+  @@unique([courseId, activityId, activityType])
+  @@index([status])
+  @@index([priority])
+  @@index([requestedAt])
+  @@index([courseId])
+}

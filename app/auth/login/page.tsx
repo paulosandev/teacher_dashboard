@@ -12,6 +12,7 @@ export default function LoginPage() {
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard/v2'
   
   const [loading, setLoading] = useState(false)
+  const [redirecting, setRedirecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     username: '',
@@ -33,13 +34,19 @@ export default function LoginPage() {
       if (result?.error) {
         setError('Credenciales inválidas. Verifique su usuario y contraseña de Moodle.')
       } else if (result?.ok) {
+        setRedirecting(true)
+        // Mantener el loading state durante la redirección
         router.push(callbackUrl)
         router.refresh()
+        // No removemos setLoading(false) aquí para mantener el indicador
       }
     } catch {
       setError('Ocurrió un error inesperado. Por favor intente nuevamente.')
     } finally {
-      setLoading(false)
+      // Solo quitar el loading si no estamos redirigiendo
+      if (!redirecting) {
+        setLoading(false)
+      }
     }
   }
 
@@ -52,7 +59,27 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-white py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-white py-12 px-4 sm:px-6 lg:px-8 relative">
+      {/* Overlay de carga cuando está redirigiendo */}
+      {redirecting && (
+        <div className="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 mb-4">
+              <FontAwesomeIcon 
+                icon={faSpinner} 
+                className="w-8 h-8 text-primary animate-spin"
+              />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              Iniciando sesión exitosamente
+            </h3>
+            <p className="text-sm text-gray-600">
+              Cargando tu dashboard personalizado...
+            </p>
+          </div>
+        </div>
+      )}
+      
       <div className="max-w-md w-full space-y-8">
         <div className="bg-white rounded-lg shadow-[0px_4px_10px_rgba(0,0,0,0.2)] p-8">
           {/* Logo y título */}
@@ -116,7 +143,7 @@ export default function LoginPage() {
                     onChange={handleChange}
                     className="appearance-none relative block w-full pl-10 pr-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary focus:z-10 sm:text-sm transition-colors duration-200"
                     placeholder="Matrícula"
-                    disabled={loading}
+                    disabled={loading || redirecting}
                   />
                 </div>
                 <p className="mt-1 text-xs text-gray-500">
@@ -142,7 +169,7 @@ export default function LoginPage() {
                     onChange={handleChange}
                     className="appearance-none relative block w-full pl-10 pr-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary focus:z-10 sm:text-sm transition-colors duration-200"
                     placeholder="••••••••"
-                    disabled={loading}
+                    disabled={loading || redirecting}
                   />
                 </div>
               </div>
@@ -151,13 +178,18 @@ export default function LoginPage() {
             <div>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || redirecting}
                 className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-[1.02]"
               >
-                {loading ? (
+                {redirecting ? (
                   <>
                     <FontAwesomeIcon icon={faSpinner} className="mr-2 animate-spin" />
-                    Iniciando sesión...
+                    Cargando dashboard...
+                  </>
+                ) : loading ? (
+                  <>
+                    <FontAwesomeIcon icon={faSpinner} className="mr-2 animate-spin" />
+                    Validando credenciales...
                   </>
                 ) : (
                   'Iniciar Sesión'
@@ -172,7 +204,7 @@ export default function LoginPage() {
         
         {/* Footer */}
         <p className="text-center text-xs text-gray-500">
-          © 2024 Sistema de Análisis Académico. Todos los derechos reservados.
+          © 2025 Sistema de Análisis Académico. Todos los derechos reservados.
         </p>
       </div>
     </div>

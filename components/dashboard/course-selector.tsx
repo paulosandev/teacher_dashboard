@@ -24,6 +24,13 @@ interface CourseSelectorProps {
 }
 
 export default function CourseSelector({ courses, onSelectionChange, selectedCourseId, selectedGroupId }: CourseSelectorProps) {
+  // Debug: verificar valores recibidos
+  console.log('🎯 CourseSelector - Props recibidas:', {
+    selectedCourseId,
+    selectedGroupId,
+    coursesCount: courses.length
+  })
+  
   const [isOpen, setIsOpen] = useState(false)
   const [selectedCourse, setSelectedCourse] = useState<string | null>(selectedCourseId || null)
   const [selectedGroup, setSelectedGroup] = useState<string | null>(selectedGroupId || null)
@@ -64,7 +71,7 @@ export default function CourseSelector({ courses, onSelectionChange, selectedCou
 
   const getSelectedText = () => {
     if (!selectedCourse || !selectedGroup) {
-      return 'Selecciona una materia y grupo'
+      return 'Selecciona un curso'
     }
 
     const course = courses.find(c => c.id === selectedCourse)
@@ -74,7 +81,7 @@ export default function CourseSelector({ courses, onSelectionChange, selectedCou
       return `${course.name} | ${group.name}`
     }
 
-    return 'Selecciona una materia y grupo'
+    return 'Selecciona un curso'
   }
 
   return (

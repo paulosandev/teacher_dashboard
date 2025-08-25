@@ -646,33 +646,63 @@ Responde ÚNICAMENTE en formato JSON:
 }
 
 async function saveAnalysisToDatabase(courseId: string, groupId: string, analysisResult: any, userId: string, rawData: any) {
+  // Obtener la matrícula del usuario de la sesión
+  const session = await getServerSession(authOptions)
+  const userMatricula = session?.user?.matricula || 'unknown'
+  
+  // Buscar o crear curso
   let course = await prisma.course.findFirst({
-    where: { moodleCourseId: courseId, userId }
+    where: { moodleCourseId: courseId }
   })
   
   if (!course) {
+    // Extraer nombre del curso de los datos raw si está disponible
+    const courseName = rawData?.courseInfo?.fullname || rawData?.courseInfo?.name || `Curso ${courseId}`
+    
     course = await prisma.course.create({
       data: {
         moodleCourseId: courseId,
-        name: `Curso ${courseId}`,
-        userId,
-        lastSync: new Date()
+        name: courseName,
+        shortName: rawData?.courseInfo?.shortname || null,
+        lastAnalyzedBy: userMatricula,
+        lastSync: new Date(),
+        isActive: true
+      }
+    })
+    console.log(`📝 Curso registrado en BD: ${courseName} (${courseId})`)
+  } else {
+    // Actualizar información del curso
+    course = await prisma.course.update({
+      where: { id: course.id },
+      data: {
+        lastAnalyzedBy: userMatricula,
+        lastSync: new Date(),
+        name: rawData?.courseInfo?.fullname || rawData?.courseInfo?.name || course.name,
+        shortName: rawData?.courseInfo?.shortname || course.shortName
       }
     })
   }
   
-  let dbGroup = await prisma.group.findFirst({
-    where: { moodleGroupId: groupId, courseId: course.id }
-  })
-  
-  if (!dbGroup) {
-    dbGroup = await prisma.group.create({
-      data: {
-        moodleGroupId: groupId,
-        name: `Grupo ${groupId}`,
-        courseId: course.id
-      }
+  // Buscar o crear grupo (solo si groupId no es '0')
+  let dbGroup = null
+  if (groupId !== '0') {
+    dbGroup = await prisma.group.findFirst({
+      where: { moodleGroupId: groupId, courseId: course.id }
     })
+    
+    if (!dbGroup) {
+      // Extraer nombre del grupo de los datos raw si está disponible
+      const groupName = rawData?.groupInfo?.name || `Grupo ${groupId}`
+      
+      dbGroup = await prisma.group.create({
+        data: {
+          moodleGroupId: groupId,
+          name: groupName,
+          courseId: course.id
+        }
+      })
+      console.log(`📝 Grupo registrado en BD: ${groupName} (${groupId})`)
+    }
   }
   
   await prisma.analysisResult.updateMany({
