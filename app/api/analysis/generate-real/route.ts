@@ -7,6 +7,10 @@ import OpenAI from 'openai'
 import fs from 'fs'
 import path from 'path'
 
+// Forzar runtime dinámico para evitar errores en build
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 interface AnalysisDetails {
   requestId: string
   timestamp: string

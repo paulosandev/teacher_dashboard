@@ -3,6 +3,10 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/auth-options'
 import { MoodleAuthService } from '@/lib/moodle/auth-service'
 
+// Forzar runtime dinámico para evitar errores en build
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     // Verificar autenticación

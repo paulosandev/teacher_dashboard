@@ -5,6 +5,10 @@ import { prisma } from '@/lib/db/prisma'
 import { decrypt } from '@/lib/utils/encryption'
 import { MoodleAPIClient } from '@/lib/moodle/api-client'
 
+// Forzar runtime dinámico para evitar errores en build
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     // Verificar autenticación

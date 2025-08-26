@@ -5,6 +5,10 @@ import { MoodleAPIClient } from '@/lib/moodle/api-client'
 import { PrismaClient } from '@prisma/client'
 import OpenAI from 'openai'
 
+// Forzar runtime dinámico para evitar errores en build
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 // Singleton pattern para Prisma Client
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -428,6 +432,27 @@ Como experto analista educativo, decide la mejor forma de presentar el análisis
   console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
   console.log(`   ⚙️ Configuración: max_completion_tokens=2500 (modelo o3-mini)`)
 
+  // CAPTURAR PROMPT COMPLETO PARA DEBUGGING
+  const fs = require('fs');
+  const promptData = {
+    timestamp: new Date().toISOString(),
+    activityType: 'forum',
+    activityName: forumData.name,
+    activityId: forumData.id,
+    systemMessage: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. Incluye datos cuantitativos en metricsTable cuando sea relevante, y separa insights en numerados (para orden específico) y bullets (para puntos generales). El fullAnalysis debe usar markdown with secciones ##.",
+    userPrompt: prompt,
+    rawData: analysisData,
+    model: "o3-mini",
+    maxTokens: 2500
+  };
+  
+  try {
+    fs.writeFileSync('/tmp/ultimo-prompt-enviado-openai.json', JSON.stringify(promptData, null, 2));
+    console.log('💾 Prompt completo guardado en /tmp/ultimo-prompt-enviado-openai.json');
+  } catch (writeError) {
+    console.log('⚠️ No se pudo guardar el prompt completo:', writeError.message);
+  }
+
   try {
     const completion = await openai.chat.completions.create({
       model: "o3-mini",
@@ -595,6 +620,27 @@ Como experto analista educativo, decide la mejor forma de presentar cada aspecto
   console.log(`   🔗 Modelo: o3-mini`)
   console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
   console.log(`   ⚙️ Configuración: max_completion_tokens=2500 (modelo o3-mini)`)
+
+  // CAPTURAR PROMPT COMPLETO PARA DEBUGGING
+  const fs = require('fs');
+  const promptData = {
+    timestamp: new Date().toISOString(),
+    activityType: 'assign',
+    activityName: assignmentData.name,
+    activityId: assignmentData.id,
+    systemMessage: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. Incluye datos cuantitativos en metricsTable cuando sea relevante, y separa insights en numerados (para orden específico) y bullets (para puntos generales). El fullAnalysis debe usar markdown con secciones ##.",
+    userPrompt: prompt,
+    rawData: analysisData,
+    model: "o3-mini",
+    maxTokens: 2500
+  };
+  
+  try {
+    fs.writeFileSync('/tmp/ultimo-prompt-enviado-openai.json', JSON.stringify(promptData, null, 2));
+    console.log('💾 Prompt completo guardado en /tmp/ultimo-prompt-enviado-openai.json');
+  } catch (writeError) {
+    console.log('⚠️ No se pudo guardar el prompt completo:', writeError.message);
+  }
 
   try {
     const completion = await openai.chat.completions.create({
@@ -836,6 +882,27 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
   console.log(`   🔗 Modelo: o3-mini`)
   console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
   console.log(`   ⚙️ Configuración: max_completion_tokens=2500 (modelo o3-mini)`)
+
+  // CAPTURAR PROMPT COMPLETO PARA DEBUGGING
+  const fs = require('fs');
+  const promptData = {
+    timestamp: new Date().toISOString(),
+    activityType: activityType,
+    activityName: activityData.name,
+    activityId: activityData.id,
+    systemMessage: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. Incluye datos cuantitativos en metricsTable cuando sea relevante, y separa insights en numerados (para orden específico) y bullets (para puntos generales). El fullAnalysis debe usar markdown con secciones ##.",
+    userPrompt: prompt,
+    rawData: analysisData,
+    model: "o3-mini",
+    maxTokens: 2500
+  };
+  
+  try {
+    fs.writeFileSync('/tmp/ultimo-prompt-enviado-openai.json', JSON.stringify(promptData, null, 2));
+    console.log('💾 Prompt completo guardado en /tmp/ultimo-prompt-enviado-openai.json');
+  } catch (writeError) {
+    console.log('⚠️ No se pudo guardar el prompt completo:', writeError.message);
+  }
 
   try {
     const completion = await openai.chat.completions.create({

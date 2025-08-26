@@ -5,6 +5,10 @@ import { prisma } from '@/lib/db/prisma'
 import { encrypt, decrypt } from '@/lib/utils/encryption'
 import { createUserMoodleClient } from '@/lib/moodle/user-api-client'
 
+// Forzar runtime dinámico para evitar errores en build
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 /**
  * GET: Obtiene el estado del token de Moodle del usuario
  */

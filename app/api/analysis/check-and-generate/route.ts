@@ -5,6 +5,10 @@ import { moodleClient } from '@/lib/moodle/api-client'
 import { prisma } from '@/lib/db/prisma'
 import OpenAI from 'openai'
 
+// Forzar runtime dinámico para evitar errores en build
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     // Verificar autenticación

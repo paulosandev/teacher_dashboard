@@ -3,6 +3,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/auth-options';
 import { forumAnalysisService } from '@/lib/services/forum-analysis-service';
 
+// Forzar runtime dinámico para evitar errores en build
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     // Verificar autenticación
@@ -236,7 +240,13 @@ async function handleGetUserAnalysis(request: NextRequest) {
 
     console.log(`✅ Devolviendo ${dashboardCards.length} tarjetas de dashboard`);
 
-    return NextResponse.json(dashboardCards);
+    // Crear respuesta con headers anti-caché
+    const response = NextResponse.json(dashboardCards);
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    response.headers.set('Pragma', 'no-cache');
+    response.headers.set('Expires', '0');
+    
+    return response;
 
   } catch (error) {
     console.error('❌ Error obteniendo análisis del usuario:', error);

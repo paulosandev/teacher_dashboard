@@ -4,6 +4,10 @@ import { queueAnalysisForActivities, getAnalysisQueueStatus } from '../../../../
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/auth-options'
 
+// Forzar runtime dinámico para evitar errores en build
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 const prisma = new PrismaClient()
 
 // POST - Agregar actividades a la cola de análisis

@@ -3,6 +3,10 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/auth-options'
 import { PrismaClient } from '@prisma/client'
 
+// Forzar runtime dinámico para evitar errores en build
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 // Singleton pattern para Prisma Client
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined

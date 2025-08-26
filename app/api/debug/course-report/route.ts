@@ -7,6 +7,10 @@ import { MoodleAPIClient } from '@/lib/moodle/api-client'
 import fs from 'fs'
 import path from 'path'
 
+// Forzar runtime dinámico para evitar errores en build
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
   const reportId = `debug-course-${timestamp}`
