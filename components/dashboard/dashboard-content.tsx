@@ -45,6 +45,7 @@ export default function DashboardContent({
   const [selectedGroup, setSelectedGroup] = useState<string | null>(initialGroupId || null)
   const [analysisCards, setAnalysisCards] = useState(initialCards)
   const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState(false)
+  const [isChangingCourse, setIsChangingCourse] = useState(false)
   const router = useRouter()
   
   // Hook para obtener datos de Moodle - siempre habilitado
@@ -56,34 +57,26 @@ export default function DashboardContent({
   // Ya no hay selección automática - el usuario debe elegir manualmente
 
   const handleSelectionChange = async (courseId: string, groupId: string) => {
+    console.log('🎯 Cambio de selección:', courseId, 'Grupo:', groupId)
+    
+    // ACTIVAR LOADER INMEDIATAMENTE
+    setIsChangingCourse(true)
+    setIsGeneratingAnalysis(true)
+    
+    // LIMPIAR ESTADO al cambiar de grupo
+    setAnalysisCards([])
     setSelectedCourse(courseId)
     setSelectedGroup(groupId)
     
-    console.log('Curso seleccionado:', courseId, 'Grupo:', groupId)
+    // Esperar un poco para que React procese la limpieza del estado
+    await new Promise(resolve => setTimeout(resolve, 100))
     
-    // Filtrar tarjetas por curso y grupo seleccionados (siempre usando IDs de Moodle)
-    const filteredCards = initialCards.filter(card => {
-      const cardMoodleId = card.moodleCourseId || card.courseId
-      const courseMatches = cardMoodleId === courseId
-      console.log(`   Comparando Moodle: card(${cardMoodleId}) === selected(${courseId}) → ${courseMatches}`)
-      
-      if (!courseMatches) return false
-      
-      // Filtrar por grupo si se especifica
-      if (card.groupId && card.groupId !== groupId) {
-        console.log(`   Grupo no coincide: card(${card.groupId}) !== selected(${groupId})`)
-        return false
-      }
-      
-      return true
-    })
-    
-    console.log(`Análisis filtrados: ${filteredCards.length} de ${initialCards.length} total`)
-    setAnalysisCards(filteredCards)
-    
-    // Si no hay análisis, verificar si debemos generar uno
-    if (filteredCards.length === 0) {
-      await checkAndTriggerAnalysis(courseId, groupId)
+    try {
+      // Refrescar análisis desde la API para el nuevo grupo
+      await refreshAnalysisForCourse(courseId, groupId)
+    } finally {
+      // DESACTIVAR LOADER sin importar el resultado
+      setIsChangingCourse(false)
     }
   }
 
@@ -91,11 +84,14 @@ export default function DashboardContent({
     try {
       console.log('🔄 Refrescando análisis para curso:', courseId, 'grupo:', groupId)
       
+      // El estado de carga ya está activo desde handleSelectionChange
+      
       const response = await fetch('/api/analysis', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-        }
+        },
+        cache: 'no-cache', // Evitar caché del navegador
       })
       
       if (!response.ok) {
@@ -110,16 +106,26 @@ export default function DashboardContent({
         const courseMatches = cardMoodleId === courseId
         const cardMoodleGroupId = card.groupId
         const groupMatches = cardMoodleGroupId === groupId
-        console.log(`   🔄 Comparando Moodle: curso card(${cardMoodleId}) === selected(${courseId}) → ${courseMatches}`)
-        console.log(`   🔄 Comparando Moodle: grupo card(${cardMoodleGroupId}) === selected(${groupId}) → ${groupMatches}`)
+        console.log(`   🔄 Comparando: curso card(${cardMoodleId}) === selected(${courseId}) → ${courseMatches}`)
+        console.log(`   🔄 Comparando: grupo card(${cardMoodleGroupId}) === selected(${groupId}) → ${groupMatches}`)
         return courseMatches && groupMatches
       })
       
       console.log(`✅ Análisis refrescados: ${filteredCards.length} encontrados`)
       setAnalysisCards(filteredCards)
       
+      // Si no hay análisis para este grupo específico, generar uno nuevo
+      if (filteredCards.length === 0) {
+        console.log('📝 No hay análisis para este grupo, generando...')
+        await checkAndTriggerAnalysis(courseId, groupId)
+      }
+      
     } catch (error) {
       console.error('Error refrescando análisis:', error)
+      setAnalysisCards([]) // Asegurar que esté limpio en caso de error
+    } finally {
+      // Solo desactivar isGeneratingAnalysis, isChangingCourse se maneja en handleSelectionChange
+      setIsGeneratingAnalysis(false)
     }
   }
 
@@ -234,7 +240,20 @@ export default function DashboardContent({
         </section>
 
         {/* Cards de actividades */}
-        {analysisCards.length > 0 ? (
+        {isChangingCourse ? (
+          // Estado de carga durante cambio de curso
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
+            <div className="flex flex-col items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+              <p className="text-lg font-medium text-blue-700 mb-2">
+                🔄 Cambiando de curso...
+              </p>
+              <p className="text-sm text-blue-600">
+                Cargando actividades y análisis del nuevo grupo seleccionado.
+              </p>
+            </div>
+          </div>
+        ) : analysisCards.length > 0 ? (
           <>
             {/* Agrupar tarjetas de a pares para grid de 2 columnas */}
             {(() => {
@@ -281,7 +300,7 @@ export default function DashboardContent({
           </>
         ) : (
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
-            {isGeneratingAnalysis ? (
+            {isGeneratingAnalysis && !isChangingCourse ? (
               // Estado: Generando análisis
               <div className="flex flex-col items-center justify-center py-8">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
