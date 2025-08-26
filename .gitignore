@@ -28,6 +28,9 @@ yarn-error.log*
 # local env files
 .env*.local
 .env
+.env.production
+.env.development
+!.env.example
 
 # vercel
 .vercel
@@ -38,34 +41,23 @@ next-env.d.ts
 
 /app/generated/prisma
 
-# Project specific
-/reports/
-cesar_token.json
-contexto_proyecto/
-*.log
+# Project specific - Development/Debug files not needed for production
+/reports/                # Análisis generados localmente
+/ReportDebug/           # Reportes de debug
+cesar_token.json        # Token personal
+contexto_proyecto/      # Documentación de contexto local
+*.log                   # Archivos de log
 
 # Debug and temporary files
-ReportDebug/
 debug-*.txt
 cookies.txt
 *.tmp
 *.temp
 
-# Test scripts (temporary - keep only essential ones)
-scripts/test-*.ts
-scripts/check-*.ts
-scripts/debug-*.ts
-scripts/investigate-*.ts
-scripts/resolve-*.ts
-scripts/setup-*.ts
-scripts/update-*.ts
-scripts/verify-*.ts
-scripts/create-test-*.ts
-scripts/init-*.ts
-scripts/generate-*.ts
-scripts/configure-*.ts
-!scripts/test-openai-models.ts
-!scripts/test-o3-mini-analysis.ts
+# Scripts de desarrollo y testing (mantener solo esenciales)
+scripts/force-clean-all.ts       # Script temporal de limpieza
+!scripts/verify-deployment.sh    # MANTENER - Verificación de deployment
+!scripts/verify-db-status.ts     # MANTENER - Verificación de DB
 
 # Backup schemas
 prisma/schema-*.prisma
@@ -73,3 +65,40 @@ prisma/schema-*.prisma
 
 # Redis dump
 dump.rdb
+
+# Logs de PM2
+logs/
+*.log
+
+# Archivos de configuración sensibles
+cesar_token.json
+*_token.json
+
+# Archivos JavaScript temporales de desarrollo/testing
+*.js.map
+test-*.js
+debug-*.js
+capture-*.js
+get-*.js
+fix-*.js
+*.test.tsx              # Archivos de test temporales
+
+# Archivos de prompting y ejemplos (no necesarios para producción)
+prompting/
+
+# Documentación de deployment específica de plataformas
+RAILWAY_DEPLOYMENT_GUIDE.md
+VERCEL_DEPLOYMENT_GUIDE.md
+DEPLOYMENT_REQUIREMENTS.md
+FLUJO_COMPLETO_APLICACION.md
+README_LOCAL_SETUP.md
+
+# Postman collections (solo para desarrollo)
+postman/
+
+# Docker files (según lo solicitado, no se usarán)
+Dockerfile
+Dockerfile.worker
+docker-compose.yml
+railway.json
+vercel.json
