@@ -146,10 +146,10 @@ export async function POST(request: NextRequest) {
           where: { id: existing.id },
           data: {
             summary: analysisResult.summary,
-            positives: analysisResult.positives,
-            alerts: analysisResult.alerts,
-            insights: analysisResult.insights,
-            recommendation: analysisResult.recommendation,
+            positives: analysisResult.positives || [],
+            alerts: analysisResult.alerts || [],
+            insights: analysisResult.insights || [],
+            recommendation: analysisResult.recommendation || 'Análisis completado',
             fullAnalysis: analysisResult.fullAnalysis || analysisResult.summary,
             activityData: activityData,
             llmResponse: {
@@ -174,10 +174,10 @@ export async function POST(request: NextRequest) {
             activityType: activityType,
             activityName: activityData.name,
             summary: analysisResult.summary,
-            positives: analysisResult.positives,
-            alerts: analysisResult.alerts,
-            insights: analysisResult.insights,
-            recommendation: analysisResult.recommendation,
+            positives: analysisResult.positives || [],
+            alerts: analysisResult.alerts || [],
+            insights: analysisResult.insights || [],
+            recommendation: analysisResult.recommendation || 'Análisis completado',
             fullAnalysis: analysisResult.fullAnalysis || analysisResult.summary,
             activityData: activityData,
             llmResponse: {
@@ -233,20 +233,29 @@ async function analyzeForum(client: MoodleAPIClient, forumData: any, openai: Ope
   const isSpecificDiscussion = forumData.forumDetails?.discussions?.length === 1
   const discussionData = isSpecificDiscussion ? forumData.forumDetails.discussions[0] : null
   
-  // Preparar datos para el análisis
+  // Preparar datos para el análisis con nueva estructura jerárquica
   const analysisData = {
     name: forumData.name,
     description: forumData.intro || '',
     config: forumData.forumDetails || {},
     discussions: forumData.forumDetails?.discussions || [],
-    allPosts: forumData.forumDetails?.allPosts || [],
+    allPosts: discussionData?.posts || forumData.forumDetails?.allPosts || [],
     isSpecificDiscussion: isSpecificDiscussion,
     discussionData: discussionData,
+    // NUEVO: Agregar datos de jerarquía y contenido optimizado
+    hierarchy: discussionData?.hierarchy || null,
+    contentSummary: discussionData?.contentSummary || null,
     stats: {
       totalDiscussions: forumData.forumDetails?.numdiscussions || 0,
       totalPosts: forumData.forumDetails?.totalPosts || 0,
       uniqueParticipants: forumData.forumDetails?.uniqueParticipants || 0,
-      avgPostsPerParticipant: forumData.forumDetails?.avgPostsPerParticipant || 0
+      avgPostsPerParticipant: forumData.forumDetails?.avgPostsPerParticipant || 0,
+      // NUEVO: Estadísticas jerárquicas (con fallback)
+      maxDepth: discussionData?.contentSummary?.stats?.maxDepth || 0,
+      teacherPosts: discussionData?.contentSummary?.stats?.teacherPosts || (discussionData?.posts || []).filter(p => p.isTeacherPost).length || 0,
+      studentPosts: discussionData?.contentSummary?.stats?.studentPosts || (discussionData?.posts || []).filter(p => !p.isTeacherPost).length || 0,
+      totalWords: discussionData?.contentSummary?.stats?.totalWords || (discussionData?.posts || []).reduce((sum, p) => sum + (p.wordCount || 0), 0) || 0,
+      conversationFlow: discussionData?.contentSummary?.conversationFlow || `${(discussionData?.posts || []).length} post(s) total`
     }
   }
 
@@ -290,15 +299,29 @@ Eres un experto en análisis educativo. Analiza la siguiente DISCUSIÓN EDUCATIV
 - **Título**: "${discussion.name || discussion.subject}"
 - **Descripción**: ${analysisData.description}
 - **Posts totales**: ${discussion.posts?.length || 0}
-- **Contenido inicial**: ${discussion.message ? discussion.message.substring(0, 300) + '...' : 'Sin contenido inicial'}
+- **Estructura de conversación**: ${analysisData.stats.conversationFlow}
+- **Profundidad máxima**: ${analysisData.stats.maxDepth} niveles de respuestas
+- **Distribución**: ${analysisData.stats.teacherPosts} posts del profesor, ${analysisData.stats.studentPosts} posts de estudiantes
+- **Total palabras**: ${analysisData.stats.totalWords}
+
+## ESTADÍSTICAS EXACTAS QUE DEBES USAR:
+⚠️ IMPORTANTE: Usa EXACTAMENTE estas estadísticas en tu análisis, NO las calcules nuevamente:
+- Posts del profesor: ${analysisData.stats.teacherPosts}
+- Posts de estudiantes: ${analysisData.stats.studentPosts}  
+- Posts totales: ${discussion.posts?.length || 0}
+- Participantes únicos: ${analysisData.stats.uniqueParticipants}
 
 ## DATOS DE PARTICIPACIÓN:
 ${studentResponseInfo}
 
-## CONTENIDO DISPONIBLE:
+## ESTRUCTURA JERÁRQUICA COMPLETA:
+${analysisData.hierarchy ? JSON.stringify(analysisData.hierarchy, null, 2) : 'No disponible'}
+
+## CONTENIDO OPTIMIZADO (Primeros 5 posts con jerarquía):
 ${discussion.posts?.slice(0, 5).map((post: any) => `
-**${post.userFullName}** (${post.isTeacherPost ? 'Profesor' : 'Estudiante'}):
-"${post.message.substring(0, 200)}${post.message.length > 200 ? '...' : ''}"
+${'  '.repeat(post.level || 0)}**${post.userFullName}** (${post.isTeacherPost ? 'Profesor' : 'Estudiante'}) - Nivel ${post.level || 0}:
+${'  '.repeat(post.level || 0)}"${post.message.substring(0, 200)}${post.message.length > 200 ? '...' : ''}"
+${'  '.repeat(post.level || 0)}↳ ${post.childrenCount || 0} respuesta(s) directa(s)
 `).join('\n') || 'No hay posts disponibles para mostrar'}
 
 ---
@@ -329,6 +352,12 @@ Como experto analista, decide la mejor forma de presentar cada aspecto del anál
 - **text**: Para explicaciones narrativas (string con markdown)
 - **cards**: Para métricas destacadas (array de {title, value, unit?, trend?})
 - **metrics**: Para indicadores clave (array de {label, value, unit?})
+
+**INSTRUCCIONES CRÍTICAS SOBRE LAS MÉTRICAS:**
+1. SIEMPRE usa las estadísticas exactas proporcionadas en "ESTADÍSTICAS EXACTAS QUE DEBES USAR"
+2. Si ves "Posts de estudiantes: 2", tu análisis DEBE reflejar que hay 2 posts de estudiantes
+3. NO recalcules ni asumas métricas diferentes a las proporcionadas
+4. En la sección "metrics", usa EXACTAMENTE los valores proporcionados
 
 **COLORES SUGERIDOS:** blue, green, yellow, red, purple, gray
 **ICONOS:** Usa emojis relevantes (📊 📈 📋 ⚠️ 💡 🎯 📝 etc.)
