@@ -155,7 +155,7 @@ export default function CronAdminPage() {
           </Button>
         </div>
 
-        {status ? (
+        {status && status.scheduler ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="flex items-center gap-2">
               <div className={`w-3 h-3 rounded-full ${
@@ -166,16 +166,16 @@ export default function CronAdminPage() {
             
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4" />
-              <span>Job Matutino: {status.scheduler.jobs.morning}</span>
+              <span>Job Matutino: {status.scheduler.jobs?.morning || 'N/A'}</span>
             </div>
             
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4" />
-              <span>Job Vespertino: {status.scheduler.jobs.afternoon}</span>
+              <span>Job Vespertino: {status.scheduler.jobs?.afternoon || 'N/A'}</span>
             </div>
             
             <div className="flex items-center gap-2">
-              {status.service.isUpdating ? (
+              {status.service?.isUpdating ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin text-blue-500" />
                   <span className="text-blue-500">Actualizando...</span>
@@ -191,14 +191,14 @@ export default function CronAdminPage() {
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4" />
               <span>
-                Última: {status.service.lastUpdate ? formatDate(status.service.lastUpdate) : 'Nunca'}
+                Última: {status.service?.lastUpdate ? formatDate(status.service.lastUpdate) : 'Nunca'}
               </span>
             </div>
             
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4" />
               <span>
-                Próxima: {status.service.nextScheduledUpdates[0] ? 
+                Próxima: {status.service?.nextScheduledUpdates?.[0] ? 
                   formatDate(status.service.nextScheduledUpdates[0]) : 'No programada'}
               </span>
             </div>
@@ -215,7 +215,7 @@ export default function CronAdminPage() {
         <div className="flex flex-wrap gap-3">
           <Button
             onClick={() => handleAction('start')}
-            disabled={loading || status?.scheduler.initialized}
+            disabled={loading || status?.scheduler?.initialized}
             variant="default"
           >
             <Play className="w-4 h-4 mr-2" />
@@ -224,7 +224,7 @@ export default function CronAdminPage() {
           
           <Button
             onClick={() => handleAction('stop')}
-            disabled={loading || !status?.scheduler.initialized}
+            disabled={loading || !status?.scheduler?.initialized}
             variant="destructive"
           >
             <Pause className="w-4 h-4 mr-2" />
@@ -242,7 +242,7 @@ export default function CronAdminPage() {
           
           <Button
             onClick={() => handleAction('trigger')}
-            disabled={loading || status?.service.isUpdating}
+            disabled={loading || status?.service?.isUpdating}
             variant="secondary"
           >
             <Play className="w-4 h-4 mr-2" />
