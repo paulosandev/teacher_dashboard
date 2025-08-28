@@ -81,7 +81,12 @@ debug-*.js
 capture-*.js
 get-*.js
 fix-*.js
+calculate-*.js          # Scripts de cálculo temporales
 *.test.tsx              # Archivos de test temporales
+
+# Scripts de testing y análisis temporal
+scripts/test-*-analysis.ts
+scripts/test-openai-*.ts
 
 # Archivos de prompting y ejemplos (no necesarios para producción)
 prompting/
