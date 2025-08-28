@@ -1,0 +1,130 @@
+
+========================================
+REPORTE TÉCNICO DE ANÁLISIS COURSE-BASED
+========================================
+
+📊 INFORMACIÓN GENERAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• ID de Solicitud: req_course_analysis_1755755275965
+• Fecha y Hora: 2025-08-21T05:47:55.965Z
+• Curso ID: 237
+• Grupo ID: 2431
+• Analizado por: julioprofe (Julio Profe)
+• Estado: ✅ EXITOSO
+• Tiempo de procesamiento: 10084ms
+
+🤖 DETALLES DE IA (OpenAI)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Modelo utilizado: o3-mini
+• Tokens utilizados:
+  - Prompt: 588
+  - Respuesta: 824
+  - Total: 1412
+• Costo estimado: $0.0671 USD
+
+📝 PROMPT ENVIADO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Como experto en análisis educativo, realiza un análisis PROFUNDO del curso 237:
+
+📊 **INFORMACIÓN DEL CURSO**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Estudiantes matriculados: 100
+• Fecha de análisis: 8/20/2025
+• Estudiantes ACTIVOS: 0
+• Estudiantes INACTIVOS: 100
+• Analizado por: julioprofe
+
+📅 **ESTRUCTURA SEMANAL**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Secciones totales: 11
+• Secciones ACTIVAS: 0
+• Secciones completadas: 11
+
+💬 **ANÁLISIS DE PARTICIPACIÓN**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Total foros: 6
+• Total discusiones: 0
+
+Proporciona un análisis que incluya:
+
+1. **Fortalezas** (3-4 puntos específicos)
+2. **Alertas críticas** (problemas urgentes)
+3. **Estudiantes en riesgo** (números específicos)
+4. **Recomendaciones** (acciones concretas)
+5. **Próximo paso** (acción prioritaria)
+6. **Estado general** (salud del curso)
+
+INSTRUCCIONES ESPECIALES PARA PRESENTACIÓN VISUAL:
+- Si tienes datos cuantitativos importantes (métricas, porcentajes, conteos), incluye una tabla en "metricsTable" usando formato "Indicador | Valor"
+- Para análisis complejos que requieren numeración específica, usa "structuredInsights.numbered"
+- Para puntos clave sin orden específico, usa "structuredInsights.bullets"
+- Incluir tanto formatos estructurados como tradicionales para compatibilidad
+
+Responde ÚNICAMENTE en formato JSON:
+{
+  "strengths": ["fortaleza 1", "fortaleza 2", "fortaleza 3"],
+  "alerts": ["alerta 1", "alerta 2"],
+  "studentsAtRisk": "100 estudiantes sin participación detectada",
+  "recommendations": ["recomendación 1", "recomendación 2"],
+  "nextStep": "acción prioritaria concreta",
+  "overallHealth": "buena/regular/necesita atención",
+  "metricsTable": "Indicador | Valor observado
+Estudiantes totales | 100
+Estudiantes activos | 0 (0%)
+Secciones activas | 0/11
+Foros analizados | 6
+Discusiones totales | 0",
+  "structuredInsights": {
+    "numbered": ["1. Análisis específico que requiere orden numerado", "2. Siguiente punto en orden de importancia"],
+    "bullets": ["• Punto clave sin orden específico", "• Otro insight importante", "• Observación adicional relevante"]
+  }
+}
+
+🔄 RESPUESTA COMPLETA DE OpenAI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{
+  "id": "chatcmpl-C6sRUwrvYjceUfR3Hs0hpmlqDEpcW",
+  "object": "chat.completion",
+  "created": 1755755280,
+  "model": "o3-mini-2025-01-31",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"strengths\": [\n    \"Contenido estructurado y completado en todas las secciones (11 completadas)\",\n    \"Diseño del curso que incluye múltiples foros (6 foros disponibles) para fomentar la interacción\",\n    \"Claridad en la organización semanal del curso, lo que facilita la navegación y seguimiento\"\n  ],\n  \"alerts\": [\n    \"Cero estudiantes activos; indica una falta de compromiso o problema en la retención\",\n    \"Ausencia de discusiones a pesar de la existencia de foros, lo que resalta la falta de interacción\"\n  ],\n  \"studentsAtRisk\": \"100 estudiantes sin participación detectada\",\n  \"recommendations\": [\n    \"Implementar estrategias de reactivación y motivación para involucrar a los estudiantes inactivos\",\n    \"Fomentar la participación mediante anuncios, actividades interactivas y seguimiento personalizado\"\n  ],\n  \"nextStep\": \"Priorizar la reactivación de los estudiantes inactivos con un plan de intervención inmediato que incluya comunicación directa y actividades interactivas\",\n  \"overallHealth\": \"necesita atención\",\n  \"metricsTable\": \"Indicador | Valor observado\\nEstudiantes totales | 100\\nEstudiantes activos | 0 (0%)\\nSecciones activas | 0/11\\nForos analizados | 6\\nDiscusiones totales | 0\",\n  \"structuredInsights\": {\n    \"numbered\": [\n      \"1. La estructura del curso está completa, pero la falta de estudiantes activos indica un problema subyacente en la participación.\",\n      \"2. Es urgente implementar estrategias de interacción y comunicación para revertir la inactividad generalizada.\"\n    ],\n    \"bullets\": [\n      \"• La ausencia total de actividad estudiantil resalta la necesidad de un plan de reactivación inmediato.\",\n      \"• La existencia de foros sin discusión sugiere que se deben revisar y ajustar las estrategias de compromiso.\",\n      \"• Monitorear el avance después de implementar las recomendaciones permitirá medir el impacto de las intervenciones.\"\n    ]\n  }\n}",
+        "refusal": null,
+        "annotations": []
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 588,
+    "completion_tokens": 824,
+    "total_tokens": 1412,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 384,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    }
+  },
+  "service_tier": "default",
+  "system_fingerprint": "fp_c278fb013d"
+}
+
+
+
+📈 MÉTRICAS DE RENDIMIENTO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Inicio del procesamiento: 8/20/2025, 11:47:55 PM
+• Duración total: 10084ms
+• Eficiencia: 140.02 tokens/segundo
+
+🔚 FIN DEL REPORTE
+Generado automáticamente por el Dashboard Académico UTEL - Sistema Course-Based V2

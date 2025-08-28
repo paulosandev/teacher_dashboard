@@ -35,11 +35,7 @@ export default function DashboardContent({
   initialGroupId
 }: DashboardContentProps) {
   // Debug: verificar valores iniciales
-  console.log('🔍 DashboardContent - Props iniciales:', {
-    initialCourseId,
-    initialGroupId,
-    coursesWithGroupsCount: coursesWithGroups.length
-  })
+  // console.log('🔍 DashboardContent - Props iniciales:', { initialCourseId, initialGroupId })
   
   const [selectedCourse, setSelectedCourse] = useState<string | null>(initialCourseId || null)
   const [selectedGroup, setSelectedGroup] = useState<string | null>(initialGroupId || null)
@@ -57,8 +53,6 @@ export default function DashboardContent({
   // Ya no hay selección automática - el usuario debe elegir manualmente
 
   const handleSelectionChange = async (courseId: string, groupId: string) => {
-    console.log('🎯 Cambio de selección:', courseId, 'Grupo:', groupId)
-    
     // ACTIVAR LOADER INMEDIATAMENTE
     setIsChangingCourse(true)
     setIsGeneratingAnalysis(true)
@@ -69,7 +63,7 @@ export default function DashboardContent({
     setSelectedGroup(groupId)
     
     // Esperar un poco para que React procese la limpieza del estado
-    await new Promise(resolve => setTimeout(resolve, 100))
+    await new Promise(resolve => setTimeout(resolve, 200))
     
     try {
       // Refrescar análisis desde la API para el nuevo grupo
@@ -82,10 +76,6 @@ export default function DashboardContent({
 
   const refreshAnalysisForCourse = async (courseId: string, groupId: string) => {
     try {
-      console.log('🔄 Refrescando análisis para curso:', courseId, 'grupo:', groupId)
-      
-      // El estado de carga ya está activo desde handleSelectionChange
-      
       const response = await fetch('/api/analysis', {
         method: 'GET',
         headers: {
@@ -106,17 +96,13 @@ export default function DashboardContent({
         const courseMatches = cardMoodleId === courseId
         const cardMoodleGroupId = card.groupId
         const groupMatches = cardMoodleGroupId === groupId
-        console.log(`   🔄 Comparando: curso card(${cardMoodleId}) === selected(${courseId}) → ${courseMatches}`)
-        console.log(`   🔄 Comparando: grupo card(${cardMoodleGroupId}) === selected(${groupId}) → ${groupMatches}`)
         return courseMatches && groupMatches
       })
       
-      console.log(`✅ Análisis refrescados: ${filteredCards.length} encontrados`)
       setAnalysisCards(filteredCards)
       
       // Si no hay análisis para este grupo específico, generar uno nuevo
       if (filteredCards.length === 0) {
-        console.log('📝 No hay análisis para este grupo, generando...')
         await checkAndTriggerAnalysis(courseId, groupId)
       }
       
@@ -131,7 +117,6 @@ export default function DashboardContent({
 
   const checkAndTriggerAnalysis = async (courseId: string, groupId: string) => {
     try {
-      console.log('🔍 Verificando contenido y generando análisis...')
       setIsGeneratingAnalysis(true)
       
       const response = await fetch('/api/analysis/generate-real', {
@@ -240,65 +225,75 @@ export default function DashboardContent({
         </section>
 
         {/* Cards de actividades */}
-        {isChangingCourse ? (
-          // Estado de carga durante cambio de curso
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
-            <div className="flex flex-col items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-              <p className="text-lg font-medium text-blue-700 mb-2">
-                🔄 Cambiando de curso...
-              </p>
-              <p className="text-sm text-blue-600">
-                Cargando actividades y análisis del nuevo grupo seleccionado.
-              </p>
-            </div>
-          </div>
-        ) : analysisCards.length > 0 ? (
-          <>
-            {/* Agrupar tarjetas de a pares para grid de 2 columnas */}
-            {(() => {
-              const cards = [...analysisCards]
-              const sections = []
-              
-              while (cards.length > 0) {
-                // Si quedan 2 o más tarjetas, tomar 2 para el grid
-                if (cards.length >= 2) {
-                  const pair = cards.splice(0, 2)
-                  sections.push(
-                    <section 
-                      key={`grid-${pair[0].id}`} 
-                      className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8" 
-                      aria-label="Resumen de actividades"
-                    >
-                      {pair.map((card) => (
+        {(() => {
+          if (isChangingCourse) {
+            return (
+              // Estado de carga durante cambio de curso
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
+                <div className="flex flex-col items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                  <p className="text-lg font-medium text-blue-700 mb-2">
+                    🔄 Cambiando de curso...
+                  </p>
+                  <p className="text-sm text-blue-600">
+                    Cargando actividades y análisis del nuevo grupo seleccionado.
+                  </p>
+                </div>
+              </div>
+            )
+          }
+          
+          if (analysisCards.length > 0) {
+            return (
+              <>
+                {/* Agrupar tarjetas de a pares para grid de 2 columnas */}
+                {(() => {
+                  const cards = [...analysisCards]
+                  const sections = []
+                  
+                  while (cards.length > 0) {
+                    // Si quedan 2 o más tarjetas, tomar 2 para el grid
+                    if (cards.length >= 2) {
+                      const pair = cards.splice(0, 2)
+                      sections.push(
+                        <section 
+                          key={`grid-${pair[0].id}`} 
+                          className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8" 
+                          aria-label="Resumen de actividades"
+                        >
+                          {pair.map((card) => (
+                            <AnalysisCard 
+                              key={card.id}
+                              data={card}
+                              onViewMore={() => handleViewMore(card.id)}
+                              onReanalyze={() => handleReanalyze(card)}
+                            />
+                          ))}
+                        </section>
+                      )
+                    } else {
+                      // Si queda solo 1 tarjeta (impar), mostrarla a ancho completo
+                      const single = cards.splice(0, 1)[0]
+                      sections.push(
+                        <section key={`full-${single.id}`} className="mb-8">
                         <AnalysisCard 
-                          key={card.id}
-                          data={card}
-                          onViewMore={() => handleViewMore(card.id)}
-                          onReanalyze={() => handleReanalyze(card)}
-                        />
-                      ))}
-                    </section>
-                  )
-                } else {
-                  // Si queda solo 1 tarjeta (impar), mostrarla a ancho completo
-                  const single = cards.splice(0, 1)[0]
-                  sections.push(
-                    <section key={`full-${single.id}`} className="mb-8">
-                    <AnalysisCard 
-                        data={single}
-                        onViewMore={() => handleViewMore(single.id)}
-                        onReanalyze={() => handleReanalyze(single)}
-                      />
-                    </section>
-                  )
-                }
-              }
-              
-              return sections
-            })()}
-          </>
-        ) : (
+                            data={single}
+                            onViewMore={() => handleViewMore(single.id)}
+                            onReanalyze={() => handleReanalyze(single)}
+                          />
+                        </section>
+                      )
+                    }
+                  }
+                  
+                  return sections
+                })()}
+              </>
+            )
+          }
+          
+          // Estado por defecto: Sin análisis disponibles
+          return (
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-8 text-center">
             {isGeneratingAnalysis && !isChangingCourse ? (
               // Estado: Generando análisis
@@ -398,7 +393,8 @@ export default function DashboardContent({
               </>
             )}
           </div>
-        )}
+          )
+        })()}
 
       {/* Espaciado al final */}
       <div className="h-16"></div>

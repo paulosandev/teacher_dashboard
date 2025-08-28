@@ -1,12 +1,12 @@
 /**
  * API endpoints para enrolments
- * Estos endpoints se comunican con el servicio de enrolments
+ * Usa el cliente integrado con túnel SSH directo
  */
 
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/app/api/auth/[...nextauth]/route'
-import { getEnrolmentServiceClient } from '@/lib/services/enrolment-client'
+import { getIntegratedEnrolmentClient } from '@/lib/db/integrated-enrolment-client'
 
 export async function GET(
   request: Request,
@@ -15,11 +15,11 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions)
     const { action } = params
-    const enrolmentClient = getEnrolmentServiceClient()
+    const enrolmentClient = getIntegratedEnrolmentClient()
 
     // Health check público
     if (action === 'health') {
-      const isHealthy = await enrolmentClient.checkHealth()
+      const isHealthy = enrolmentClient.getConnectionStatus()
       return NextResponse.json({
         success: true,
         healthy: isHealthy,
@@ -40,30 +40,49 @@ export async function GET(
     switch (action) {
       case 'my-aulas': {
         // Obtener las aulas del profesor actual
-        const aulas = await enrolmentClient.getTeacherAulas(userEmail)
+        const result = await enrolmentClient.getEnrolmentsByEmail(userEmail)
         
         return NextResponse.json({
           success: true,
           email: userEmail,
-          aulas,
+          aulas: result.aulas,
           timestamp: new Date().toISOString()
         })
       }
 
       case 'my-enrolments': {
         // Obtener todos los enrolments del profesor actual
-        const enrolments = await enrolmentClient.getEnrolmentsByEmail(userEmail)
+        const result = await enrolmentClient.getEnrolmentsByEmail(userEmail)
         
-        if (!enrolments) {
-          return NextResponse.json(
-            { success: false, error: 'No se pudieron obtener los enrolments' },
-            { status: 500 }
-          )
-        }
+        // Agrupar por aula para el formato esperado
+        const enrolmentsByAula = result.enrolments.reduce((acc: any, enr) => {
+          if (!acc[enr.aulaId]) {
+            acc[enr.aulaId] = {
+              aulaId: enr.aulaId,
+              aulaUrl: enr.aulaUrl,
+              courses: []
+            }
+          }
+          
+          acc[enr.aulaId].courses.push({
+            courseId: enr.courseId,
+            courseName: enr.courseName,
+            courseShortName: enr.courseShortName,
+            groupId: enr.groupId,
+            groupName: enr.groupName
+          })
+          
+          return acc
+        }, {})
         
         return NextResponse.json({
           success: true,
-          ...enrolments,
+          email: userEmail,
+          totalEnrolments: result.totalEnrolments,
+          aulasCount: result.aulasCount,
+          aulas: result.aulas,
+          enrolmentsByAula: Object.values(enrolmentsByAula),
+          rawEnrolments: result.enrolments,
           timestamp: new Date().toISOString()
         })
       }
@@ -72,30 +91,18 @@ export async function GET(
         // Verificar si el usuario actual es profesor
         const result = await enrolmentClient.checkIfTeacher(userEmail)
         
-        if (!result) {
-          return NextResponse.json(
-            { success: false, error: 'No se pudo verificar el rol' },
-            { status: 500 }
-          )
-        }
-        
         return NextResponse.json({
           success: true,
-          ...result,
+          email: userEmail,
+          isTeacher: result.isTeacher,
+          userData: result.userData,
           timestamp: new Date().toISOString()
         })
       }
 
       case 'stats': {
-        // Obtener estadísticas generales (puede requerir permisos especiales)
+        // Obtener estadísticas generales
         const stats = await enrolmentClient.getStats()
-        
-        if (!stats) {
-          return NextResponse.json(
-            { success: false, error: 'No se pudieron obtener las estadísticas' },
-            { status: 500 }
-          )
-        }
         
         return NextResponse.json({
           success: true,
@@ -142,11 +149,11 @@ export async function POST(
     }
 
     const body = await request.json()
-    const enrolmentClient = getEnrolmentServiceClient()
+    const enrolmentClient = getIntegratedEnrolmentClient()
 
     switch (action) {
       case 'by-email': {
-        // Consultar enrolments por email específico (admin only?)
+        // Consultar enrolments por email específico
         const { email } = body
         
         if (!email) {
@@ -156,18 +163,19 @@ export async function POST(
           )
         }
         
-        const enrolments = await enrolmentClient.getEnrolmentsByEmail(email)
+        const result = await enrolmentClient.getEnrolmentsByEmail(email)
         
         return NextResponse.json({
-          success: !!enrolments,
-          ...enrolments
+          success: true,
+          email,
+          ...result
         })
       }
 
       case 'by-aula': {
         // Obtener cursos del profesor en una aula específica
         const { aulaId } = body
-        const userEmail = session.user.email
+        const userEmail = session.user.email!
         
         if (!aulaId) {
           return NextResponse.json(
@@ -176,12 +184,21 @@ export async function POST(
           )
         }
         
-        const courses = await enrolmentClient.getTeacherCoursesByAula(userEmail, aulaId)
+        const result = await enrolmentClient.getEnrolmentsByEmail(userEmail)
+        const coursesInAula = result.enrolments
+          .filter(enr => enr.aulaId === aulaId)
+          .map(enr => ({
+            courseId: enr.courseId,
+            courseName: enr.courseName,
+            courseShortName: enr.courseShortName,
+            groupId: enr.groupId,
+            groupName: enr.groupName
+          }))
         
         return NextResponse.json({
           success: true,
           aulaId,
-          courses,
+          courses: coursesInAula,
           timestamp: new Date().toISOString()
         })
       }

@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'courseId is required' }, { status: 400 })
     }
 
-    console.log(`🔍 Buscando caché persistente para curso: ${courseId}`)
+//     console.log(`🔍 Buscando caché persistente para curso: ${courseId}`)
 
     // Buscar caché en la base de datos
     const cachedData = await prisma.courseCache.findUnique({
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    console.log(`✅ Caché encontrado para curso ${courseId}, válido hasta: ${cachedData.expiresAt}`)
+//     console.log(`✅ Caché encontrado para curso ${courseId}, válido hasta: ${cachedData.expiresAt}`)
 
     // Devolver datos del caché
     return NextResponse.json({ 
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'courseId is required' }, { status: 400 })
     }
 
-    console.log(`💾 Guardando caché persistente para curso: ${courseId}`)
+//     console.log(`💾 Guardando caché persistente para curso: ${courseId}`)
 
     const now = new Date()
     const expiresAt = new Date(now.getTime() + 60 * 60 * 1000) // 1 hora
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    console.log(`✅ Caché guardado para curso ${courseId}, expira: ${expiresAt}`)
+//     console.log(`✅ Caché guardado para curso ${courseId}, expira: ${expiresAt}`)
 
     return NextResponse.json({ 
       success: true, 

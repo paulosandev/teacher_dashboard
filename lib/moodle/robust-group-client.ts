@@ -45,7 +45,7 @@ export class RobustGroupClient {
     const siteInfo = await this.client.callMoodleAPI('core_webservice_get_site_info', {})
     this.userId = siteInfo.userid
     this.userInfo = siteInfo
-    console.log(`🔑 Cliente inicializado para: ${siteInfo.fullname} (ID: ${siteInfo.userid})`)
+//     console.log(`🔑 Cliente inicializado para: ${siteInfo.fullname} (ID: ${siteInfo.userid})`)
   }
 
   /**
@@ -67,7 +67,7 @@ export class RobustGroupClient {
         visible: course.visible !== false
       }))
 
-      console.log(`✅ Cursos accesibles: ${courses.length}`)
+//       console.log(`✅ Cursos accesibles: ${courses.length}`)
       return courses
 
     } catch (error) {
@@ -92,7 +92,7 @@ export class RobustGroupClient {
         description: group.description || ''
       }))
 
-      console.log(`✅ Grupos del curso ${courseId}: ${groups.length}`)
+//       console.log(`✅ Grupos del curso ${courseId}: ${groups.length}`)
       return groups
 
     } catch (error) {
@@ -131,7 +131,7 @@ export class RobustGroupClient {
         })) || []
       }))
 
-      console.log(`✅ Miembros del grupo ${groupId}: ${members.length}`)
+//       console.log(`✅ Miembros del grupo ${groupId}: ${members.length}`)
       return members
 
     } catch (error) {
@@ -185,8 +185,8 @@ export class RobustGroupClient {
         }
       })
 
-      console.log(`✅ Curso completo cargado: ${courseInfo.fullname}`)
-      console.log(`   📊 ${groups.length} grupos, ${enrolledUsers.length} usuarios totales`)
+//       console.log(`✅ Curso completo cargado: ${courseInfo.fullname}`)
+//       console.log(`   📊 ${groups.length} grupos, ${enrolledUsers.length} usuarios totales`)
 
       return {
         ...courseInfo,
@@ -218,7 +218,7 @@ export class RobustGroupClient {
         description: group.description || ''
       })) || []
 
-      console.log(`✅ Grupos del usuario en curso ${courseId}: ${groups.length}`)
+//       console.log(`✅ Grupos del usuario en curso ${courseId}: ${groups.length}`)
       return groups
 
     } catch (error) {
@@ -269,7 +269,7 @@ export class RobustGroupClient {
         averageMembersPerGroup: Math.round(averageMembersPerGroup * 100) / 100
       }
 
-      console.log(`📊 Estadísticas del curso ${courseId}:`, stats)
+//       console.log(`📊 Estadísticas del curso ${courseId}:`, stats)
       return stats
 
     } catch (error) {

@@ -50,7 +50,7 @@ export function useMoodleData(enabled = true): UseMoodleDataResult {
 
       if (coursesData.success && coursesData.data) {
         setCourses(coursesData.data)
-        console.log(`✅ Cargados ${coursesData.count} cursos desde Moodle`)
+//         console.log(`✅ Cargados ${coursesData.count} cursos desde Moodle`)
       } else {
         throw new Error('No se pudieron obtener los cursos')
       }

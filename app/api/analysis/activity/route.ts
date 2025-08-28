@@ -301,28 +301,107 @@ Eres un experto en análisis educativo. Analiza la siguiente DISCUSIÓN EDUCATIV
 - **Posts totales**: ${discussion.posts?.length || 0}
 - **Estructura de conversación**: ${analysisData.stats.conversationFlow}
 - **Profundidad máxima**: ${analysisData.stats.maxDepth} niveles de respuestas
-- **Distribución**: ${analysisData.stats.teacherPosts} posts del profesor, ${analysisData.stats.studentPosts} posts de estudiantes
+- **Distribución**: ${analysisData.stats.teacherPosts} aportaciones del profesor, ${analysisData.stats.studentPosts} aportaciones de estudiantes
 - **Total palabras**: ${analysisData.stats.totalWords}
 
 ## ESTADÍSTICAS EXACTAS QUE DEBES USAR:
 ⚠️ IMPORTANTE: Usa EXACTAMENTE estas estadísticas en tu análisis, NO las calcules nuevamente:
-- Posts del profesor: ${analysisData.stats.teacherPosts}
-- Posts de estudiantes: ${analysisData.stats.studentPosts}  
+${analysisData.stats.teacherPosts > 0 ? `- Aportaciones del profesor: ${analysisData.stats.teacherPosts}` : ''}
+- Aportaciones totales: ${discussion.posts?.length || 0}
+- Participantes únicos: ${analysisData.stats.uniqueParticipants}
+${(() => {
+  // Identificar profesores que sí participaron
+  const professorNames = ['Junior Rafael Figueroa Olmedo', 'Patricia Abigail Alejandria Vallejos', 'Jose Antonio Moguel Rivera', 'Erick Torres Carreño'];
+  const participatingProfessors: Set<string> = new Set();
+  
+  discussion.posts?.forEach((p: any) => {
+    if (professorNames.includes(p.userFullName)) {
+      participatingProfessors.add(p.userFullName);
+    }
+  });
+  
+  if (participatingProfessors.size > 0) {
+    return `📚 Profesores participantes: ${Array.from(participatingProfessors).join(', ')}`;
+  }
+  return '';
+})()}  
 - Posts totales: ${discussion.posts?.length || 0}
 - Participantes únicos: ${analysisData.stats.uniqueParticipants}
 
 ## DATOS DE PARTICIPACIÓN:
 ${studentResponseInfo}
 
-## ESTRUCTURA JERÁRQUICA COMPLETA:
-${analysisData.hierarchy ? JSON.stringify(analysisData.hierarchy, null, 2) : 'No disponible'}
+## ESTRUCTURA JERÁRQUICA:
+${(() => {
+  if (!analysisData.hierarchy || analysisData.hierarchy.length === 0) {
+    return 'No disponible - verificar si hay respuestas anidadas';
+  }
+  
+  // Función para renderizar jerarquía de forma compacta
+  const renderHierarchy = (items: any[], depth = 0): string => {
+    return items.slice(0, 10).map(item => {
+      const indent = '  '.repeat(depth);
+      const preview = item.message ? item.message.substring(0, 100) + '...' : '';
+      let result = `${indent}├─ ${item.author}: "${preview}"\n`;
+      if (item.children && item.children.length > 0) {
+        result += renderHierarchy(item.children, depth + 1);
+      }
+      return result;
+    }).join('');
+  };
+  
+  return renderHierarchy(analysisData.hierarchy);
+})()}
 
-## CONTENIDO OPTIMIZADO (Primeros 5 posts con jerarquía):
-${discussion.posts?.slice(0, 5).map((post: any) => `
-${'  '.repeat(post.level || 0)}**${post.userFullName}** (${post.isTeacherPost ? 'Profesor' : 'Estudiante'}) - Nivel ${post.level || 0}:
-${'  '.repeat(post.level || 0)}"${post.message.substring(0, 200)}${post.message.length > 200 ? '...' : ''}"
-${'  '.repeat(post.level || 0)}↳ ${post.childrenCount || 0} respuesta(s) directa(s)
-`).join('\n') || 'No hay posts disponibles para mostrar'}
+## CONTENIDO COMPLETO Y ESTRUCTURA DE LA DISCUSIÓN:
+${(() => {
+  const posts = discussion.posts || [];
+  const totalPosts = posts.length;
+  // Lista de nombres conocidos de profesores
+  const professorNames = [
+    'Junior Rafael Figueroa Olmedo', 
+    'Patricia Abigail Alejandria Vallejos', 
+    'Jose Antonio Moguel Rivera',
+    'Erick Torres Carreño',
+    'NOEMI ADRIANA MORALES MÉNDEZ'
+  ];
+  
+  // Detectar automáticamente IDs de profesores
+  const otherProfessorIds: number[] = [];
+  posts.forEach((post: any) => {
+    if (!post.isTeacherPost && professorNames.includes(post.userFullName) && !otherProfessorIds.includes(post.userId)) {
+      otherProfessorIds.push(post.userId);
+    }
+  });
+  
+  // Estrategia adaptativa según cantidad de posts
+  if (totalPosts <= 10) {
+    // Pocos posts: incluir todo completo
+    return posts.map((post: any) => `
+${'  '.repeat(post.level || 0)}**${post.userFullName}** (${post.isTeacherPost || otherProfessorIds.includes(post.userId) || professorNames.includes(post.userFullName) ? 'Profesor' : 'Estudiante'}) - Nivel ${post.level || 0}:
+${'  '.repeat(post.level || 0)}"${post.message}"
+${'  '.repeat(post.level || 0)}↳ ${post.childrenCount || 0} respuesta(s)
+`).join('\n');
+  } else if (totalPosts <= 30) {
+    // Posts moderados: mensaje limitado a 500 chars
+    return posts.map((post: any) => `
+**${post.userFullName}** (${post.isTeacherPost || otherProfessorIds.includes(post.userId) || professorNames.includes(post.userFullName) ? 'Profesor' : 'Estudiante'}):
+"${post.message.substring(0, 500)}${post.message.length > 500 ? '...' : ''}"
+`).join('\n');
+  } else {
+    // Muchos posts: muestreo estratégico
+    const profPosts = posts.filter((p: any) => p.isTeacherPost || otherProfessorIds.includes(p.userId));
+    const studentPosts = posts.filter((p: any) => !p.isTeacherPost && !otherProfessorIds.includes(p.userId));
+    
+    return `📊 Total: ${totalPosts} aportaciones (${profPosts.length} de profesores, ${studentPosts.length} de estudiantes)
+    
+MUESTRA DE APORTACIONES:
+${posts.slice(0, 20).map((post: any) => `
+**${post.userFullName}** (${post.isTeacherPost || otherProfessorIds.includes(post.userId) || professorNames.includes(post.userFullName) ? 'Profesor' : 'Estudiante'}):
+"${post.message.substring(0, 300)}..."
+`).join('\n')}`;
+  }
+})() || 'No hay posts disponibles'}
 
 ---
 
@@ -459,7 +538,7 @@ Como experto analista educativo, decide la mejor forma de presentar el análisis
   console.log(`   🔗 Modelo: o3-mini`)
   console.log(`   📝 Tipo de contenido: ${analysisData.isSpecificDiscussion ? 'Discusión individual' : 'Foro con múltiples discusiones'}`)
   console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
-  console.log(`   ⚙️ Configuración: max_completion_tokens=2500 (modelo o3-mini)`)
+  console.log(`   ⚙️ Configuración: max_completion_tokens=4000 (modelo o3-mini)`)
 
   // CAPTURAR PROMPT COMPLETO PARA DEBUGGING
   const fs = require('fs');
@@ -472,7 +551,7 @@ Como experto analista educativo, decide la mejor forma de presentar el análisis
     userPrompt: prompt,
     rawData: analysisData,
     model: "o3-mini",
-    maxTokens: 2500
+    maxTokens: 4000
   };
   
   try {
@@ -488,14 +567,14 @@ Como experto analista educativo, decide la mejor forma de presentar el análisis
       messages: [
         {
           role: "system",
-          content: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. Incluye datos cuantitativos en metricsTable cuando sea relevante, y separa insights en numerados (para orden específico) y bullets (para puntos generales). El fullAnalysis debe usar markdown con secciones ##."
+          content: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. IMPORTANTE: Los títulos de secciones NO deben tener formato markdown (##) en el contenido, van en el campo 'title'. El contenido debe ser texto limpio. Usa terminología educativa: 'aportaciones' en lugar de 'posts'. Cuando menciones participación de profesores, usa sus nombres específicos."
         },
         {
           role: "user",
           content: prompt
         }
       ],
-      max_completion_tokens: 2500
+      max_completion_tokens: 4000
     })
 
     const analysisText = completion.choices[0]?.message?.content || ''
@@ -648,7 +727,7 @@ Como experto analista educativo, decide la mejor forma de presentar cada aspecto
   console.log(`🚀 ENVIANDO A OpenAI - ASIGNACIÓN:`)
   console.log(`   🔗 Modelo: o3-mini`)
   console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
-  console.log(`   ⚙️ Configuración: max_completion_tokens=2500 (modelo o3-mini)`)
+  console.log(`   ⚙️ Configuración: max_completion_tokens=4000 (modelo o3-mini)`)
 
   // CAPTURAR PROMPT COMPLETO PARA DEBUGGING
   const fs = require('fs');
@@ -661,7 +740,7 @@ Como experto analista educativo, decide la mejor forma de presentar cada aspecto
     userPrompt: prompt,
     rawData: analysisData,
     model: "o3-mini",
-    maxTokens: 2500
+    maxTokens: 4000
   };
   
   try {
@@ -677,14 +756,14 @@ Como experto analista educativo, decide la mejor forma de presentar cada aspecto
       messages: [
         {
           role: "system",
-          content: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. Incluye datos cuantitativos en metricsTable cuando sea relevante, y separa insights en numerados (para orden específico) y bullets (para puntos generales). El fullAnalysis debe usar markdown con secciones ##."
+          content: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. IMPORTANTE: Los títulos de secciones NO deben tener formato markdown (##) en el contenido, van en el campo 'title'. El contenido debe ser texto limpio. Usa terminología educativa: 'aportaciones' en lugar de 'posts'. Cuando menciones participación de profesores, usa sus nombres específicos."
         },
         {
           role: "user",
           content: prompt
         }
       ],
-      max_completion_tokens: 2500
+      max_completion_tokens: 4000
     })
 
     const analysisText = completion.choices[0]?.message?.content || ''
@@ -910,7 +989,7 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
   console.log(`🚀 ENVIANDO A OpenAI - ${typeLabel.toUpperCase()}:`)
   console.log(`   🔗 Modelo: o3-mini`)
   console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
-  console.log(`   ⚙️ Configuración: max_completion_tokens=2500 (modelo o3-mini)`)
+  console.log(`   ⚙️ Configuración: max_completion_tokens=4000 (modelo o3-mini)`)
 
   // CAPTURAR PROMPT COMPLETO PARA DEBUGGING
   const fs = require('fs');
@@ -923,7 +1002,7 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
     userPrompt: prompt,
     rawData: analysisData,
     model: "o3-mini",
-    maxTokens: 2500
+    maxTokens: 4000
   };
   
   try {
@@ -939,14 +1018,14 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
       messages: [
         {
           role: "system",
-          content: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. Incluye datos cuantitativos en metricsTable cuando sea relevante, y separa insights en numerados (para orden específico) y bullets (para puntos generales). El fullAnalysis debe usar markdown con secciones ##."
+          content: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. IMPORTANTE: Los títulos de secciones NO deben tener formato markdown (##) en el contenido, van en el campo 'title'. El contenido debe ser texto limpio. Usa terminología educativa: 'aportaciones' en lugar de 'posts'. Cuando menciones participación de profesores, usa sus nombres específicos."
         },
         {
           role: "user",
           content: prompt
         }
       ],
-      max_completion_tokens: 2500
+      max_completion_tokens: 4000
     })
 
     const analysisText = completion.choices[0]?.message?.content || ''

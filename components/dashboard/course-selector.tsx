@@ -25,11 +25,11 @@ interface CourseSelectorProps {
 
 export default function CourseSelector({ courses, onSelectionChange, selectedCourseId, selectedGroupId }: CourseSelectorProps) {
   // Debug: verificar valores recibidos
-  console.log('🎯 CourseSelector - Props recibidas:', {
-    selectedCourseId,
-    selectedGroupId,
-    coursesCount: courses.length
-  })
+//   console.log('🎯 CourseSelector - Props recibidas:', {
+//     selectedCourseId,
+//     selectedGroupId,
+//     coursesCount: courses.length
+//   })
   
   const [isOpen, setIsOpen] = useState(false)
   const [selectedCourse, setSelectedCourse] = useState<string | null>(selectedCourseId || null)

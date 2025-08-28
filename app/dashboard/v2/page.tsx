@@ -17,9 +17,9 @@ export default async function IntelligentDashboardPage() {
     redirect('/auth/login')
   }
 
-  console.log('📊 Cargando dashboard basado en sesión para:', session.user.name)
-  console.log('🆔 Matrícula:', session.user.matricula)
-  console.log('🔑 Token válido hasta:', session.user.tokenExpiry)
+//   console.log('📊 Cargando dashboard basado en sesión para:', session.user.name)
+//   console.log('🆔 Matrícula:', session.user.matricula)
+//   console.log('🔑 Token válido hasta:', session.user.tokenExpiry)
 
   let courses: any[] = []
   let connectionStatus: 'connected' | 'disconnected' | 'failed' | 'error' = 'disconnected'
@@ -36,7 +36,7 @@ export default async function IntelligentDashboardPage() {
     if (isConnected) {
       // Obtener combinaciones curso-grupo donde el profesor está enrolado
       try {
-        console.log('🎯 Intentando obtener cursos-grupos...')
+//         console.log('🎯 Intentando obtener cursos-grupos...')
         const teacherCourseGroups = await sessionClient.getTeacherCourseGroups()
         
         if (!teacherCourseGroups || teacherCourseGroups.length === 0) {
@@ -60,23 +60,27 @@ export default async function IntelligentDashboardPage() {
             group: null
           }))
         } else {
-          // Convertir a formato para el selector
-          courses = teacherCourseGroups.map(item => ({
-            id: `${item.courseId}|${item.groupId}`, // Formato "courseId|groupId"
-            name: item.displayName, // "Curso Name | Grupo Name"
-            shortname: item.courseShortname,
-            fullname: item.courseFullname,
-            courseId: item.courseId,
-            groupId: item.groupId,
-            courseName: item.courseName,
-            groupName: item.groupName,
-            visible: item.course.visible,
-            summary: item.course.summary,
-            startdate: item.course.startdate,
-            enddate: item.course.enddate,
-            course: item.course,
-            group: item.group
-          }))
+          // Convertir a formato para el selector - SOLO CURSOS VISIBLES/ACTIVOS
+          courses = teacherCourseGroups
+            .filter(item => item.course.visible !== false) // Solo cursos visibles
+            .map(item => ({
+              id: `${item.courseId}|${item.groupId}`, // Formato "courseId|groupId"
+              name: item.displayName, // "Curso Name | Grupo Name"
+              shortname: item.courseShortname,
+              fullname: item.courseFullname,
+              courseId: item.courseId,
+              groupId: item.groupId,
+              courseName: item.courseName,
+              groupName: item.groupName,
+              visible: item.course.visible,
+              summary: item.course.summary,
+              startdate: item.course.startdate,
+              enddate: item.course.enddate,
+              course: item.course,
+              group: item.group
+            }))
+          
+          console.log(`📊 Filtrado: ${teacherCourseGroups.length} totales → ${courses.length} visibles/activos`)
         }
       } catch (courseError) {
         console.error('❌ Error obteniendo cursos-grupos, usando fallback legacy:', courseError)
@@ -107,17 +111,17 @@ export default async function IntelligentDashboardPage() {
       }
       
       console.log('📚 COMBINACIONES CURSO-GRUPO DONDE SOY PROFESOR:')
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
-      console.log(`📊 Total de combinaciones encontradas: ${courses.length}`)
+//       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+//       console.log(`📊 Total de combinaciones encontradas: ${courses.length}`)
       
       courses.forEach((item, index) => {
-        console.log(`\n📖 COMBINACIÓN ${index + 1}:`)
-        console.log(`   🆔 ID Combinado: ${item.id}`)
-        console.log(`   📋 Display: ${item.name}`)
+//         console.log(`\n📖 COMBINACIÓN ${index + 1}:`)
+//         console.log(`   🆔 ID Combinado: ${item.id}`)
+//         console.log(`   📋 Display: ${item.name}`)
         console.log(`   🏫 Curso ID: ${item.courseId}`)
-        console.log(`   👥 Grupo ID: ${item.groupId}`)
-        console.log(`   📖 Curso: ${item.courseName}`)
-        console.log(`   🎯 Grupo: ${item.groupName}`)
+//         console.log(`   👥 Grupo ID: ${item.groupId}`)
+//         console.log(`   📖 Curso: ${item.courseName}`)
+//         console.log(`   🎯 Grupo: ${item.groupName}`)
         console.log(`   👁️ Visible: ${item.visible ? 'Sí' : 'No'}`)
         
         // Mostrar información adicional si está disponible
@@ -136,7 +140,7 @@ export default async function IntelligentDashboardPage() {
         }
       })
       
-      console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+//       console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
     } else {
       error = 'Token de sesión inválido o expirado.'
     }

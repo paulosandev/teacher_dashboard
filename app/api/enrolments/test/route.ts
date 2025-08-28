@@ -1,83 +1,49 @@
 /**
- * Endpoint de prueba para verificar conectividad con base de datos externa
+ * Endpoint de prueba para verificar conectividad con cliente integrado
  * y obtener registros de la tabla enrolment
  */
 
 import { NextResponse } from 'next/server'
-import { getEnrolmentClient } from '@/lib/db/enrolment-db'
+import { getIntegratedEnrolmentClient } from '@/lib/db/integrated-enrolment-client'
 
 export async function GET(request: Request) {
   try {
-    console.log('🔍 Iniciando prueba de conexión a base de datos externa...')
+    console.log('🔍 Iniciando prueba de conexión integrada...')
     
-    const enrolmentClient = getEnrolmentClient()
+    const enrolmentClient = getIntegratedEnrolmentClient()
     
-    // 1. Verificar estructura de la tabla
-    console.log('\n📋 1. Verificando estructura de la tabla...')
-    const tableStructure = await enrolmentClient.getTableStructure()
+    // 1. Obtener estadísticas generales
+    console.log('📊 Obteniendo estadísticas...')
+    const stats = await enrolmentClient.getStats()
     
-    // 2. Obtener estadísticas
-    console.log('\n📊 2. Obteniendo estadísticas...')
-    const stats = await enrolmentClient.getEnrolmentStats()
-    
-    // 3. Obtener algunos registros de ejemplo
-    console.log('\n📚 3. Obteniendo registros de ejemplo...')
-    const sampleRecords = await enrolmentClient.getAllEnrolments(10)
-    
-    // 4. Obtener algunos profesores con sus aulas
-    console.log('\n👨‍🏫 4. Obteniendo profesores con sus aulas...')
-    const teachersWithAulas = await enrolmentClient.getAllTeachersWithAulas()
+    // 2. Probar un email específico conocido
+    console.log('📧 Probando con email específico...')
+    const testResult = await enrolmentClient.getEnrolmentsByEmail('omarobr@hotmail.com')
     
     // Preparar respuesta
     const response = {
       success: true,
-      message: 'Conexión exitosa a base de datos externa',
+      message: 'Conexión integrada exitosa',
       timestamp: new Date().toISOString(),
+      connectionStatus: enrolmentClient.getConnectionStatus(),
       data: {
-        tableStructure: {
-          columns: tableStructure.map((col: any) => ({
-            field: col.Field,
-            type: col.Type,
-            nullable: col.Null === 'YES',
-            key: col.Key,
-            default: col.Default
-          }))
-        },
-        statistics: {
-          totalRecords: stats.totalRecords,
-          activeRecords: stats.activeRecords,
-          totalTeachers: stats.totalTeachers,
-          uniqueAulasCount: stats.uniqueAulas.length,
-          uniqueAulas: stats.uniqueAulas.slice(0, 10), // Primeras 10 aulas
-          teachersByAula: stats.teachersByAula.slice(0, 5) // Top 5 aulas con más profesores
-        },
-        sampleRecords: sampleRecords.slice(0, 5).map(record => ({
-          userId: record.userId,
-          userName: record.userName,
-          userFullName: record.userFullName,
-          email: record.email,
-          aulaId: record.aulaId,
-          aulaUrl: record.aulaUrl,
-          courseName: record.courseName,
-          groupName: record.groupName,
-          roleName: record.roleName,
-          isTeacher: record.isTeacher
-        })),
-        teachersSample: teachersWithAulas.slice(0, 5).map(teacher => ({
-          userId: teacher.userId,
-          userName: teacher.userName,
-          aulasCount: teacher.aulas.length,
-          aulas: teacher.aulas
-        }))
+        statistics: stats,
+        testResult: {
+          email: 'omarobr@hotmail.com',
+          totalEnrolments: testResult.totalEnrolments,
+          aulasCount: testResult.aulasCount,
+          aulas: testResult.aulas,
+          sampleEnrolments: testResult.enrolments.slice(0, 3) // Primeros 3 para prueba
+        }
       }
     }
     
-    console.log('\n✅ Prueba completada exitosamente')
+    console.log('✅ Prueba completada exitosamente')
     console.log(`📊 Resumen:`)
     console.log(`  - Total registros: ${stats.totalRecords}`)
-    console.log(`  - Registros activos: ${stats.activeRecords}`)
     console.log(`  - Total profesores: ${stats.totalTeachers}`)
     console.log(`  - Aulas únicas: ${stats.uniqueAulas.length}`)
+    console.log(`  - Test email enrolments: ${testResult.totalEnrolments}`)
     
     return NextResponse.json(response)
     
@@ -97,60 +63,37 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { email, userId } = body
+    const { email } = body
     
-    if (!email && !userId) {
+    if (!email) {
       return NextResponse.json({
         success: false,
-        message: 'Debe proporcionar email o userId'
+        message: 'Debe proporcionar email'
       }, { status: 400 })
     }
     
-    const enrolmentClient = getEnrolmentClient()
+    const enrolmentClient = getIntegratedEnrolmentClient()
     
-    let enrolments = []
-    let aulas = []
+    console.log(`📧 Buscando enrolments por email: ${email}`)
     
-    if (email) {
-      console.log(`📧 Buscando enrolments por email: ${email}`)
-      enrolments = await enrolmentClient.getTeacherEnrolmentsByEmail(email)
-    } else if (userId) {
-      console.log(`🔍 Buscando enrolments por userId: ${userId}`)
-      enrolments = await enrolmentClient.getTeacherEnrolments(userId)
-      aulas = await enrolmentClient.getTeacherAulas(userId)
+    // Verificar si es profesor
+    const teacherCheck = await enrolmentClient.checkIfTeacher(email)
+    
+    if (!teacherCheck.isTeacher) {
+      return NextResponse.json({
+        success: false,
+        message: `${email} no es profesor`
+      }, { status: 404 })
     }
     
-    // Agrupar por aula
-    const enrolmentsByAula = enrolments.reduce((acc: any, enr) => {
-      if (!acc[enr.aulaId]) {
-        acc[enr.aulaId] = {
-          aulaId: enr.aulaId,
-          aulaUrl: enr.aulaUrl,
-          courses: []
-        }
-      }
-      
-      acc[enr.aulaId].courses.push({
-        courseId: enr.courseId,
-        courseName: enr.courseName,
-        courseShortName: enr.courseShortName,
-        groupId: enr.groupId,
-        groupName: enr.groupName
-      })
-      
-      return acc
-    }, {})
+    // Obtener enrolments
+    const result = await enrolmentClient.getEnrolmentsByEmail(email)
     
     return NextResponse.json({
       success: true,
-      message: `Enrolments encontrados para ${email || userId}`,
-      data: {
-        totalEnrolments: enrolments.length,
-        aulasCount: Object.keys(enrolmentsByAula).length,
-        enrolmentsByAula: Object.values(enrolmentsByAula),
-        aulas: aulas,
-        rawEnrolments: enrolments.slice(0, 10) // Primeros 10 para referencia
-      }
+      message: `Enrolments encontrados para ${email}`,
+      teacherData: teacherCheck.userData,
+      data: result
     })
     
   } catch (error) {

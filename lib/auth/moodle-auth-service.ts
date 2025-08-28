@@ -84,7 +84,7 @@ export class MoodleAuthService {
         roles: [] // Se llenará después si es necesario
       }
 
-      console.log(`✅ Autenticación exitosa para profesor: ${user.fullname}`)
+//       console.log(`✅ Autenticación exitosa para profesor: ${user.fullname}`)
 
       return {
         success: true,
@@ -133,7 +133,7 @@ export class MoodleAuthService {
       }
 
       if (data.token) {
-        console.log(`🔑 Token obtenido exitosamente`)
+//         console.log(`🔑 Token obtenido exitosamente`)
         return data.token
       }
 
@@ -177,7 +177,7 @@ export class MoodleAuthService {
             )
 
             if (hasTeacherRole) {
-              console.log(`✅ Usuario ${userId} confirmado como profesor en curso ${course.id}`)
+//               console.log(`✅ Usuario ${userId} confirmado como profesor en curso ${course.id}`)
               return true
             }
           }
@@ -299,8 +299,8 @@ export class MoodleAuthService {
     group: any
   }>> {
     try {
-      console.log(`🔍 ALGORITMO OPTIMIZADO: Iniciando obtención de cursos-grupos para usuario ${userId}`)
-      console.log(`📋 PSEUDO-CÓDIGO IMPLEMENTADO:`)
+//       console.log(`🔍 ALGORITMO OPTIMIZADO: Iniciando obtención de cursos-grupos para usuario ${userId}`)
+//       console.log(`📋 PSEUDO-CÓDIGO IMPLEMENTADO:`)
       console.log(`   1. Obtener cursos del profesor`)
       console.log(`   2. Recopilar IDs de todos los grupos en lote`)
       console.log(`   3. Consultar membresía de todos los grupos de una vez`)
@@ -309,7 +309,7 @@ export class MoodleAuthService {
       const client = new MoodleAPIClient(this.baseUrl, token)
       
       // Paso 1: Obtener sus cursos
-      console.log(`🚀 PASO 1: Obteniendo cursos del usuario ${userId}`)
+//       console.log(`🚀 PASO 1: Obteniendo cursos del usuario ${userId}`)
       const lista_de_cursos = await client.callMoodleAPI('core_enrol_get_users_courses', {
         userid: userId
       })
@@ -319,7 +319,7 @@ export class MoodleAuthService {
         return []
       }
 
-      console.log(`✅ PASO 1 COMPLETADO: ${lista_de_cursos.length} cursos encontrados`)
+//       console.log(`✅ PASO 1 COMPLETADO: ${lista_de_cursos.length} cursos encontrados`)
 
       // Array para guardar todos los grupos encontrados
       const todos_los_ids_de_grupos: number[] = []
@@ -327,11 +327,11 @@ export class MoodleAuthService {
       const teacherCourses: any[] = []
 
       // Paso 2: Verificar cuales son cursos donde es profesor y recopilar grupos
-      console.log(`🚀 PASO 2: Verificando rol de profesor y recopilando grupos...`)
+//       console.log(`🚀 PASO 2: Verificando rol de profesor y recopilando grupos...`)
       
       for (const curso of lista_de_cursos) {
         try {
-          console.log(`🔄 Verificando curso: ${curso.fullname || curso.name} (ID: ${curso.id})`)
+//           console.log(`🔄 Verificando curso: ${curso.fullname || curso.name} (ID: ${curso.id})`)
           
           // Verificar si es profesor en el curso
           const enrolledUsers = await client.callMoodleAPI('core_enrol_get_enrolled_users', {
@@ -348,7 +348,7 @@ export class MoodleAuthService {
             continue // No es profesor en este curso
           }
 
-          console.log(`👨‍🏫 Profesor CONFIRMADO en curso: ${curso.fullname || curso.name}`)
+//           console.log(`👨‍🏫 Profesor CONFIRMADO en curso: ${curso.fullname || curso.name}`)
           teacherCourses.push(curso)
 
           // Obtener grupos del curso
@@ -358,16 +358,16 @@ export class MoodleAuthService {
             })
 
             if (grupos_del_curso && grupos_del_curso.length > 0) {
-              console.log(`👥 Encontrados ${grupos_del_curso.length} grupos en curso ${curso.fullname || curso.name}`)
+//               console.log(`👥 Encontrados ${grupos_del_curso.length} grupos en curso ${curso.fullname || curso.name}`)
               
               // Para cada grupo en grupos_del_curso, agregar grupo.id a todos_los_ids_de_grupos
               for (const grupo of grupos_del_curso) {
                 todos_los_ids_de_grupos.push(grupo.id)
                 courseGroupMapping[grupo.id] = { course: curso, group: grupo }
-                console.log(`   📌 Agregado grupo ID ${grupo.id}: ${grupo.name}`)
+//                 console.log(`   📌 Agregado grupo ID ${grupo.id}: ${grupo.name}`)
               }
             } else {
-              console.log(`📋 Curso sin grupos: ${curso.fullname || curso.name}`)
+//               console.log(`📋 Curso sin grupos: ${curso.fullname || curso.name}`)
               // Marcar curso sin grupos para procesamiento posterior
               courseGroupMapping[0] = { course: curso, group: null }
             }
@@ -383,13 +383,13 @@ export class MoodleAuthService {
         }
       }
 
-      console.log(`✅ PASO 2 COMPLETADO:`)
+//       console.log(`✅ PASO 2 COMPLETADO:`)
       console.log(`   - Cursos donde es profesor: ${teacherCourses.length}`)
       console.log(`   - Total IDs de grupos recopilados: ${todos_los_ids_de_grupos.length}`)
       console.log(`   - IDs de grupos: [${todos_los_ids_de_grupos.join(', ')}]`)
 
       // Paso 3: Obtener información de grupos desde usuarios enrolados (MÉTODO CORREGIDO)
-      console.log(`🚀 PASO 3: Obteniendo información de grupos desde usuarios enrolados...`)
+//       console.log(`🚀 PASO 3: Obteniendo información de grupos desde usuarios enrolados...`)
       console.log(`🔧 CORRECCIÓN: Usando core_enrol_get_enrolled_users en lugar de core_group_get_group_members`)
       console.log(`   Razón: La API de miembros de grupos solo devuelve estudiantes, no profesores`)
       
@@ -399,7 +399,7 @@ export class MoodleAuthService {
       // Para cada curso donde es profesor, verificar sus grupos desde enrolled_users
       for (const curso of teacherCourses) {
         try {
-          console.log(`🔍 Verificando grupos del profesor en curso: ${curso.fullname || curso.name}`)
+//           console.log(`🔍 Verificando grupos del profesor en curso: ${curso.fullname || curso.name}`)
           
           const enrolledUsers = await client.callMoodleAPI('core_enrol_get_enrolled_users', {
             courseid: curso.id
@@ -407,11 +407,11 @@ export class MoodleAuthService {
 
           const currentUser = enrolledUsers.find((u: any) => u.id === userId)
           if (currentUser && currentUser.groups && currentUser.groups.length > 0) {
-            console.log(`✅ Profesor encontrado con ${currentUser.groups.length} grupos en curso ${curso.id}`)
+//             console.log(`✅ Profesor encontrado con ${currentUser.groups.length} grupos en curso ${curso.id}`)
             
             // Para cada grupo del profesor
             for (const userGroup of currentUser.groups) {
-              console.log(`🎯 Profesor está en grupo: ${userGroup.name} (ID: ${userGroup.id})`)
+//               console.log(`🎯 Profesor está en grupo: ${userGroup.name} (ID: ${userGroup.id})`)
               
               // Buscar el mapping de este grupo
               const mappingInfo = courseGroupMapping[userGroup.id]
@@ -427,7 +427,7 @@ export class MoodleAuthService {
                   course: mappingInfo.course,
                   group: mappingInfo.group
                 })
-                console.log(`✅ PROFESOR AGREGADO: ${mappingInfo.course.name || mappingInfo.course.fullname} | ${mappingInfo.group.name}`)
+//                 console.log(`✅ PROFESOR AGREGADO: ${mappingInfo.course.name || mappingInfo.course.fullname} | ${mappingInfo.group.name}`)
               } else {
                 console.warn(`⚠️ Grupo ${userGroup.name} (${userGroup.id}) no encontrado en mapping`)
               }
@@ -440,11 +440,11 @@ export class MoodleAuthService {
         }
       }
 
-      console.log(`✅ PASO 3 COMPLETADO usando método corregido`)
-      console.log(`📊 Grupos específicos encontrados: ${grupos_finales_del_profesor.length}`)
+//       console.log(`✅ PASO 3 COMPLETADO usando método corregido`)
+//       console.log(`📊 Grupos específicos encontrados: ${grupos_finales_del_profesor.length}`)
 
       // Agregar cursos sin grupos o con acceso general
-      console.log(`🚀 PASO 5: Procesando cursos sin grupos o con acceso general...`)
+//       console.log(`🚀 PASO 5: Procesando cursos sin grupos o con acceso general...`)
       for (const curso of teacherCourses) {
         // Verificar si el profesor ya está en algún grupo de este curso
         const profesorEnGruposDelCurso = grupos_finales_del_profesor.some(item => 
@@ -464,15 +464,15 @@ export class MoodleAuthService {
             course: curso,
             group: null
           })
-          console.log(`👨‍🏫 Acceso general concedido para curso: ${curso.name || curso.fullname}`)
+//           console.log(`👨‍🏫 Acceso general concedido para curso: ${curso.name || curso.fullname}`)
         }
       }
 
-      console.log(`✅ ALGORITMO COMPLETADO:`)
-      console.log(`📊 Total de combinaciones curso-grupo encontradas: ${grupos_finales_del_profesor.length}`)
+//       console.log(`✅ ALGORITMO COMPLETADO:`)
+//       console.log(`📊 Total de combinaciones curso-grupo encontradas: ${grupos_finales_del_profesor.length}`)
       
       // ¡Listo! 'grupos_finales_del_profesor' contiene la información que necesitas.
-      console.log(`🎯 RESULTADO FINAL:`)
+//       console.log(`🎯 RESULTADO FINAL:`)
       grupos_finales_del_profesor.forEach((item, index) => {
         console.log(`   ${index + 1}. ${item.displayName} (Curso: ${item.courseId}, Grupo: ${item.groupId})`)
       })
@@ -487,7 +487,7 @@ export class MoodleAuthService {
       console.error(`❌ Error crítico en algoritmo optimizado:`, error)
       
       // Fallback: usar el método legacy como backup
-      console.log(`🔄 Intentando método legacy como fallback...`)
+//       console.log(`🔄 Intentando método legacy como fallback...`)
       try {
         const legacyCourses = await this.getTeacherCourses(token, userId)
         return legacyCourses.map(course => ({

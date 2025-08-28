@@ -1,0 +1,263 @@
+
+========================================
+REPORTE TÉCNICO DE ANÁLISIS INTELIGENTE
+========================================
+
+📊 INFORMACIÓN GENERAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• ID de Solicitud: req_intelligent_1755162759928
+• Fecha y Hora: 2025-08-14T09:12:39.928Z
+• Curso ID: 161
+• Grupo ID: 1926
+• Usuario ID: cmeay7zvs0000vkoq5jlu7iew
+• Matrícula: cesar.espindola
+• Estado: ✅ EXITOSO
+• Tiempo de procesamiento: 11604ms
+
+🤖 DETALLES DE IA (OpenAI)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Modelo utilizado: gpt-4
+• Tokens utilizados:
+  - Prompt: 1628
+  - Respuesta: 195
+  - Total: 1823
+• Costo estimado: $0.0605 USD
+
+📝 PROMPT ENVIADO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Como experto en análisis educativo, realiza un análisis PROFUNDO del curso 161 (Grupo/Modalidad: 1926):
+
+📊 **INFORMACIÓN DEL CURSO**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Estudiantes matriculados: 0
+• Fecha de análisis: 8/14/2025
+• Estudiantes ACTIVOS: 11 (0%)
+• Estudiantes INACTIVOS: 0 (0%)
+• Profesor analizado: cesar.espindola
+
+📅 **ESTRUCTURA SEMANAL**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Secciones totales: 11
+• Secciones ACTIVAS: 0
+• Secciones completadas: 11
+
+**SECCIONES ACTIVAS:**
+
+
+💬 **ANÁLISIS DE FOROS**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Total foros: 5
+• Total discusiones: 0
+• Total posts: 0
+
+
+**Foro de trabajo Prueba** (Cambio de Modalidad de Evaluación)
+- Discusiones: 0
+- Posts: 0
+- Participantes: 0
+**Foro de presentación** (Contenido)
+- Discusiones: 0
+- Posts: 0
+- Participantes: 0
+**Espacio del profesor** (Contenido)
+- Discusiones: 0
+- Posts: 0
+- Participantes: 0
+**Foro ejecutivo 1** (Contenido)
+- Discusiones: 0
+- Posts: 0
+- Participantes: 0
+**Foro ejecutivo 2** (Contenido)
+- Discusiones: 0
+- Posts: 0
+- Participantes: 0
+
+📝 **ANÁLISIS DE TAREAS**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Total tareas: 21
+
+
+**Puntos extra** (Contenido)
+- Entregas: 1
+- Estudiantes que entregaron: 1/0
+
+
+**Actividad General de Recuperación** (Contenido)
+- Entregas: 0
+- Estudiantes que entregaron: 0/0
+
+
+**Open Class 1** (Contenido)
+- Entregas: 0
+- Estudiantes que entregaron: 0/0
+
+
+**Open Class 2** (Contenido)
+- Entregas: 0
+- Estudiantes que entregaron: 0/0
+
+
+**Open Class 3** (Contenido)
+- Entregas: 0
+- Estudiantes que entregaron: 0/0
+
+
+**Open Class 4** (Contenido)
+- Entregas: 0
+- Estudiantes que entregaron: 0/0
+
+
+**Open Class 5** (Contenido)
+- Entregas: 0
+- Estudiantes que entregaron: 0/0
+
+
+**Open Class 6** (Contenido)
+- Entregas: 0
+- Estudiantes que entregaron: 0/0
+
+
+**Sesión ejecutiva 1** (Contenido)
+- Entregas: 0
+- Estudiantes que entregaron: 0/0
+
+
+**Sesión ejecutiva 2** (Contenido)
+- Entregas: 0
+- Estudiantes que entregaron: 0/0
+
+
+**Modalidad de actividades | Semana 1** (Contenido)
+- Entregas: 9
+- Estudiantes que entregaron: 9/0
+- **TAREA DE MODALIDAD** 🎯
+
+**Modalidad de actividades | Semana 2** (Contenido)
+- Entregas: 7
+- Estudiantes que entregaron: 7/0
+- **TAREA DE MODALIDAD** 🎯
+
+**Modalidad de actividades | Semana 3** (Contenido)
+- Entregas: 8
+- Estudiantes que entregaron: 8/0
+- **TAREA DE MODALIDAD** 🎯
+
+**Modalidad de actividades | Semana 4** (Contenido)
+- Entregas: 4
+- Estudiantes que entregaron: 4/0
+- **TAREA DE MODALIDAD** 🎯
+
+**Modalidad de actividades | Semana 5** (Contenido)
+- Entregas: 1
+- Estudiantes que entregaron: 1/0
+- **TAREA DE MODALIDAD** 🎯
+
+**Modalidad de actividades | Semana 6** (Contenido)
+- Entregas: 2
+- Estudiantes que entregaron: 2/0
+- **TAREA DE MODALIDAD** 🎯
+
+**Modalidad de actividades | Semana 7** (Contenido)
+- Entregas: 2
+- Estudiantes que entregaron: 2/0
+- **TAREA DE MODALIDAD** 🎯
+
+**Modalidad de trabajo final | Semana 2** (Contenido)
+- Entregas: 0
+- Estudiantes que entregaron: 0/0
+- **TAREA DE MODALIDAD** 🎯
+
+**Modalidad de trabajo final | Semana 4** (Contenido)
+- Entregas: 0
+- Estudiantes que entregaron: 0/0
+- **TAREA DE MODALIDAD** 🎯
+
+**Modalidad de trabajo final | Semana 6** (Contenido)
+- Entregas: 0
+- Estudiantes que entregaron: 0/0
+- **TAREA DE MODALIDAD** 🎯
+
+**Modalidad de evidencia por competencias | Semana 3** (Contenido)
+- Entregas: 0
+- Estudiantes que entregaron: 0/0
+- **TAREA DE MODALIDAD** 🎯
+
+
+🚨 **ESTUDIANTES EN RIESGO**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+No hay estudiantes completamente inactivos.
+
+Proporciona un análisis que incluya:
+
+1. **Fortalezas** (3-4 puntos específicos)
+2. **Alertas críticas** (problemas urgentes)
+3. **Estudiantes en riesgo** (números específicos)
+4. **Recomendaciones** (acciones concretas)
+5. **Próximo paso** (acción prioritaria)
+6. **Estado general** (salud del curso)
+
+Responde ÚNICAMENTE en formato JSON:
+{
+  "strengths": ["fortaleza 1", "fortaleza 2", "fortaleza 3"],
+  "alerts": ["alerta 1", "alerta 2"],
+  "studentsAtRisk": "0 estudiantes (0%) sin participación",
+  "recommendations": ["recomendación 1", "recomendación 2"],
+  "nextStep": "acción prioritaria concreta",
+  "overallHealth": "buena/regular/necesita atención"
+}
+
+🔄 RESPUESTA COMPLETA DE OpenAI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{
+  "id": "chatcmpl-C4OInJGDchXTnWyUvss9rM1jy1K3h",
+  "object": "chat.completion",
+  "created": 1755162765,
+  "model": "gpt-4-0613",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"strengths\": [\"Todos los estudiantes registrados están activos\", \"Todos los estudiantes han completado las secciones del curso\", \"El curso tiene un alto número de tareas y secciones, lo que indica un contenido educativo robusto\"],\n  \"alerts\": [\"No hay estudiantes matriculados en el curso\", \"No hay participación en los foros de discusión\"],\n  \"studentsAtRisk\": \"0 estudiantes (0%) sin participación\",\n  \"recommendations\": [\"Revisar el proceso de matriculación para asegurar que los estudiantes estén siendo correctamente matriculados\", \"Fomentar la participación en los foros de discusión a través de tareas o actividades que la requieran\"],\n  \"nextStep\": \"Revisar el proceso de matriculación y corregir cualquier problema o error\",\n  \"overallHealth\": \"necesita atención\"\n}",
+        "refusal": null,
+        "annotations": []
+      },
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1628,
+    "completion_tokens": 195,
+    "total_tokens": 1823,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    }
+  },
+  "service_tier": "default",
+  "system_fingerprint": null
+}
+
+
+
+📈 MÉTRICAS DE RENDIMIENTO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Inicio del procesamiento: 8/14/2025, 3:12:39 AM
+• Duración total: 11604ms
+• Eficiencia: 157.10 tokens/segundo
+
+💰 INFORMACIÓN DE COSTOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Costo por prompt: $0.0488 USD
+• Costo por respuesta: $0.0117 USD
+• Costo total: $0.0605 USD
+
+🔚 FIN DEL REPORTE
+Generado automáticamente por el Dashboard Académico UTEL - Análisis Inteligente V2

@@ -1,0 +1,132 @@
+
+========================================
+REPORTE TÉCNICO DE ANÁLISIS COURSE-BASED
+========================================
+
+📊 INFORMACIÓN GENERAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• ID de Solicitud: req_course_analysis_1755755121983
+• Fecha y Hora: 2025-08-21T05:45:21.983Z
+• Curso ID: 237
+• Grupo ID: 2431
+• Analizado por: julioprofe (Julio Profe)
+• Estado: ✅ EXITOSO
+• Tiempo de procesamiento: 11697ms
+
+🤖 DETALLES DE IA (OpenAI)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Modelo utilizado: o3-mini
+• Tokens utilizados:
+  - Prompt: 588
+  - Respuesta: 1000
+  - Total: 1588
+• Costo estimado: $0.0776 USD
+
+📝 PROMPT ENVIADO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Como experto en análisis educativo, realiza un análisis PROFUNDO del curso 237:
+
+📊 **INFORMACIÓN DEL CURSO**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Estudiantes matriculados: 100
+• Fecha de análisis: 8/20/2025
+• Estudiantes ACTIVOS: 0
+• Estudiantes INACTIVOS: 100
+• Analizado por: julioprofe
+
+📅 **ESTRUCTURA SEMANAL**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Secciones totales: 11
+• Secciones ACTIVAS: 0
+• Secciones completadas: 11
+
+💬 **ANÁLISIS DE PARTICIPACIÓN**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Total foros: 6
+• Total discusiones: 0
+
+Proporciona un análisis que incluya:
+
+1. **Fortalezas** (3-4 puntos específicos)
+2. **Alertas críticas** (problemas urgentes)
+3. **Estudiantes en riesgo** (números específicos)
+4. **Recomendaciones** (acciones concretas)
+5. **Próximo paso** (acción prioritaria)
+6. **Estado general** (salud del curso)
+
+INSTRUCCIONES ESPECIALES PARA PRESENTACIÓN VISUAL:
+- Si tienes datos cuantitativos importantes (métricas, porcentajes, conteos), incluye una tabla en "metricsTable" usando formato "Indicador | Valor"
+- Para análisis complejos que requieren numeración específica, usa "structuredInsights.numbered"
+- Para puntos clave sin orden específico, usa "structuredInsights.bullets"
+- Incluir tanto formatos estructurados como tradicionales para compatibilidad
+
+Responde ÚNICAMENTE en formato JSON:
+{
+  "strengths": ["fortaleza 1", "fortaleza 2", "fortaleza 3"],
+  "alerts": ["alerta 1", "alerta 2"],
+  "studentsAtRisk": "100 estudiantes sin participación detectada",
+  "recommendations": ["recomendación 1", "recomendación 2"],
+  "nextStep": "acción prioritaria concreta",
+  "overallHealth": "buena/regular/necesita atención",
+  "metricsTable": "Indicador | Valor observado
+Estudiantes totales | 100
+Estudiantes activos | 0 (0%)
+Secciones activas | 0/11
+Foros analizados | 6
+Discusiones totales | 0",
+  "structuredInsights": {
+    "numbered": ["1. Análisis específico que requiere orden numerado", "2. Siguiente punto en orden de importancia"],
+    "bullets": ["• Punto clave sin orden específico", "• Otro insight importante", "• Observación adicional relevante"]
+  }
+}
+
+🔄 RESPUESTA COMPLETA DE OpenAI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{
+  "id": "chatcmpl-C6sP079ul6QvK79CtjiIZLIcpTTGb",
+  "object": "chat.completion",
+  "created": 1755755126,
+  "model": "o3-mini-2025-01-31",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"strengths\": [\n    \"Estructura completa y bien organizada: 11 secciones completadas aseguran que el contenido del curso esté íntegro.\",\n    \"Claridad en la distribución semanal del curso, facilitando la navegación de los estudiantes.\",\n    \"Presencia de foros que demuestran la intención de incluir espacios de interacción, aunque actualmente poco aprovechados.\"\n  ],\n  \"alerts\": [\n    \"100% de inactividad estudiantil: Ningún estudiante está activamente participando a pesar de estar matriculado.\",\n    \"Ausencia de interacción en discusiones, lo que señala una desconexión con los espacios de debate.\",\n    \"Secciones activas en cero, indicando que no se están utilizando dinámicamente para promover el aprendizaje en tiempo real.\"\n  ],\n  \"studentsAtRisk\": \"",
+        "refusal": null,
+        "annotations": []
+      },
+      "finish_reason": "length"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 588,
+    "completion_tokens": 1000,
+    "total_tokens": 1588,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 821,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    }
+  },
+  "service_tier": "default",
+  "system_fingerprint": "fp_c278fb013d"
+}
+
+❌ ERROR ENCONTRADO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Unterminated string in JSON at position 764 (line 12 column 22)
+
+📈 MÉTRICAS DE RENDIMIENTO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Inicio del procesamiento: 8/20/2025, 11:45:21 PM
+• Duración total: 11697ms
+• Eficiencia: 135.76 tokens/segundo
+
+🔚 FIN DEL REPORTE
+Generado automáticamente por el Dashboard Académico UTEL - Sistema Course-Based V2

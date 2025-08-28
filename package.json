@@ -20,9 +20,7 @@
     "test:moodle": "tsx scripts/test-moodle.ts",
     "test:enrolments": "node scripts/test-enrolment-connection.js",
     "worker": "tsx workers/analysis-worker.ts",
-    "worker:dev": "tsx --watch workers/analysis-worker.ts",
-    "enrolments:service": "node workers/enrolment-service.js",
-    "enrolments:dev": "nodemon workers/enrolment-service.js"
+    "worker:dev": "tsx --watch workers/analysis-worker.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -58,8 +56,7 @@
     "react-dom": "^18",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "tailwind-merge": "^3.3.1",
-    "tunnel-ssh": "^5.2.0"
+    "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

@@ -74,7 +74,7 @@ export class MoodleAuthService {
       }
 
       // Guardar el token en la base de datos
-      console.log(`✅ Token obtenido para ${data.fullname}`)
+//       console.log(`✅ Token obtenido para ${data.fullname}`)
       
       const encryptedToken = encrypt(data.token)
       
@@ -121,7 +121,7 @@ export class MoodleAuthService {
     userId: string
   ): Promise<{ success: boolean; message: string; token?: string }> {
     try {
-      console.log(`🔑 Generando token para ${moodleUsername} usando admin...`)
+//       console.log(`🔑 Generando token para ${moodleUsername} usando admin...`)
       
       // Primero obtener el ID del usuario en Moodle
       const url = new URL(this.baseUrl + '/webservice/rest/server.php')
@@ -207,7 +207,7 @@ export class MoodleAuthService {
     // En este caso, usamos el token admin pero registramos el usuario
     // para saber en nombre de quién hacer las operaciones
     
-    console.log('🔄 Usando método de token maestro compartido...')
+//     console.log('🔄 Usando método de token maestro compartido...')
     
     await prisma.userMoodleToken.upsert({
       where: { userId },

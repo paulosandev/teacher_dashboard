@@ -59,7 +59,7 @@ async function handleAnalyzeForum(
   userId: string
 ) {
   try {
-    console.log(`🎯 Iniciando análisis del foro ${forumId} para usuario ${userId}`);
+//     console.log(`🎯 Iniciando análisis del foro ${forumId} para usuario ${userId}`);
     
     if (!forumId || !forumName || !courseId) {
       return NextResponse.json(
@@ -199,7 +199,7 @@ async function handleGetUserAnalysis(request: NextRequest) {
       );
     }
 
-    console.log('📈 Obteniendo análisis para usuario:', session.user.email);
+//     console.log('📈 Obteniendo análisis para usuario:', session.user.email);
 
     // Obtener análisis del usuario desde la base de datos
     const { prisma } = await import('@/lib/db/prisma');
@@ -214,7 +214,7 @@ async function handleGetUserAnalysis(request: NextRequest) {
       }
     });
 
-    console.log(`📈 Encontrados ${analysisResults.length} análisis para el usuario`);
+//     console.log(`📈 Encontrados ${analysisResults.length} análisis para el usuario`);
 
     // Convertir a formato compatible con el dashboard
     const dashboardCards = analysisResults.map(analysis => {
@@ -238,7 +238,7 @@ async function handleGetUserAnalysis(request: NextRequest) {
       };
     });
 
-    console.log(`✅ Devolviendo ${dashboardCards.length} tarjetas de dashboard`);
+//     console.log(`✅ Devolviendo ${dashboardCards.length} tarjetas de dashboard`);
 
     // Crear respuesta con headers anti-caché
     const response = NextResponse.json(dashboardCards);
