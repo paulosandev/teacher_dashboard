@@ -5,7 +5,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -110,11 +110,11 @@ model ActivityAnalysis {
   activityName    String   // Nombre de la actividad
   
   // Análisis completo
-  summary         String   // Resumen del análisis
+  summary         String   // Resumen del análisis (puede ser largo)
   positives       Json     // Array de aspectos positivos
   alerts          Json     // Array de alertas/problemas
   insights        Json     // Array de insights clave
-  recommendation  String   // Recomendación principal
+  recommendation  String   // Recomendación principal (puede ser larga)
   fullAnalysis    String?  // Análisis completo en formato Markdown
   
   // Análisis específico por tipo

@@ -606,12 +606,12 @@ Responde ÚNICAMENTE en formato JSON:
   
   try {
     const response = await openai.chat.completions.create({
-      model: "o3-mini",
+      model: "gpt-5-mini",
       messages: [{ role: "user", content: prompt }],
       max_completion_tokens: 1000
     })
     
-    details.model = "o3-mini"
+    details.model = "gpt-5-mini"
     details.response = response
     details.tokensUsed = {
       prompt: response.usage?.prompt_tokens || 0,

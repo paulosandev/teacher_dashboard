@@ -15,7 +15,7 @@ REPORTE TÉCNICO DE ANÁLISIS COURSE-BASED
 
 🤖 DETALLES DE IA (OpenAI)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Modelo utilizado: o3-mini
+• Modelo utilizado: gpt-5-mini
 • Tokens utilizados:
   - Prompt: 588
   - Respuesta: 1000
@@ -86,7 +86,7 @@ Discusiones totales | 0",
   "id": "chatcmpl-C6sP079ul6QvK79CtjiIZLIcpTTGb",
   "object": "chat.completion",
   "created": 1755755126,
-  "model": "o3-mini-2025-01-31",
+  "model": "gpt-5-mini-2025-01-31",
   "choices": [
     {
       "index": 0,

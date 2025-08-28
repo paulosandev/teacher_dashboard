@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
             fullAnalysis: analysisResult.fullAnalysis || analysisResult.summary,
             activityData: activityData,
             llmResponse: {
-              model: 'o3-mini',
+              model: 'gpt-5-mini',
               generatedAt: new Date(),
               // Nuevo formato dinámico
               sections: analysisResult.sections,
@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
             fullAnalysis: analysisResult.fullAnalysis || analysisResult.summary,
             activityData: activityData,
             llmResponse: {
-              model: 'o3-mini',
+              model: 'gpt-5-mini',
               generatedAt: new Date(),
               // Nuevo formato dinámico
               sections: analysisResult.sections,
@@ -535,10 +535,10 @@ Como experto analista educativo, decide la mejor forma de presentar el análisis
   }
 
   console.log(`🚀 ENVIANDO A OpenAI - ${analysisData.isSpecificDiscussion ? 'DISCUSIÓN' : 'FORO'}:`)
-  console.log(`   🔗 Modelo: o3-mini`)
+  console.log(`   🔗 Modelo: gpt-5-mini`)
   console.log(`   📝 Tipo de contenido: ${analysisData.isSpecificDiscussion ? 'Discusión individual' : 'Foro con múltiples discusiones'}`)
   console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
-  console.log(`   ⚙️ Configuración: max_completion_tokens=4000 (modelo o3-mini)`)
+  console.log(`   ⚙️ Configuración: max_completion_tokens=4000 (modelo gpt-5-mini)`)
 
   // CAPTURAR PROMPT COMPLETO PARA DEBUGGING
   const fs = require('fs');
@@ -550,7 +550,7 @@ Como experto analista educativo, decide la mejor forma de presentar el análisis
     systemMessage: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. Incluye datos cuantitativos en metricsTable cuando sea relevante, y separa insights en numerados (para orden específico) y bullets (para puntos generales). El fullAnalysis debe usar markdown with secciones ##.",
     userPrompt: prompt,
     rawData: analysisData,
-    model: "o3-mini",
+    model: "gpt-5-mini",
     maxTokens: 4000
   };
   
@@ -563,7 +563,7 @@ Como experto analista educativo, decide la mejor forma de presentar el análisis
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "o3-mini",
+      model: "gpt-5-mini",
       messages: [
         {
           role: "system",
@@ -725,9 +725,9 @@ Como experto analista educativo, decide la mejor forma de presentar cada aspecto
 `
 
   console.log(`🚀 ENVIANDO A OpenAI - ASIGNACIÓN:`)
-  console.log(`   🔗 Modelo: o3-mini`)
+  console.log(`   🔗 Modelo: gpt-5-mini`)
   console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
-  console.log(`   ⚙️ Configuración: max_completion_tokens=4000 (modelo o3-mini)`)
+  console.log(`   ⚙️ Configuración: max_completion_tokens=4000 (modelo gpt-5-mini)`)
 
   // CAPTURAR PROMPT COMPLETO PARA DEBUGGING
   const fs = require('fs');
@@ -739,7 +739,7 @@ Como experto analista educativo, decide la mejor forma de presentar cada aspecto
     systemMessage: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. Incluye datos cuantitativos en metricsTable cuando sea relevante, y separa insights en numerados (para orden específico) y bullets (para puntos generales). El fullAnalysis debe usar markdown con secciones ##.",
     userPrompt: prompt,
     rawData: analysisData,
-    model: "o3-mini",
+    model: "gpt-5-mini",
     maxTokens: 4000
   };
   
@@ -752,7 +752,7 @@ Como experto analista educativo, decide la mejor forma de presentar cada aspecto
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "o3-mini",
+      model: "gpt-5-mini",
       messages: [
         {
           role: "system",
@@ -987,9 +987,9 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
 `
 
   console.log(`🚀 ENVIANDO A OpenAI - ${typeLabel.toUpperCase()}:`)
-  console.log(`   🔗 Modelo: o3-mini`)
+  console.log(`   🔗 Modelo: gpt-5-mini`)
   console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
-  console.log(`   ⚙️ Configuración: max_completion_tokens=4000 (modelo o3-mini)`)
+  console.log(`   ⚙️ Configuración: max_completion_tokens=4000 (modelo gpt-5-mini)`)
 
   // CAPTURAR PROMPT COMPLETO PARA DEBUGGING
   const fs = require('fs');
@@ -1001,7 +1001,7 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
     systemMessage: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. Incluye datos cuantitativos en metricsTable cuando sea relevante, y separa insights en numerados (para orden específico) y bullets (para puntos generales). El fullAnalysis debe usar markdown con secciones ##.",
     userPrompt: prompt,
     rawData: analysisData,
-    model: "o3-mini",
+    model: "gpt-5-mini",
     maxTokens: 4000
   };
   
@@ -1014,7 +1014,7 @@ Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido 
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "o3-mini",
+      model: "gpt-5-mini",
       messages: [
         {
           role: "system",

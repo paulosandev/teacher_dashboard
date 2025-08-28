@@ -508,7 +508,7 @@ Responde en formato JSON con la siguiente estructura:
   
   try {
     const response = await openai.chat.completions.create({
-      model: "o3-mini",
+      model: "gpt-5-mini",
       messages: [{ role: "user", content: prompt }],
       max_completion_tokens: 800
     })

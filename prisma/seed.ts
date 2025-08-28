@@ -61,6 +61,7 @@ async function main() {
         'La participación se concentra al final del período'
       ],
       recommendation: 'Enviar recordatorio sobre formato APA/netiqueta y activar avisos 48h antes del cierre',
+      fullAnalysis: '## Análisis del Foro Semana 1\n\nEste foro muestra buena participación estudiantil con discusiones de calidad. Los estudiantes demuestran comprensión de conceptos pero requieren refuerzo en formato académico.',
       activityData: {
         participants: 17,
         messages: 45,
