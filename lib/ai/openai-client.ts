@@ -59,7 +59,7 @@ class OpenAIClient {
       const prompt = this.buildAnalysisPrompt(input);
 
       const completion = await this.getClient().chat.completions.create({
-        model: "gpt-5-mini"
+        model: "gpt-5-mini",
         messages: [
           {
             role: "system",
