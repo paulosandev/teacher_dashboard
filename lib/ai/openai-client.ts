@@ -59,7 +59,7 @@ class OpenAIClient {
       const prompt = this.buildAnalysisPrompt(input);
 
       const completion = await this.getClient().chat.completions.create({
-        model: "gpt-4o-mini", // Usar gpt-4o-mini que es más económico
+        model: "gpt-5-mini"
         messages: [
           {
             role: "system",
@@ -194,7 +194,7 @@ Responde ÚNICAMENTE con el JSON, sin texto adicional.`;
       console.log('🔍 Verificando conexión con OpenAI...');
       
       const completion = await this.getClient().chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-5-mini",
         messages: [
           {
             role: "user",

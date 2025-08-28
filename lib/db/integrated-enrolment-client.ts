@@ -1,11 +1,10 @@
 /**
  * Cliente integrado para acceder a la base de datos de enrolments
- * Usa túnel SSH mediante comando del sistema para mayor compatibilidad con Next.js
+ * Conexión directa a la base de datos MySQL
  */
 
-import { spawn, ChildProcess } from 'child_process'
-import { createConnection, Connection } from 'mysql2/promise'
-import path from 'path'
+import { createConnection } from 'mysql2/promise'
+import type { Connection } from 'mysql2/promise'
 
 export interface EnrolmentRecord {
   id: number
@@ -52,17 +51,12 @@ export interface AulaInfo {
 
 class IntegratedEnrolmentClient {
   private readonly TEACHER_ROLE_ID = 17
-  private readonly SSH_HOST = '44.233.107.237'
-  private readonly SSH_USER = 'ec2-user'
-  private readonly SSH_KEY_PATH = '/Users/paulocesarsanchezespindola/Downloads/status-services-v2 3 1.pem'
-  private readonly LOCAL_PORT = 33061
   private readonly DB_HOST = 'wsdata.ce9oduyxts26.us-west-1.rds.amazonaws.com'
   private readonly DB_PORT = 3306
   private readonly DB_USER = 'datos'
   private readonly DB_PASSWORD = 'PP7Su9e433aNZP956'
   private readonly DB_NAME = 'heroku_e6e033d354ff64c'
 
-  private sshProcess: ChildProcess | null = null
   private connection: Connection | null = null
   private isConnected = false
 
@@ -104,88 +98,27 @@ class IntegratedEnrolmentClient {
     }
   }
 
-  /**
-   * Establecer túnel SSH usando comando del sistema
-   */
-  private async establishSSHTunnel(): Promise<boolean> {
-    return new Promise((resolve, reject) => {
-      console.log(`🔐 Estableciendo túnel SSH via comando del sistema...`)
-      
-      // Comando SSH con port forwarding
-      const sshCommand = 'ssh'
-      const sshArgs = [
-        '-i', this.SSH_KEY_PATH,
-        '-L', `${this.LOCAL_PORT}:${this.DB_HOST}:${this.DB_PORT}`,
-        '-N', // No ejecutar comando remoto
-        '-o', 'StrictHostKeyChecking=no',
-        '-o', 'UserKnownHostsFile=/dev/null',
-        '-o', 'ServerAliveInterval=60',
-        '-o', 'ServerAliveCountMax=3',
-        `${this.SSH_USER}@${this.SSH_HOST}`
-      ]
-
-      this.sshProcess = spawn(sshCommand, sshArgs)
-
-      // Manejar errores del proceso SSH
-      this.sshProcess.on('error', (error) => {
-        console.error('❌ Error en proceso SSH:', error)
-        reject(error)
-      })
-
-      // Capturar stderr para debug
-      this.sshProcess.stderr?.on('data', (data) => {
-        const output = data.toString()
-        console.log('SSH stderr:', output)
-        
-        // Si vemos mensaje de conexión establecida
-        if (output.includes('Warning:') || output.includes('Permanently added')) {
-          // Dar tiempo para que se establezca el túnel
-          setTimeout(() => {
-            console.log('✅ Túnel SSH establecido')
-            resolve(true)
-          }, 2000)
-        }
-      })
-
-      // Si el proceso se cierra inesperadamente
-      this.sshProcess.on('close', (code) => {
-        console.log(`🔒 Proceso SSH cerrado con código: ${code}`)
-        this.sshProcess = null
-        this.isConnected = false
-      })
-
-      // Timeout de seguridad
-      setTimeout(() => {
-        if (!this.isConnected) {
-          console.log('✅ Túnel SSH establecido (timeout)')
-          resolve(true)
-        }
-      }, 3000)
-    })
-  }
 
   /**
-   * Establecer conexión MySQL
+   * Establecer conexión MySQL directa
    */
   private async establishDatabaseConnection(): Promise<void> {
-    console.log('💾 Conectando a MySQL...')
+    console.log('💾 Conectando a MySQL directamente...')
     
     this.connection = await createConnection({
-      host: '127.0.0.1',
-      port: this.LOCAL_PORT,
+      host: this.DB_HOST,
+      port: this.DB_PORT,
       user: this.DB_USER,
       password: this.DB_PASSWORD,
       database: this.DB_NAME,
-      connectTimeout: 10000,
-      acquireTimeout: 10000,
-      timeout: 10000
+      connectTimeout: 10000
     })
     
     console.log('✅ Conexión MySQL establecida')
   }
 
   /**
-   * Conectar (SSH + MySQL)
+   * Conectar directamente a MySQL
    */
   async connect(): Promise<void> {
     if (this.isConnected) {
@@ -194,14 +127,11 @@ class IntegratedEnrolmentClient {
     }
 
     try {
-      // Establecer túnel SSH
-      await this.establishSSHTunnel()
-      
-      // Establecer conexión MySQL
+      // Establecer conexión MySQL directa
       await this.establishDatabaseConnection()
       
       this.isConnected = true
-      console.log('🎉 Conexión completa establecida')
+      console.log('🎉 Conexión directa establecida')
       
     } catch (error) {
       console.error('❌ Error estableciendo conexión:', error)
@@ -220,12 +150,6 @@ class IntegratedEnrolmentClient {
       await this.connection.end()
       this.connection = null
       console.log('💾 Conexión MySQL cerrada')
-    }
-
-    if (this.sshProcess) {
-      this.sshProcess.kill('SIGTERM')
-      this.sshProcess = null
-      console.log('🔑 Proceso SSH terminado')
     }
 
     this.isConnected = false
