@@ -2,10 +2,9 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPencilAlt, faBell, faGear, faKey, faSignOutAlt } from '@fortawesome/free-solid-svg-icons'
+import { faPencilAlt, faBell, faSignOutAlt } from '@fortawesome/free-solid-svg-icons'
 import { signOut } from 'next-auth/react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
 
 interface HeaderProps {
   userName?: string
@@ -18,7 +17,6 @@ export default function DashboardHeader({
   userImage,
   notificationCount = 0 
 }: HeaderProps) {
-  const pathname = usePathname()
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -120,30 +118,6 @@ export default function DashboardHeader({
                       <div className="font-medium">{userName}</div>
                       <div className="text-gray-500">Profesor</div>
                     </div>
-                    <Link
-                      href="/settings/moodle-token"
-                      className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors ${
-                        pathname === '/settings/moodle-token' 
-                          ? 'text-primary-darker bg-primary-light/50' 
-                          : 'text-gray-700 hover:bg-gray-100'
-                      }`}
-                      onClick={() => setIsProfileDropdownOpen(false)}
-                    >
-                      <FontAwesomeIcon icon={faKey} className="w-4 h-4" />
-                      Token Moodle
-                    </Link>
-                    <Link
-                      href="/dashboard/settings"
-                      className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors ${
-                        pathname === '/dashboard/settings' 
-                          ? 'text-primary-darker bg-primary-light/50' 
-                          : 'text-gray-700 hover:bg-gray-100'
-                      }`}
-                      onClick={() => setIsProfileDropdownOpen(false)}
-                    >
-                      <FontAwesomeIcon icon={faGear} className="w-4 h-4" />
-                      Configuración
-                    </Link>
                     <div className="border-t border-gray-100 my-1"></div>
                     <button
                       onClick={handleLogout}
