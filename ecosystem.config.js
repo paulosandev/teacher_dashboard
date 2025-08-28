@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       // Aplicación principal Next.js
-      name: 'profebot-app',
+      name: 'next-app',
       script: 'npm',
       args: 'start',
       cwd: './',
@@ -11,7 +11,8 @@ module.exports = {
       watch: false,
       env: {
         NODE_ENV: 'production',
-        PORT: 3000
+        PORT: 3000,
+        ENABLE_CRON: 'true'  // ✅ Habilita los cron jobs
       },
       error_file: './logs/app-error.log',
       out_file: './logs/app-out.log',
