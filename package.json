@@ -18,8 +18,11 @@
     "db:setup": "npm run db:generate && npm run db:push && npm run db:seed",
     "check": "tsx scripts/check-setup.ts",
     "test:moodle": "tsx scripts/test-moodle.ts",
+    "test:enrolments": "node scripts/test-enrolment-connection.js",
     "worker": "tsx workers/analysis-worker.ts",
-    "worker:dev": "tsx --watch workers/analysis-worker.ts"
+    "worker:dev": "tsx --watch workers/analysis-worker.ts",
+    "enrolments:service": "node workers/enrolment-service.js",
+    "enrolments:dev": "nodemon workers/enrolment-service.js"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -41,17 +44,22 @@
     "bullmq": "^5.56.10",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
     "ioredis": "^5.7.0",
     "lucide-react": "^0.539.0",
+    "mysql2": "^3.14.3",
     "next": "14.2.31",
     "next-auth": "^4.24.11",
+    "node-fetch": "^2.7.0",
     "openai": "^5.12.2",
     "prisma": "^6.13.0",
     "react": "^18",
     "react-dom": "^18",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "tailwind-merge": "^3.3.1"
+    "tailwind-merge": "^3.3.1",
+    "tunnel-ssh": "^5.2.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
