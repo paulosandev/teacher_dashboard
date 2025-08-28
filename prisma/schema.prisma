@@ -4,8 +4,10 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Configuración para desarrollo (PostgreSQL) y producción (MySQL)
+// Para cambiar a MySQL en producción, usar: npm run prisma:mysql
 datasource db {
-  provider = "postgresql"
+  provider = "postgresql"  // Cambiar a "mysql" para producción
   url      = env("DATABASE_URL")
 }
 
@@ -110,12 +112,12 @@ model ActivityAnalysis {
   activityName    String   // Nombre de la actividad
   
   // Análisis completo
-  summary         String   // Resumen del análisis (puede ser largo)
+  summary         String   @db.Text // Resumen del análisis (puede ser largo) - MySQL: TEXT, PostgreSQL: text
   positives       Json     // Array de aspectos positivos
   alerts          Json     // Array de alertas/problemas
   insights        Json     // Array de insights clave
-  recommendation  String   // Recomendación principal (puede ser larga)
-  fullAnalysis    String?  // Análisis completo en formato Markdown
+  recommendation  String   @db.Text // Recomendación principal (puede ser larga) - MySQL: TEXT, PostgreSQL: text
+  fullAnalysis    String?  @db.Text // Análisis completo en formato Markdown - MySQL: TEXT, PostgreSQL: text
   
   // Análisis específico por tipo
   forumAnalysis   Json?    // Análisis específico de foros
