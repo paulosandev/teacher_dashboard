@@ -14,7 +14,8 @@ import {
   faRobot,
   faEye,
   faLightbulb,
-  faArrowLeft
+  faArrowLeft,
+  faExternalLinkAlt
 } from '@fortawesome/free-solid-svg-icons'
 import SimpleCourseSelector from '@/components/dashboard/simple-course-selector'
 import { AnalysisModal } from '@/components/dashboard/analysis-modal'
@@ -64,6 +65,7 @@ export function IntelligentDashboardContent({
   connectionStatus,
   error
 }: IntelligentDashboardContentProps) {
+  const [mounted, setMounted] = useState(false)
   const [selectedCourse, setSelectedCourse] = useState<string | null>(null)
   const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState(false)
   const [analysisCards, setAnalysisCards] = useState<any[]>([])
@@ -79,7 +81,7 @@ export function IntelligentDashboardContent({
   const [visibleActivitiesCount, setVisibleActivitiesCount] = useState(50) // Número de actividades visibles - mostrar todas
   const [isAnalyzingBatch, setIsAnalyzingBatch] = useState(false)
   const [isLoadingCourse, setIsLoadingCourse] = useState(true) // Nuevo estado para loader general, empieza en true
-  const [loadingPhase, setLoadingPhase] = useState<'loading' | 'analyzing'>('loading') // Fase actual de carga
+  const [loadingPhase, setLoadingPhase] = useState<'loading' | 'analyzing' | 'cleaning'>('loading') // Fase actual de carga
   const [cacheLoaded, setCacheLoaded] = useState(false) // Estado para saber si el cache ya se cargó
   const [detailView, setDetailView] = useState<{isActive: boolean, activity: any} | null>(null) // Estado para vista de detalle
   const [courseAnalysisId, setCourseAnalysisId] = useState<string | null>(null) // ID del análisis del curso
@@ -96,7 +98,7 @@ export function IntelligentDashboardContent({
     courseAnalysisId?: string
   }) => {
     try {
-      console.log('💾 Guardando datos en caché persistente para curso:', courseId)
+//       console.log('💾 Guardando datos en caché persistente para curso:', courseId)
       await fetch('/api/analysis/cache', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -116,10 +118,10 @@ export function IntelligentDashboardContent({
   const loadAnalysisForCourse = useCallback(async (courseId: string) => {
     try {
       // Cargar análisis existentes para este curso desde caché persistente
-      console.log(`🔍 Cargando análisis desde caché persistente para curso: ${courseId}`)
+//       console.log(`🔍 Cargando análisis desde caché persistente para curso: ${courseId}`)
       const response = await fetch(`/api/analysis/cache?courseId=${courseId}`)
       
-      console.log(`📡 Respuesta de caché persistente: ${response.status}`)
+//       console.log(`📡 Respuesta de caché persistente: ${response.status}`)
       
       if (response.status === 401 || response.status === 403) {
         console.log('🔐 Sin autenticación para caché persistente, continuando sin caché')
@@ -139,7 +141,7 @@ export function IntelligentDashboardContent({
           setAnalysisResults(data.analysisResults)
           if (data.activities) {
             setOpenActivities(data.activities)
-            console.log(`📋 Cargadas ${data.activities.length} actividades desde caché`)
+//             console.log(`📋 Cargadas ${data.activities.length} actividades desde caché`)
           }
           if (data.activitiesSummary) {
             setActivitiesSummary(data.activitiesSummary)
@@ -157,7 +159,7 @@ export function IntelligentDashboardContent({
             courseAnalysisId: data.courseAnalysisId
           }
           
-          console.log('✅ Datos cargados desde caché persistente')
+//           console.log('✅ Datos cargados desde caché persistente')
           return true // Indica que se cargaron datos del caché
         } else {
           console.log('⚠️ Respuesta exitosa pero sin datos válidos en caché persistente')
@@ -184,7 +186,7 @@ export function IntelligentDashboardContent({
   const loadOpenActivities = useCallback(async (courseId: string) => {
     try {
       setLoadingActivities(true)
-      console.log('🎯 Obteniendo actividades abiertas para curso:', courseId)
+//       console.log('🎯 Obteniendo actividades abiertas para curso:', courseId)
       
       const response = await fetch(`/api/activities/open?courseId=${courseId}`)
       if (response.ok) {
@@ -222,7 +224,7 @@ export function IntelligentDashboardContent({
       const data = await response.json()
 
       if (response.ok && data.success) {
-        console.log(`✅ Reporte de debug generado exitosamente: ${data.reportPath}`)
+//         console.log(`✅ Reporte de debug generado exitosamente: ${data.reportPath}`)
         console.log(`📄 ID del reporte: ${data.reportId}`)
       } else {
         console.error(`❌ Error generando reporte de debug:`, data.error)
@@ -269,15 +271,25 @@ export function IntelligentDashboardContent({
   }, [selectedCourse, loadOpenActivities, loadAnalysisForCourse, generateDebugReport])
 
   const handleCourseChange = useCallback(async (courseId: string) => {
-    setSelectedCourse(courseId)
-    console.log('🎯 Curso seleccionado:', courseId)
+    console.log('🎯 Cambiando a curso/grupo:', courseId)
     
-    // Verificar si tenemos datos en caché para este curso
+    // IMPORTANTE: Limpiar estado INMEDIATAMENTE al cambiar de curso/grupo
+    setOpenActivities([])
+    setAnalysisResults({})
+    setActivitiesSummary(null)
+    setCourseAnalysisId(null)
+    setCacheLoaded(false)
+    setVisibleActivitiesCount(50)
+    
+    // Actualizar el curso seleccionado
+    setSelectedCourse(courseId)
+    
+    // Verificar si tenemos datos en caché para este curso/grupo específico
     const cached = courseDataCache[courseId]
     const now = Date.now()
     
     if (cached && (now - cached.lastFetched) < CACHE_DURATION) {
-      console.log('✅ Usando datos del caché en memoria para el curso:', courseId)
+      console.log('✅ Usando datos del caché en memoria para el curso/grupo:', courseId)
       // Restaurar datos desde el caché
       setOpenActivities(cached.activities)
       setAnalysisResults(cached.analysisResults)
@@ -288,7 +300,8 @@ export function IntelligentDashboardContent({
       setIsLoadingCourse(false)
       setCacheLoaded(true)
     } else {
-      console.log('🔄 No hay caché válido, se cargarán datos frescos para el curso:', courseId)
+      console.log('🔄 No hay caché válido, se cargarán datos frescos para el curso/grupo:', courseId)
+      setIsLoadingCourse(true)
       // Si no hay caché o expiró, el useEffect se encargará de cargar los datos
     }
   }, [])
@@ -302,9 +315,10 @@ export function IntelligentDashboardContent({
       const cached = courseDataCache[selectedCourse]
       const now = Date.now()
       
+      // Verificar que el caché corresponda exactamente al curso/grupo seleccionado
       if (cached && (now - cached.lastFetched) < CACHE_DURATION) {
-        console.log('📦 Restaurando datos del caché de memoria para curso:', selectedCourse)
-        // Usar datos del caché directamente sin limpiar
+        console.log('📦 Restaurando datos del caché de memoria para curso/grupo:', selectedCourse)
+        // Usar datos del caché directamente
         setOpenActivities(cached.activities)
         setAnalysisResults(cached.analysisResults)
         setActivitiesSummary(cached.activitiesSummary)
@@ -318,7 +332,7 @@ export function IntelligentDashboardContent({
       }
       
       // 2. Si no hay caché de memoria, intentar cargar desde caché persistente
-      console.log('🔍 No hay caché de memoria válido, intentando caché persistente...')
+//       console.log('🔍 No hay caché de memoria válido, intentando caché persistente...')
       setIsLoadingCourse(true)
       setVisibleActivitiesCount(50)
       
@@ -327,20 +341,20 @@ export function IntelligentDashboardContent({
         
         try {
           setLoadingPhase('loading')
-          console.log('🔄 Fase: Verificando caché persistente...')
+//           console.log('🔄 Fase: Verificando caché persistente...')
           
           // Intentar cargar desde caché persistente
           hasPeristentCache = await loadAnalysisForCourse(selectedCourse)
           
           if (hasPeristentCache) {
-            console.log('✅ Datos cargados desde caché persistente, finalizando carga')
+//             console.log('✅ Datos cargados desde caché persistente, finalizando carga')
             // El useEffect de análisis automático se encargará de desactivar el loader
             // cuando detecte que tenemos datos y cacheLoaded = true
             return
           }
           
           // 3. Si no hay caché persistente, cargar datos frescos
-          console.log('🔄 Fase: Cargando datos frescos del servidor...')
+//           console.log('🔄 Fase: Cargando datos frescos del servidor...')
           setOpenActivities([])
           setAnalysisResults({})
           
@@ -377,7 +391,7 @@ export function IntelligentDashboardContent({
 
   // Función para analizar una actividad individual con información extendida
   const analyzeActivity = useCallback(async (activity: any, showVisualFeedback = true) => {
-    console.log('🚀 INICIANDO analyzeActivity con:', { activity, showVisualFeedback })
+//     console.log('🚀 INICIANDO analyzeActivity con:', { activity, showVisualFeedback })
     
     if (!activity) {
       console.error('❌ analyzeActivity: activity es null o undefined')
@@ -392,7 +406,7 @@ export function IntelligentDashboardContent({
     }
     
     const activityKey = `${activity.type}_${activity.id}`
-    console.log('🔑 Activity key generada:', activityKey)
+//     console.log('🔑 Activity key generada:', activityKey)
     
     try {
       // Solo mostrar estado de análisis si showVisualFeedback es true (análisis individual)
@@ -412,8 +426,8 @@ export function IntelligentDashboardContent({
         })
       })
 
-      console.log('📊 Response status:', response.status)
-      console.log('📊 Response headers:', response.headers)
+//       console.log('📊 Response status:', response.status)
+//       console.log('📊 Response headers:', response.headers)
       
       // Verificar si la respuesta es HTML (redirección a login)
       const contentType = response.headers.get('content-type')
@@ -427,7 +441,7 @@ export function IntelligentDashboardContent({
       }
       
       const data = await response.json()
-      console.log('📊 Response data:', data)
+//       console.log('📊 Response data:', data)
 
       if (response.ok && data.success) {
         setAnalysisResults(prev => ({
@@ -439,7 +453,7 @@ export function IntelligentDashboardContent({
             collectedData: data.collectedData // Guardar datos recopilados
           }
         }))
-        console.log(`✅ Análisis completado para: ${activity.name}`)
+//         console.log(`✅ Análisis completado para: ${activity.name}`)
       } else {
         console.error('❌ Error en análisis:', data.error)
         if (showVisualFeedback) {
@@ -468,7 +482,7 @@ export function IntelligentDashboardContent({
     const activitiesToAnalyze = openActivities.slice(0, visibleActivitiesCount)
 
     console.log(`📦 Analizando ${activitiesToAnalyze.length} actividades visibles`)
-    console.log(`📋 Análisis en cache disponibles: ${Object.keys(analysisResults).length}`)
+//     console.log(`📋 Análisis en cache disponibles: ${Object.keys(analysisResults).length}`)
 
     for (const activity of activitiesToAnalyze) {
       const activityKey = `${activity.type}_${activity.id}`
@@ -481,7 +495,7 @@ export function IntelligentDashboardContent({
         console.log(`⏰ ${activity.name} - Análisis desactualizado, regenerando...`)
         await analyzeActivity(activity, false)
       } else {
-        console.log(`✅ ${activity.name} - Usando análisis en caché (${existingAnalysis.fromCache ? 'desde BD' : 'desde sesión'})`)
+//         console.log(`✅ ${activity.name} - Usando análisis en caché (${existingAnalysis.fromCache ? 'desde BD' : 'desde sesión'})`)
       }
     }
 
@@ -495,47 +509,70 @@ export function IntelligentDashboardContent({
     if (!selectedCourse || !openActivities.length) return
     
     const confirmed = confirm(
-      `¿Actualizar análisis del curso actual?\n\nEsto volverá a analizar todas las ${openActivities.length} actividades del curso/grupo seleccionado.`
+      `🧹 LIMPIEZA COMPLETA DEL SISTEMA\n\n¿Proceder con la actualización completa?\n\nEsto hará:\n• Limpiará TODA la base de datos\n• Limpiará TUTTO el caché Redis\n• Limpiará caché y cookies del navegador\n• Re-analizará todas las ${openActivities.length} actividades\n\n⚠️ Todos los análisis previos se perderán.`
     )
     
     if (!confirmed) return
     
     try {
-      console.log(`🔄 Forzando re-análisis de ${openActivities.length} actividades del curso ${selectedCourse}`)
+      console.log(`🧹 INICIANDO LIMPIEZA COMPLETA DEL SISTEMA`)
       
-      // Limpiar caché del curso actual
-      delete courseDataCache[selectedCourse]
-      setAnalysisResults({})
+      // 1. LIMPIEZA COMPLETA DEL SISTEMA
+      setLoadingPhase('cleaning')
+      console.log('🧹 Llamando endpoint de limpieza completa...')
       
-      // Configurar estado de análisis
-      setIsAnalyzingBatch(true)
-      setLoadingPhase('analyzing')
-      setBatchProgress({current: 0, total: openActivities.length})
+      const clearResponse = await fetch('/api/analysis/clear-cache', {
+        method: 'POST',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      })
       
-      // Analizar todas las actividades secuencialmente
-      for (let i = 0; i < openActivities.length; i++) {
-        const activity = openActivities[i]
-        console.log(`🔄 Re-analizando actividad ${i + 1}/${openActivities.length}: ${activity.name}`)
-        
-        // Actualizar progreso
-        setBatchProgress({current: i + 1, total: openActivities.length})
-        
-        // Forzar análisis usando la misma función que los botones individuales
-        await analyzeActivity(activity, false)
+      if (!clearResponse.ok) {
+        throw new Error('Error en limpieza completa')
       }
       
-      console.log('✅ Re-análisis completo del curso terminado')
+      const clearResult = await clearResponse.json()
+      console.log('✅ Limpieza completa exitosa:', clearResult)
       
-      // Recargar los análisis desde la BD
-      await loadAnalysisForCourse(selectedCourse)
+      // 2. Limpiar caché local del componente
+      Object.keys(courseDataCache).forEach(key => delete courseDataCache[key]) // Resetear completamente el caché
+      setAnalysisResults({})
+      
+      // 3. Recargar página para limpiar estado completo
+      console.log('🔄 Recargando página para estado completamente fresco...')
+      window.location.href = window.location.pathname + '?refresh=' + Date.now()
       
     } catch (error) {
-      console.error('❌ Error forzando actualización:', error)
+      console.error('❌ Error en limpieza completa:', error)
       setError('Error al actualizar análisis. Por favor intente nuevamente.')
-    } finally {
-      setIsAnalyzingBatch(false)
-      setLoadingPhase(null)
-      setBatchProgress(null)
+      
+      // Fallback: limpieza manual si falla la API
+      try {
+        delete courseDataCache[selectedCourse]
+        setAnalysisResults({})
+        
+        // Configurar estado de análisis
+        setIsAnalyzingBatch(true)
+        setLoadingPhase('analyzing')
+        setBatchProgress({current: 0, total: openActivities.length})
+        
+        // Analizar todas las actividades secuencialmente
+        for (let i = 0; i < openActivities.length; i++) {
+          const activity = openActivities[i]
+          setBatchProgress({current: i + 1, total: openActivities.length})
+          await analyzeActivity(activity, false)
+        }
+        
+        await loadAnalysisForCourse(selectedCourse)
+      } catch (fallbackError) {
+        console.error('❌ Error en fallback:', fallbackError)
+      } finally {
+        setIsAnalyzingBatch(false)
+        setLoadingPhase(null)
+        setBatchProgress(null)
+      }
     }
   }
 
@@ -550,7 +587,8 @@ export function IntelligentDashboardContent({
       analysisCount: Object.keys(analysisResults).length
     })
     
-    if (cacheLoaded && !loadingActivities && selectedCourse && isLoadingCourse) {
+    // Cambiar condición: permitir análisis cuando hay actividades sin análisis, independiente del estado de carga
+    if (cacheLoaded && !loadingActivities && selectedCourse) {
       if (openActivities.length > 0 && !isAnalyzingBatch) {
         // Verificar si ya tenemos análisis para las actividades
         const hasAnalysisForActivities = openActivities.some(activity => {
@@ -564,7 +602,7 @@ export function IntelligentDashboardContent({
           return !analysisResults[activityKey]
         })
         
-        console.log(`📊 Estado del análisis: ${Object.keys(analysisResults).length} analizadas, ${activitiesWithoutAnalysis.length} sin analizar de ${openActivities.length} totales`)
+//         console.log(`📊 Estado del análisis: ${Object.keys(analysisResults).length} analizadas, ${activitiesWithoutAnalysis.length} sin analizar de ${openActivities.length} totales`)
         
         if (activitiesWithoutAnalysis.length > 0) {
           // Analizar directamente las actividades que faltan (como el botón individual)
@@ -579,7 +617,7 @@ export function IntelligentDashboardContent({
             // Analizar secuencialmente cada actividad que falta
             for (let i = 0; i < activitiesWithoutAnalysis.length; i++) {
               const activity = activitiesWithoutAnalysis[i]
-              console.log(`📊 Analizando actividad ${i + 1}/${activitiesWithoutAnalysis.length}: ${activity.name}`)
+//               console.log(`📊 Analizando actividad ${i + 1}/${activitiesWithoutAnalysis.length}: ${activity.name}`)
               
               // Actualizar progreso
               setBatchProgress({current: i + 1, total: activitiesWithoutAnalysis.length})
@@ -591,18 +629,18 @@ export function IntelligentDashboardContent({
             setIsAnalyzingBatch(false)
             setIsLoadingCourse(false)
             setBatchProgress({current: 0, total: 0}) // Limpiar progreso
-            console.log('✅ Análisis directo completado para todas las actividades faltantes')
+//             console.log('✅ Análisis directo completado para todas las actividades faltantes')
           }
           startDirectAnalysisForMissing()
         } else {
           // Todas las actividades ya tienen análisis
-          console.log('✅ Todas las actividades ya tienen análisis, desactivando loader')
+//           console.log('✅ Todas las actividades ya tienen análisis, desactivando loader')
           setIsLoadingCourse(false)
         }
       } else if (Object.keys(analysisResults).length > 0) {
         // Caso 2: No hay actividades abiertas PERO hay análisis en cache - mostrar cache inmediatamente
         console.log('📦 Mostrando análisis desde cache sin actividades abiertas')
-        console.log(`📋 Análisis disponibles en cache: ${Object.keys(analysisResults).length}`)
+//         console.log(`📋 Análisis disponibles en cache: ${Object.keys(analysisResults).length}`)
         setIsLoadingCourse(false) // Desactivar loader y mostrar cache
       } else {
         // Caso 3: No hay actividades ni cache - desactivar loader
@@ -620,13 +658,13 @@ export function IntelligentDashboardContent({
       console.log('⏰ Iniciando timeout de seguridad para el loader (10 segundos)')
       const timeoutId = setTimeout(() => {
         console.log('🚨 Timeout de seguridad activado - desactivando loader forzosamente')
-        console.log('📊 Estado al momento del timeout:', {
-          cacheLoaded,
-          loadingActivities,
-          openActivitiesCount: openActivities.length,
-          analysisCount: Object.keys(analysisResults).length,
-          selectedCourse
-        })
+//         console.log('📊 Estado al momento del timeout:', {
+//           cacheLoaded,
+//           loadingActivities,
+//           openActivitiesCount: openActivities.length,
+//           analysisCount: Object.keys(analysisResults).length,
+//           selectedCourse
+//         })
         setIsLoadingCourse(false)
       }, 10000) // 10 segundos para test más rápido
       
@@ -641,7 +679,7 @@ export function IntelligentDashboardContent({
     if (selectedCourse && !isLoadingCourse && !loadingActivities && cacheLoaded) {
       // Solo guardar en caché cuando tengamos datos completos
       if (openActivities.length > 0 || Object.keys(analysisResults).length > 0) {
-        console.log('💾 Guardando datos en caché de memoria y persistente para curso:', selectedCourse)
+//         console.log('💾 Guardando datos en caché de memoria y persistente para curso:', selectedCourse)
         
         // Guardar en caché de memoria
         courseDataCache[selectedCourse] = {
@@ -669,8 +707,8 @@ export function IntelligentDashboardContent({
       return
     }
 
-    console.log('🚀 INICIANDO ANÁLISIS DE CURSO')
-    console.log('📋 Curso seleccionado:', selectedCourse)
+//     console.log('🚀 INICIANDO ANÁLISIS DE CURSO')
+//     console.log('📋 Curso seleccionado:', selectedCourse)
 
     try {
       setIsGeneratingAnalysis(true)
@@ -686,11 +724,11 @@ export function IntelligentDashboardContent({
 
       console.log('📥 Respuesta recibida:', response.status, response.statusText)
       const data = await response.json()
-      console.log('📊 Datos de respuesta:', data)
+//       console.log('📊 Datos de respuesta:', data)
 
       if (response.ok && data.success) {
-        console.log('✅ Análisis generado exitosamente')
-        console.log('🔄 Recargando análisis del curso...')
+//         console.log('✅ Análisis generado exitosamente')
+//         console.log('🔄 Recargando análisis del curso...')
         await loadAnalysisForCourse(selectedCourse)
         
         // Navegar a la página de detalle del análisis del curso
@@ -718,7 +756,7 @@ export function IntelligentDashboardContent({
   const loadMoreActivities = useCallback(() => {
     const newVisibleCount = Math.min(visibleActivitiesCount + BATCH_SIZE, openActivities.length)
     setVisibleActivitiesCount(newVisibleCount)
-    console.log(`📋 Mostrando ${newVisibleCount} de ${openActivities.length} actividades`)
+//     console.log(`📋 Mostrando ${newVisibleCount} de ${openActivities.length} actividades`)
   }, [visibleActivitiesCount, openActivities.length])
 
   // Resetear actividades visibles cuando cambia el curso
@@ -858,12 +896,12 @@ export function IntelligentDashboardContent({
   // Función para navegar a la vista de detalle
   const navigateToDetail = useCallback((activity: any) => {
     console.log('📦 NavigateToDetail llamado con activity:', activity)
-    console.log('🔍 Activity data:', {
-      id: activity?.id,
-      type: activity?.type,
-      name: activity?.name,
-      hasAllFields: !!(activity?.id && activity?.type && activity?.name)
-    })
+//     console.log('🔍 Activity data:', {
+//       id: activity?.id,
+//       type: activity?.type,
+//       name: activity?.name,
+//       hasAllFields: !!(activity?.id && activity?.type && activity?.name)
+//     })
     setDetailView({ isActive: true, activity })
   }, [])
 
@@ -910,7 +948,7 @@ export function IntelligentDashboardContent({
             .map(line => line.replace(/^[-•*]\s*/, '').trim())
             .filter(line => line.length > 10) // Filtrar líneas muy cortas
           
-          console.log('📋 Resumen ejecutivo encontrado:', summaryPoints)
+//           console.log('📋 Resumen ejecutivo encontrado:', summaryPoints)
         } else if (title && sectionContent && sectionContent.length > 50) {
           // Solo incluir secciones con contenido sustancial (más de 50 caracteres)
           points.push({
@@ -919,7 +957,7 @@ export function IntelligentDashboardContent({
             content: sectionContent,
             type: detectContentType(sectionContent)
           })
-          console.log(`📋 Sección incluida: "${title}" (${sectionContent.length} caracteres)`)
+//           console.log(`📋 Sección incluida: "${title}" (${sectionContent.length} caracteres)`)
         } else {
           console.log(`⚠️ Sección excluida: "${title}" - contenido insuficiente (${sectionContent?.length || 0} caracteres)`)
         }
@@ -975,6 +1013,11 @@ export function IntelligentDashboardContent({
     return 'text'
   }
 
+  // Prevent SSR/hydration issues - useEffect must be after all other hooks
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   const getStatusIcon = () => {
     switch (connectionStatus) {
       case 'connected':
@@ -1002,6 +1045,24 @@ export function IntelligentDashboardContent({
       default:
         return 'Conectando...'
     }
+  }
+
+  // Don't render anything until the component is mounted on client-side to prevent hydration errors
+  if (!mounted) {
+    return (
+      <div className="max-w-[1132px] mx-auto px-4 sm:px-6 lg:px-3">
+        <div className="flex items-center justify-center py-16">
+          <div className="animate-pulse">
+            <div className="h-8 bg-gray-200 rounded mb-4 w-64"></div>
+            <div className="h-4 bg-gray-200 rounded mb-8 w-96"></div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="h-64 bg-gray-200 rounded"></div>
+              <div className="h-64 bg-gray-200 rounded"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // Mostrar vista de detalle si está activa
@@ -1329,7 +1390,7 @@ export function IntelligentDashboardContent({
               <button
                 onClick={() => {
                   console.log('🔘 Botón Generar análisis presionado')
-                  console.log('🔍 detailView.activity:', detailView.activity)
+//                   console.log('🔍 detailView.activity:', detailView.activity)
                   if (detailView.activity) {
                     analyzeActivity(detailView.activity)
                   } else {
@@ -1667,28 +1728,45 @@ export function IntelligentDashboardContent({
                         
                         {/* Footer con botones de acción - siempre en la parte inferior */}
                         <div className="flex justify-between items-center mt-6">
-                          {/* Botón de análisis forzado */}
-                          <button
-                            onClick={() => analyzeActivity(activity)}
-                            disabled={analyzingActivity === `${activity.type}_${activity.id}`}
-                            className={`px-3 py-2 rounded-lg text-sm font-medium font-inter transition-all flex items-center space-x-2 ${
-                              analyzingActivity === `${activity.type}_${activity.id}`
-                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                : 'bg-button-light text-icon-dark hover:shadow-[0_4px_10px_0_rgba(0,0,0,0.20)] shadow-[0_2px_6px_0_rgba(0,0,0,0.10)]'
-                            }`}
-                          >
-                            {analyzingActivity === `${activity.type}_${activity.id}` ? (
-                              <>
-                                <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
-                                <span>Analizando...</span>
-                              </>
-                            ) : (
-                              <>
-                                <FontAwesomeIcon icon={faBrain} />
-                                <span>Analizar</span>
-                              </>
+                          {/* Botones de la izquierda */}
+                          <div className="flex items-center space-x-3">
+                            {/* Botón de análisis forzado */}
+                            <button
+                              onClick={() => analyzeActivity(activity)}
+                              disabled={analyzingActivity === `${activity.type}_${activity.id}`}
+                              className={`px-3 py-2 rounded-lg text-sm font-medium font-inter transition-all flex items-center space-x-2 ${
+                                analyzingActivity === `${activity.type}_${activity.id}`
+                                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                  : 'bg-button-light text-icon-dark hover:shadow-[0_4px_10px_0_rgba(0,0,0,0.20)] shadow-[0_2px_6px_0_rgba(0,0,0,0.10)]'
+                              }`}
+                            >
+                              {analyzingActivity === `${activity.type}_${activity.id}` ? (
+                                <>
+                                  <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
+                                  <span>Analizando...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <FontAwesomeIcon icon={faBrain} />
+                                  <span>Analizar</span>
+                                </>
+                              )}
+                            </button>
+                            
+                            {/* Botón de ir a Moodle */}
+                            {activity.url && (
+                              <a
+                                href={activity.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-2 rounded-lg text-sm font-medium font-inter transition-all flex items-center space-x-2 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:shadow-[0_4px_10px_0_rgba(59,130,246,0.15)] shadow-[0_2px_6px_0_rgba(59,130,246,0.10)]"
+                                title="Abrir en Moodle"
+                              >
+                                <FontAwesomeIcon icon={faExternalLinkAlt} />
+                                <span>Ver en Moodle</span>
+                              </a>
                             )}
-                          </button>
+                          </div>
                           
                           {/* Ver más como en el diseño de referencia */}
                           <button 
