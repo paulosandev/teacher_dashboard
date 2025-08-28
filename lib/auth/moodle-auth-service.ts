@@ -423,7 +423,7 @@ export class MoodleAuthService {
                   courseFullname: mappingInfo.course.fullname || mappingInfo.course.name,
                   groupId: mappingInfo.group.id.toString(),
                   groupName: mappingInfo.group.name,
-                  displayName: `${mappingInfo.course.name || mappingInfo.course.fullname} | ${mappingInfo.group.name}`,
+                  displayName: `${mappingInfo.course.name || mappingInfo.course.fullname} | ${mappingInfo.group.name} | ${this.extractAulaFromUrl()}`,
                   course: mappingInfo.course,
                   group: mappingInfo.group
                 })
@@ -460,7 +460,7 @@ export class MoodleAuthService {
             courseFullname: curso.fullname || curso.name,
             groupId: '0', // ID especial para acceso general
             groupName: 'Acceso General',
-            displayName: `${curso.name || curso.fullname} | Acceso General`,
+            displayName: `${curso.name || curso.fullname} | Acceso General | ${this.extractAulaFromUrl()}`,
             course: curso,
             group: null
           })
@@ -497,7 +497,7 @@ export class MoodleAuthService {
           courseFullname: course.fullname || course.name,
           groupId: '0',
           groupName: 'Sin Grupos (Fallback)',
-          displayName: `${course.name || course.fullname} | Sin Grupos (Fallback)`,
+          displayName: `${course.name || course.fullname} | Sin Grupos (Fallback) | ${this.extractAulaFromUrl()}`,
           course: course,
           group: null
         }))
@@ -505,6 +505,30 @@ export class MoodleAuthService {
         console.error(`❌ Error en fallback:`, fallbackError)
         return []
       }
+    }
+  }
+
+  /**
+   * Extrae el identificador del aula desde la URL base
+   */
+  private extractAulaFromUrl(): string {
+    try {
+      // Extraer dominio de la URL (ej: https://av141.utel.edu.mx -> av141)
+      const url = new URL(this.baseUrl)
+      const hostname = url.hostname
+      
+      // Buscar patrones como: av141.utel.edu.mx, aula101.utel.edu.mx
+      const aulaMatch = hostname.match(/^(av\d+|aula\d+)\.utel\.edu\.mx$/)
+      if (aulaMatch) {
+        return aulaMatch[1].toUpperCase() // AV141, AULA101
+      }
+      
+      // Fallback: usar el hostname completo si no coincide el patrón
+      return hostname.split('.')[0].toUpperCase()
+      
+    } catch (error) {
+      console.warn('⚠️ Error extrayendo aula de URL:', error)
+      return 'AULA'
     }
   }
 }
