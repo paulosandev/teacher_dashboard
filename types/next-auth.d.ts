@@ -9,6 +9,7 @@ declare module 'next-auth' {
     username?: string
     moodleToken?: string
     tokenExpiry?: Date
+    multiAulaData?: any
   }
 
   interface Session {
@@ -20,6 +21,7 @@ declare module 'next-auth' {
       username?: string
       moodleToken?: string
       tokenExpiry?: Date
+      multiAulaData?: any
     }
   }
 }
@@ -32,5 +34,6 @@ declare module 'next-auth/jwt' {
     username?: string
     moodleToken?: string
     tokenExpiry?: Date
+    multiAulaData?: any
   }
 }

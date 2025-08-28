@@ -64,7 +64,7 @@ class MoodleAPIClient {
   private config: MoodleConfig | null = null
 
   constructor(baseUrl?: string, token?: string) {
-    if (baseUrl && token) {
+    if (baseUrl) {
       // Asegurar que la URL incluye el endpoint de webservice
       const fullUrl = baseUrl.endsWith('/webservice/rest/server.php') 
         ? baseUrl 
@@ -72,7 +72,7 @@ class MoodleAPIClient {
       
       this.config = {
         baseUrl: fullUrl,
-        token
+        token: token || ''
       }
     }
   }
@@ -920,6 +920,85 @@ class MoodleAPIClient {
     } catch (error) {
       console.error('❌ Error al conectar con Moodle:', error)
       return false
+    }
+  }
+
+  /**
+   * Obtener token directamente con credenciales de usuario
+   */
+  async getTokenWithCredentials(username: string, password: string): Promise<{success: boolean, token?: string, expiry?: Date, error?: string}> {
+    try {
+      console.log(`🔑 Obteniendo token con credenciales para: ${username}`)
+
+      // Obtener baseUrl del config
+      if (!this.config?.baseUrl) {
+        return {
+          success: false,
+          error: 'Cliente Moodle no configurado con URL base'
+        }
+      }
+      
+      const baseUrl = this.config.baseUrl.replace('/webservice/rest/server.php', '')
+      const loginUrl = `${baseUrl}/login/token.php`
+      const params = new URLSearchParams({
+        username: username,
+        password: password,
+        service: 'moodle_mobile_app'
+      })
+
+      const response = await fetch(`${loginUrl}?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'MoodleMobile',
+          'Accept': 'application/json'
+        },
+        timeout: 15000
+      })
+
+      if (!response.ok) {
+        console.error(`❌ Error HTTP ${response.status}: ${response.statusText}`)
+        return {
+          success: false,
+          error: `Error HTTP ${response.status}: ${response.statusText}`
+        }
+      }
+
+      const data = await response.json()
+
+      if (data.error) {
+        console.error(`❌ Error de Moodle: ${data.error}`)
+        return {
+          success: false,
+          error: data.error
+        }
+      }
+
+      if (!data.token) {
+        console.error('❌ Respuesta de Moodle sin token')
+        return {
+          success: false,
+          error: 'Respuesta de Moodle sin token'
+        }
+      }
+
+      // Calcular expiración (típicamente 1 hora desde ahora)
+      const expiry = new Date()
+      expiry.setHours(expiry.getHours() + 1)
+
+      console.log(`✅ Token obtenido exitosamente para: ${username}`)
+      
+      return {
+        success: true,
+        token: data.token,
+        expiry: expiry
+      }
+
+    } catch (error) {
+      console.error('❌ Error obteniendo token con credenciales:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Error desconocido'
+      }
     }
   }
 }

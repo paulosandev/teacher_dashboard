@@ -1,6 +1,6 @@
 import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import { moodleAuthService } from './moodle-auth-service'
+import { multiAulaAuthService } from './multi-aula-auth-service'
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -23,25 +23,21 @@ export const authOptions: NextAuthOptions = {
         }
 
         try {
-          console.log(`🔐 Intentando autenticación NextAuth para: ${credentials.username}`)
+          console.log(`🔐 Intentando autenticación multi-aula NextAuth para: ${credentials.username}`)
 
-          // Autenticar directamente contra Moodle
-          const authResult = await moodleAuthService.authenticateUser(
+          // Autenticar usando el servicio multi-aula
+          const authResult = await multiAulaAuthService.authenticateUser(
             credentials.username,
             credentials.password
           )
 
           if (!authResult.success || !authResult.user) {
-            console.log(`❌ Autenticación fallida: ${authResult.error}`)
+            console.log(`❌ Autenticación multi-aula fallida: ${authResult.error}`)
             throw new Error(authResult.error || 'Credenciales inválidas')
           }
 
-          if (!authResult.isTeacher) {
-            console.log(`❌ Usuario no es profesor: ${credentials.username}`)
-            throw new Error('Acceso restringido a profesores únicamente')
-          }
-
-          console.log(`✅ Autenticación exitosa para profesor: ${authResult.user.fullname}`)
+          const statusMessage = multiAulaAuthService.getStatusMessage(authResult)
+          console.log(`✅ Autenticación multi-aula exitosa: ${statusMessage}`)
 
           // Retornar datos del usuario para la sesión
           return {
@@ -50,8 +46,15 @@ export const authOptions: NextAuthOptions = {
             name: authResult.user.fullname,
             matricula: authResult.user.username,
             username: authResult.user.username,
-            moodleToken: authResult.token,
-            tokenExpiry: authResult.tokenExpiry
+            moodleToken: authResult.primaryToken,
+            tokenExpiry: new Date(Date.now() + 60 * 60 * 1000), // 1 hora
+            multiAulaData: {
+              totalAulas: authResult.totalAulas,
+              validAulas: authResult.validAulas,
+              invalidAulas: authResult.invalidAulas,
+              aulaResults: authResult.aulaResults,
+              validTokens: multiAulaAuthService.getValidTokens(authResult.aulaResults)
+            }
           }
         } catch (error: any) {
           console.error('❌ Error en autenticación Moodle:', error)
@@ -70,6 +73,7 @@ export const authOptions: NextAuthOptions = {
         token.username = user.username
         token.moodleToken = user.moodleToken
         token.tokenExpiry = user.tokenExpiry
+        token.multiAulaData = user.multiAulaData
       }
 
       // Validar expiración del token de Moodle
@@ -95,6 +99,7 @@ export const authOptions: NextAuthOptions = {
         session.user.name = token.name as string
         session.user.moodleToken = token.moodleToken as string
         session.user.tokenExpiry = token.tokenExpiry as Date
+        session.user.multiAulaData = token.multiAulaData as any
       }
       return session
     },
