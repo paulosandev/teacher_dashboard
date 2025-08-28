@@ -39,8 +39,8 @@ export class CronScheduler {
       timezone: "America/Mexico_City" // Ajusta según tu zona horaria
     })
 
-    // Job de 4:00 PM (todos los días)
-    this.afternoonJob = cron.schedule('0 16 * * *', async () => {
+    // Job de 6:00 PM (todos los días)
+    this.afternoonJob = cron.schedule('0 18 * * *', async () => {
       console.log('\n🌆 ===== ACTUALIZACIÓN VESPERTINA PROGRAMADA =====')
       await autoUpdateService.executeUpdate('scheduled')
     }, {
@@ -71,7 +71,7 @@ export class CronScheduler {
 
     console.log('✅ Programador de tareas inicializado:')
     console.log('   📅 Actualización matutina: 8:00 AM (México)')
-    console.log('   📅 Actualización vespertina: 4:00 PM (México)')
+    console.log('   📅 Actualización vespertina: 6:00 PM (México)')
     console.log('   📅 Limpieza de caché: 2:00 AM (México)')
     console.log('   📅 Health check: Cada hora')
   }

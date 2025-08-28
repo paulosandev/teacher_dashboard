@@ -5,6 +5,7 @@
 
 import { getIntegratedEnrolmentClient } from '@/lib/db/integrated-enrolment-client'
 import { MoodleAPIClient } from '@/lib/moodle/api-client'
+import { serviceTokenManager, type ServiceTokenInfo } from '@/lib/services/service-token-manager'
 
 export interface AulaAuthResult {
   aulaId: string
@@ -20,6 +21,8 @@ export interface AulaAuthResult {
     fullname: string
     email: string
   }
+  serviceToken?: ServiceTokenInfo  // Token de servicio general disponible
+  hasServiceAccess?: boolean       // Si hay acceso vía token de servicio
 }
 
 export interface MultiAulaAuthResult {
@@ -201,12 +204,18 @@ class MultiAulaAuthService {
       
       if (!tokenResult.success || !tokenResult.token) {
         console.log(`❌ Credenciales inválidas en ${domain}: ${tokenResult.error}`)
+        
+        // Verificar si hay token de servicio disponible como fallback
+        const serviceToken = serviceTokenManager.getServiceToken(aulaId)
+        
         return {
           aulaId,
           aulaUrl,
           domain,
           isValidCredentials: false,
-          error: tokenResult.error || 'Credenciales inválidas'
+          error: tokenResult.error || 'Credenciales inválidas',
+          serviceToken,
+          hasServiceAccess: !!serviceToken
         }
       }
 
@@ -229,6 +238,9 @@ class MultiAulaAuthService {
 
       console.log(`✅ Credenciales válidas en ${domain} para: ${userInfo.fullname}`)
       
+      // Verificar si también hay token de servicio disponible
+      const serviceToken = serviceTokenManager.getServiceToken(aulaId)
+      
       return {
         aulaId,
         aulaUrl,
@@ -241,7 +253,9 @@ class MultiAulaAuthService {
           username: userInfo.username,
           fullname: userInfo.fullname,
           email: userInfo.useremail || ''
-        }
+        },
+        serviceToken,
+        hasServiceAccess: !!serviceToken
       }
 
     } catch (error) {

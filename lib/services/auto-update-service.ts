@@ -6,6 +6,7 @@
 import { MoodleAPIClient } from '@/lib/moodle/api-client'
 import { CourseAnalysisService } from '@/lib/services/analysis-service'
 import { getIntegratedEnrolmentClient } from '@/lib/db/integrated-enrolment-client'
+import { serviceTokenManager } from '@/lib/services/service-token-manager'
 import fs from 'fs/promises'
 import path from 'path'
 
@@ -234,21 +235,24 @@ export class AutoUpdateService {
   }
 
   /**
-   * Obtener token para un profesor (simulado, en producción usar sistema real)
+   * Obtener token para un profesor, con fallback a tokens de servicio
    */
   private async getTokenForTeacher(username: string, aulaId: string): Promise<string | null> {
-    // En producción, aquí se obtendría el token real del profesor
-    // Por ahora retornamos el token de ambiente si está disponible
+    // 1. Intentar obtener token específico del profesor desde variables de entorno
+    const teacherToken = process.env[`MOODLE_TOKEN_${aulaId.toUpperCase()}_${username.toUpperCase()}`] || 
+                        process.env[`MOODLE_TOKEN_${aulaId.toUpperCase()}`] || 
+                        process.env.MOODLE_TOKEN
     
-    // Verificar si tenemos un token almacenado en caché o base de datos
-    // Este es un placeholder - en producción necesitarías:
-    // 1. Sistema de tokens de servicio con permisos de lectura
-    // 2. O tokens almacenados de forma segura con refresh automático
-    
-    const envToken = process.env[`MOODLE_TOKEN_${aulaId.toUpperCase()}`] || process.env.MOODLE_TOKEN
-    
-    if (envToken) {
-      return envToken
+    if (teacherToken) {
+      console.log(`🔑 Usando token específico para ${username} en ${aulaId}`)
+      return teacherToken
+    }
+
+    // 2. Fallback: usar token de servicio general si está disponible
+    const serviceToken = serviceTokenManager.getServiceToken(aulaId)
+    if (serviceToken) {
+      console.log(`🔧 Usando token de servicio general para ${aulaId} (usuario: ${serviceToken.user})`)
+      return serviceToken.token
     }
 
     console.warn(`⚠️ No hay token disponible para ${username} en ${aulaId}`)
@@ -373,9 +377,9 @@ export class AutoUpdateService {
       times.push(morning)
     }
     
-    // 4:00 PM
+    // 6:00 PM
     const afternoon = new Date(now)
-    afternoon.setHours(16, 0, 0, 0)
+    afternoon.setHours(18, 0, 0, 0)
     if (afternoon > now) {
       times.push(afternoon)
     } else {
