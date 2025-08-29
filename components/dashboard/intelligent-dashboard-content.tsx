@@ -1430,7 +1430,15 @@ export function IntelligentDashboardContent({
           <h1 className="text-3xl font-bold text-gray-900">
             ¡Hola, {user.firstName}!
           </h1>
-          
+
+          <a
+              href="https://forms.gle/xHNHcHHP6p8QDKzP7"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white shadow-sm transition-colors"
+          >
+            No encuentras tu curso?
+          </a>
         </div>
         
         <p className="text-gray-600 mb-2">
