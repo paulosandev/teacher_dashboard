@@ -4,6 +4,7 @@
  */
 
 import { MoodleAPIClient } from '@/lib/moodle/api-client'
+import { getAulaDisplayName } from '@/lib/config/aulas-config'
 
 export interface MoodleUser {
   id: number
@@ -31,8 +32,9 @@ export interface MoodleAuthResult {
 export class MoodleAuthService {
   private baseUrl: string
 
-  constructor() {
-    this.baseUrl = process.env.MOODLE_URL!
+  constructor(baseUrl?: string) {
+    // Permitir URL personalizada o usar la de env por defecto
+    this.baseUrl = baseUrl || process.env.MOODLE_API_URL || 'https://av141.utel.edu.mx/webservice/rest/server.php'
   }
 
   /**
@@ -287,7 +289,7 @@ export class MoodleAuthService {
    * Obtiene combinaciones curso-grupo donde el usuario es profesor y está enrolado
    * Implementa el algoritmo optimizado en lotes para verificar membresía de grupos
    */
-  async getTeacherCourseGroups(token: string, userId: number): Promise<Array<{
+  async getTeacherCourseGroups(token: string, userId: number, userAulaUrl?: string): Promise<Array<{
     courseId: string,
     courseName: string,
     courseShortname: string,
@@ -423,7 +425,7 @@ export class MoodleAuthService {
                   courseFullname: mappingInfo.course.fullname || mappingInfo.course.name,
                   groupId: mappingInfo.group.id.toString(),
                   groupName: mappingInfo.group.name,
-                  displayName: `${mappingInfo.course.name || mappingInfo.course.fullname} | ${mappingInfo.group.name} | ${this.extractAulaFromUrl()}`,
+                  displayName: `${mappingInfo.course.name || mappingInfo.course.fullname} | ${mappingInfo.group.name} | ${getAulaDisplayName(userAulaUrl || this.baseUrl)}`,
                   course: mappingInfo.course,
                   group: mappingInfo.group
                 })
@@ -460,7 +462,7 @@ export class MoodleAuthService {
             courseFullname: curso.fullname || curso.name,
             groupId: '0', // ID especial para acceso general
             groupName: 'Acceso General',
-            displayName: `${curso.name || curso.fullname} | Acceso General | ${this.extractAulaFromUrl()}`,
+            displayName: `${curso.name || curso.fullname} | Acceso General | ${getAulaDisplayName(userAulaUrl || this.baseUrl)}`,
             course: curso,
             group: null
           })
@@ -497,7 +499,7 @@ export class MoodleAuthService {
           courseFullname: course.fullname || course.name,
           groupId: '0',
           groupName: 'Sin Grupos (Fallback)',
-          displayName: `${course.name || course.fullname} | Sin Grupos (Fallback) | ${this.extractAulaFromUrl()}`,
+          displayName: `${course.name || course.fullname} | Sin Grupos (Fallback) | ${getAulaDisplayName(userAulaUrl || this.baseUrl)}`,
           course: course,
           group: null
         }))
@@ -511,10 +513,17 @@ export class MoodleAuthService {
   /**
    * Extrae el identificador del aula desde la URL base
    */
-  private extractAulaFromUrl(): string {
+  private extractAulaFromUrl(urlString?: string): string {
     try {
+      // Usar la URL proporcionada o la baseUrl por defecto
+      const urlToUse = urlString || this.baseUrl
+      
+      if (!urlToUse) {
+        return 'AULA'
+      }
+      
       // Extraer dominio de la URL (ej: https://av141.utel.edu.mx -> av141)
-      const url = new URL(this.baseUrl)
+      const url = new URL(urlToUse)
       const hostname = url.hostname
       
       // Buscar patrones como: av141.utel.edu.mx, aula101.utel.edu.mx

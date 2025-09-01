@@ -39,6 +39,11 @@ export const authOptions: NextAuthOptions = {
           const statusMessage = multiAulaAuthService.getStatusMessage(authResult)
           console.log(`✅ Autenticación multi-aula exitosa: ${statusMessage}`)
 
+          // Obtener la URL del aula principal (primera aula válida)
+          const primaryAulaUrl = authResult.aulaResults && authResult.aulaResults.length > 0
+            ? authResult.aulaResults.find(a => a.isValidCredentials)?.aulaUrl || 'https://av141.utel.edu.mx'
+            : 'https://av141.utel.edu.mx'
+          
           // Retornar datos del usuario para la sesión
           return {
             id: authResult.user.id.toString(),
@@ -47,6 +52,7 @@ export const authOptions: NextAuthOptions = {
             matricula: authResult.user.username,
             username: authResult.user.username,
             moodleToken: authResult.primaryToken,
+            moodleUrl: primaryAulaUrl, // Agregar URL del aula principal
             tokenExpiry: new Date(Date.now() + 60 * 60 * 1000), // 1 hora
             multiAulaData: {
               totalAulas: authResult.totalAulas,
@@ -68,6 +74,7 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
+        token.moodleUrl = user.moodleUrl
         token.email = user.email
         token.matricula = user.matricula
         token.username = user.username
@@ -98,6 +105,7 @@ export const authOptions: NextAuthOptions = {
         session.user.username = token.username as string
         session.user.name = token.name as string
         session.user.moodleToken = token.moodleToken as string
+        session.user.moodleUrl = token.moodleUrl as string
         session.user.tokenExpiry = token.tokenExpiry as Date
         session.user.multiAulaData = token.multiAulaData as any
       }

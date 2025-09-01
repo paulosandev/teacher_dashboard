@@ -8,6 +8,7 @@ declare module 'next-auth' {
     matricula: string
     username?: string
     moodleToken?: string
+    moodleUrl?: string
     tokenExpiry?: Date
     multiAulaData?: any
   }
@@ -20,6 +21,7 @@ declare module 'next-auth' {
       matricula: string
       username?: string
       moodleToken?: string
+      moodleUrl?: string
       tokenExpiry?: Date
       multiAulaData?: any
     }
@@ -33,6 +35,7 @@ declare module 'next-auth/jwt' {
     matricula: string
     username?: string
     moodleToken?: string
+    moodleUrl?: string
     tokenExpiry?: Date
     multiAulaData?: any
   }

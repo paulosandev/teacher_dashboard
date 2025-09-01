@@ -94,9 +94,13 @@ export class SessionMoodleClient {
       throw new Error('No hay sesión activa')
     }
 
+    // Obtener la URL del aula desde la sesión (si existe)
+    const aulaUrl = session.user.moodleUrl || 'https://av141.utel.edu.mx/webservice/rest/server.php'
+    
     return await moodleAuthService.getTeacherCourseGroups(
       session.user.moodleToken,
-      parseInt(session.user.id)
+      parseInt(session.user.id),
+      aulaUrl
     )
   }
 
