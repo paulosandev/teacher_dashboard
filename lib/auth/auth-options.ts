@@ -41,8 +41,8 @@ export const authOptions: NextAuthOptions = {
 
           // Obtener la URL del aula principal (primera aula válida)
           const primaryAulaUrl = authResult.aulaResults && authResult.aulaResults.length > 0
-            ? authResult.aulaResults.find(a => a.isValidCredentials)?.aulaUrl || 'https://av141.utel.edu.mx'
-            : 'https://av141.utel.edu.mx'
+            ? authResult.aulaResults.find(a => a.isValidCredentials)?.aulaUrl || process.env.MOODLE_API_URL?.replace('/webservice/rest/server.php', '') || 'https://av141.utel.edu.mx'
+            : process.env.MOODLE_API_URL?.replace('/webservice/rest/server.php', '') || 'https://av141.utel.edu.mx'
           
           // Retornar datos del usuario para la sesión
           return {

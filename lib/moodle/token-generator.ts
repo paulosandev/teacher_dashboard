@@ -11,7 +11,7 @@ export class MoodleTokenGenerator {
   private moodleUrl: string
 
   constructor() {
-    this.moodleUrl = process.env.MOODLE_URL || 'https://av141.utel.edu.mx'
+    this.moodleUrl = process.env.MOODLE_API_URL?.replace('/webservice/rest/server.php', '') || 'https://av141.utel.edu.mx'
   }
 
   /**
