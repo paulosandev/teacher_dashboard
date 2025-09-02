@@ -11,23 +11,50 @@ interface DynamicSectionProps {
 }
 
 export function DynamicSectionRenderer({ section, className = "" }: DynamicSectionProps) {
-  // Función para limpiar caracteres de markdown y especiales
-  const cleanText = (text: string): string => {
+  // Función para convertir markdown a HTML y limpiar
+  const processMarkdownText = (text: string): string => {
     if (!text) return ''
     return text
-      .replace(/\*\*(.*?)\*\*/g, '$1')           // **texto** → texto
-      .replace(/\*(.*?)\*/g, '$1')              // *texto* → texto
-      .replace(/~(.*?)~/g, '$1')                // ~texto~ → texto
-      .replace(/`(.*?)`/g, '$1')                // `texto` → texto
-      .replace(/~(?=\d)/g, '')                  // Eliminar ~ que van antes de números (~59 → 59)
-      .replace(/~/g, '')                        // Eliminar ~ restantes
-      .replace(/\*\*Acción sugerida:\*\*/g, 'Acción sugerida:') // Casos específicos
-      .replace(/\*Acción sugerida:\*/g, 'Acción sugerida:')
-      .replace(/^\*\s+/gm, '')                  // * al inicio de línea
-      .replace(/^\*\*\s+/gm, '')                // ** al inicio de línea
-      .replace(/\*\*/g, '')                     // ** restantes
-      .replace(/\*/g, '')                       // * restantes
+      // Convertir markdown a HTML
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // **texto** → <strong>texto</strong>
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')              // *texto* → <em>texto</em>
+      .replace(/`(.*?)`/g, '<code>$1</code>')            // `texto` → <code>texto</code>
+      // Limpiar caracteres especiales restantes
+      .replace(/~/g, '')                                 // ~ sueltos
+      .replace(/\|/g, '')                               // | pipes
+      .replace(/\\\\/g, '')                               // \\ backslash
+      // Limpiar patrones de inicio de línea pero mantener el contenido
+      .replace(/^[\*\-\+]\s+/gm, '')                    // *, -, + al inicio
+      .replace(/^\d+\.\s+/gm, '')                       // 1. 2. etc al inicio
+      // Limpiar espacios múltiples
+      .replace(/\s+/g, ' ')                             // Múltiples espacios → uno
       .trim()
+  }
+
+  // Función para crear resumen integrado más completo
+  const createIntegratedSummary = (items: string[]): string => {
+    if (!items || items.length === 0) return ''
+    
+    // Tomar más items y procesarlos
+    const processedItems = items.slice(0, 5).map(item => {
+      return processMarkdownText(item)
+    }).filter(text => text.length > 0)
+    
+    if (processedItems.length === 0) return ''
+    
+    // Crear un texto más fluido uniendo las primeras oraciones
+    let combinedText = processedItems.join('. ')
+    
+    // Limpiar puntos dobles y agregar punto final si no lo tiene
+    combinedText = combinedText
+      .replace(/\.\./g, '.')
+      .replace(/\.$/, '')
+    
+    if (!combinedText.endsWith('.')) {
+      combinedText += '.'
+    }
+    
+    return combinedText
   }
 
   // Mantener diseño consistente: fondo blanco, box-shadow-sm, border-radius 16px
@@ -50,28 +77,29 @@ export function DynamicSectionRenderer({ section, className = "" }: DynamicSecti
 
       case 'numbered-list':
         if (Array.isArray(section.content)) {
-          // Limpiar caracteres de markdown para mejor presentación
-          const cleanedContent = section.content.map((item: string) => cleanText(item))
-          return <AnalysisList items={cleanedContent} numbered={true} />
+          // Procesar markdown a HTML para mejor presentación
+          const processedContent = section.content.map((item: string) => processMarkdownText(item))
+          return <AnalysisList items={processedContent} numbered={true} />
         }
         break
 
       case 'bullet-list':
         if (Array.isArray(section.content)) {
-          // Limpiar caracteres de markdown para mejor presentación
-          const cleanedContent = section.content.map((item: string) => cleanText(item))
-          return <AnalysisList items={cleanedContent} numbered={false} />
+          // Procesar markdown a HTML para mejor presentación
+          const processedContent = section.content.map((item: string) => processMarkdownText(item))
+          return <AnalysisList items={processedContent} numbered={false} />
         }
         break
 
       case 'text':
         if (typeof section.content === 'string') {
-          // Limpiar caracteres de markdown para mejor presentación
-          const cleanedContent = cleanText(section.content)
+          // Procesar markdown a HTML para mejor presentación
+          const processedContent = processMarkdownText(section.content)
           return (
-            <div className="max-w-none text-neutral-dark font-inter text-sm">
-              <ContentParser content={cleanedContent} />
-            </div>
+            <div 
+              className="max-w-none text-neutral-dark font-inter text-sm leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: processedContent }}
+            />
           )
         }
         break

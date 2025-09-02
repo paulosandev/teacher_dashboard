@@ -27,23 +27,51 @@ interface AnalysisCardProps {
 export default function AnalysisCard({ data, onViewMore, onReanalyze }: AnalysisCardProps) {
   const [isReanalyzing, setIsReanalyzing] = useState(false)
 
-  // Función para limpiar caracteres de markdown y especiales
-  const cleanText = (text: string): string => {
+  // Función para convertir markdown a HTML y limpiar
+  const processMarkdownText = (text: string): string => {
     if (!text) return ''
     return text
-      .replace(/\*\*(.*?)\*\*/g, '$1')           // **texto** → texto
-      .replace(/\*(.*?)\*/g, '$1')              // *texto* → texto
-      .replace(/~(.*?)~/g, '$1')                // ~texto~ → texto
-      .replace(/`(.*?)`/g, '$1')                // `texto` → texto
-      .replace(/~(?=\d)/g, '')                  // Eliminar ~ que van antes de números (~59 → 59)
-      .replace(/~/g, '')                        // Eliminar ~ restantes
-      .replace(/\*\*Acción sugerida:\*\*/g, 'Acción sugerida:') // Casos específicos
-      .replace(/\*Acción sugerida:\*/g, 'Acción sugerida:')
-      .replace(/^\*\s+/gm, '')                  // * al inicio de línea
-      .replace(/^\*\*\s+/gm, '')                // ** al inicio de línea
-      .replace(/\*\*/g, '')                     // ** restantes
-      .replace(/\*/g, '')                       // * restantes
+      // Convertir markdown a HTML
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // **texto** → <strong>texto</strong>
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')              // *texto* → <em>texto</em>
+      .replace(/`(.*?)`/g, '<code>$1</code>')            // `texto` → <code>texto</code>
+      // Limpiar caracteres especiales restantes
+      .replace(/~/g, '')                                 // ~ sueltos
+      .replace(/\|/g, '')                               // | pipes
+      .replace(/\\/g, '')                               // \ backslash
+      // Limpiar patrones de inicio de línea pero mantener el contenido
+      .replace(/^[\*\-\+]\s+/gm, '')                    // *, -, + al inicio
+      .replace(/^\d+\.\s+/gm, '')                       // 1. 2. etc al inicio
+      // Limpiar espacios múltiples
+      .replace(/\s+/g, ' ')                             // Múltiples espacios → uno
       .trim()
+  }
+  
+  // Función para crear resumen integrado más completo
+  const createIntegratedSummary = (items: any[]): string => {
+    if (!items || items.length === 0) return ''
+    
+    // Tomar más items y procesarlos
+    const processedItems = items.slice(0, 5).map(item => {
+      const text = typeof item === 'string' ? item : item.description || item.action || ''
+      return processMarkdownText(text)
+    }).filter(text => text.length > 0)
+    
+    if (processedItems.length === 0) return ''
+    
+    // Crear un texto más fluido uniendo las primeras oraciones
+    let combinedText = processedItems.join('. ')
+    
+    // Limpiar puntos dobles y agregar punto final si no lo tiene
+    combinedText = combinedText
+      .replace(/\.\./g, '.')
+      .replace(/\.$/, '')
+    
+    if (!combinedText.endsWith('.')) {
+      combinedText += '.'
+    }
+    
+    return combinedText
   }
 
   const getTypeIcon = () => {
@@ -144,50 +172,72 @@ export default function AnalysisCard({ data, onViewMore, onReanalyze }: Analysis
               </p>
             </div>
             
-            {/* Mostrar resumen de las primeras dimensiones */}
+            {/* Mostrar resumen integrado de hallazgos */}
             {data.positives.length > 0 && (
-              <div className="flex items-start">
-                <FontAwesomeIcon 
-                  icon={faUsers} 
-                  className="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0"
-                />
-                <div>
-                  <strong className="font-semibold text-gray-700">Principales hallazgos:</strong>
-                  <span className="text-gray-600 ml-1">
-                    {cleanText(data.positives[0] || '').substring(0, 250) + (data.positives[0]?.length > 250 ? '...' : '')}
-                  </span>
+              <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+                <div className="flex items-start">
+                  <FontAwesomeIcon 
+                    icon={faUsers} 
+                    className="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0"
+                  />
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-700 mb-1">Principales hallazgos</div>
+                    <div 
+                      className="text-gray-600 text-sm leading-relaxed"
+                      dangerouslySetInnerHTML={{
+                        __html: createIntegratedSummary(data.positives).substring(0, 400) || 
+                               'Se identificaron múltiples aspectos positivos en la participación estudiantil.'
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             )}
             
-            {/* Mostrar alertas si las hay */}
+            {/* Mostrar alertas integradas */}
             {data.alerts.length > 0 && (
-              <div className="flex items-start">
-                <FontAwesomeIcon 
-                  icon={faExclamationTriangle} 
-                  className="w-5 h-5 text-red-600 mt-0.5 mr-3 flex-shrink-0"
-                />
-                <div>
-                  <strong className="font-semibold text-gray-700">Aspectos a mejorar:</strong>
-                  <span className="text-gray-600 ml-1">
-                    {cleanText(data.alerts[0] || '').substring(0, 250) + (data.alerts[0]?.length > 250 ? '...' : '')}
-                  </span>
+              <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg">
+                <div className="flex items-start">
+                  <FontAwesomeIcon 
+                    icon={faExclamationTriangle} 
+                    className="w-5 h-5 text-amber-600 mt-0.5 mr-3 flex-shrink-0"
+                  />
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-700 mb-1">Áreas de oportunidad</div>
+                    <div 
+                      className="text-gray-600 text-sm leading-relaxed"
+                      dangerouslySetInnerHTML={{
+                        __html: createIntegratedSummary(data.alerts).substring(0, 400) ||
+                               'Se detectaron oportunidades de mejora en la dinámica del curso.'
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             )}
             
-            {/* Próxima acción */}
-            <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
-              <div className="flex items-center gap-2 text-green-700 font-medium mb-2">
-                <FontAwesomeIcon icon={faFileAlt} className="w-4 h-4" />
-                Próxima Acción Recomendada
+            {/* Próxima acción mejorada */}
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+              <div className="flex items-start">
+                <FontAwesomeIcon 
+                  icon={faFileAlt} 
+                  className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0"
+                />
+                <div className="flex-1">
+                  <div className="font-semibold text-gray-700 mb-1">Acción recomendada</div>
+                  <div 
+                    className="text-gray-600 text-sm leading-relaxed"
+                    dangerouslySetInnerHTML={{
+                      __html: (() => {
+                        const text = typeof data.recommendation === 'string' 
+                          ? data.recommendation 
+                          : data.recommendation?.action || 'Revisar el análisis detallado para obtener recomendaciones específicas.'
+                        return processMarkdownText(text).substring(0, 350)
+                      })()
+                    }}
+                  />
+                </div>
               </div>
-              <p className="text-green-600 text-sm">
-                {typeof data.recommendation === 'string' 
-                  ? cleanText(data.recommendation).substring(0, 200) + (data.recommendation.length > 200 ? '...' : '')
-                  : cleanText(data.recommendation?.action || 'Ver análisis detallado')
-                }
-              </p>
             </div>
           </div>
         ) : hasEnrichedData ? (
@@ -305,9 +355,12 @@ export default function AnalysisCard({ data, onViewMore, onReanalyze }: Analysis
                 />
                 <div>
                   <strong className="font-semibold text-gray-700">Fortalezas:</strong>
-                  <span className="text-gray-600 ml-1">
-                    {data.strengths.map(s => cleanText(typeof s === 'string' ? s : s.description)).join(', ')}
-                  </span>
+                  <span 
+                    className="text-gray-600 ml-1"
+                    dangerouslySetInnerHTML={{
+                      __html: data.strengths.map(s => processMarkdownText(typeof s === 'string' ? s : s.description)).join(', ')
+                    }}
+                  />
                 </div>
               </div>
             )}
@@ -321,9 +374,12 @@ export default function AnalysisCard({ data, onViewMore, onReanalyze }: Analysis
                 />
                 <div>
                   <strong className="font-semibold text-gray-700">Alertas:</strong>
-                  <span className="text-gray-600 ml-1">
-                    {data.alerts.map(a => cleanText(typeof a === 'string' ? a : a.description)).join('; ')}
-                  </span>
+                  <span 
+                    className="text-gray-600 ml-1"
+                    dangerouslySetInnerHTML={{
+                      __html: data.alerts.map(a => processMarkdownText(typeof a === 'string' ? a : a.description)).join('; ')
+                    }}
+                  />
                 </div>
               </div>
             )}
@@ -336,9 +392,12 @@ export default function AnalysisCard({ data, onViewMore, onReanalyze }: Analysis
               />
               <div>
                 <strong className="font-semibold text-gray-700">Próximo paso docente:</strong>
-                <span className="text-gray-600 ml-1">
-                  {cleanText(typeof data.nextStep === 'string' ? data.nextStep : data.nextStep.action)}
-                </span>
+                <span 
+                  className="text-gray-600 ml-1"
+                  dangerouslySetInnerHTML={{
+                    __html: processMarkdownText(typeof data.nextStep === 'string' ? data.nextStep : data.nextStep.action)
+                  }}
+                />
               </div>
             </div>
           </div>

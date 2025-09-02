@@ -1703,9 +1703,22 @@ export function IntelligentDashboardContent({
                                       {summaryPoints.map((point: string, idx: number) => (
                                         <div key={idx} className="flex items-start space-x-2">
                                           <span className="text-primary-darker mt-1 flex-shrink-0">•</span>
-                                          <p className="text-neutral-dark font-inter text-sm leading-relaxed">
-                                            {point}
-                                          </p>
+                                          <p 
+                                            className="text-neutral-dark font-inter text-sm leading-relaxed"
+                                            dangerouslySetInnerHTML={{ 
+                                              __html: point
+                                                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // **texto** → <strong>texto</strong>
+                                                .replace(/\*(.*?)\*/g, '<em>$1</em>')              // *texto* → <em>texto</em>
+                                                .replace(/`(.*?)`/g, '<code>$1</code>')            // `texto` → <code>texto</code>
+                                                .replace(/~/g, '')                                 // ~ sueltos
+                                                .replace(/\|/g, '')                               // | pipes
+                                                .replace(/\\\\/g, '')                               // \\ backslash
+                                                .replace(/^[\*\-\+]\s+/gm, '')                    // *, -, + al inicio
+                                                .replace(/^\d+\.\s+/gm, '')                       // 1. 2. etc al inicio
+                                                .replace(/\s+/g, ' ')                             // Múltiples espacios → uno
+                                                .trim()
+                                            }}
+                                          />
                                         </div>
                                       ))}
                                     </div>

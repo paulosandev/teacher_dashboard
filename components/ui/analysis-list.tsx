@@ -27,9 +27,10 @@ export function AnalysisList({ title, items, numbered = false, className = "" }:
               )}
             </div>
             <div className="flex-1">
-              <p className="text-neutral-dark font-inter text-sm leading-relaxed text-justify">
-                {item}
-              </p>
+              <p 
+                className="text-neutral-dark font-inter text-sm leading-relaxed text-justify"
+                dangerouslySetInnerHTML={{ __html: item }}
+              />
             </div>
           </div>
         ))}
