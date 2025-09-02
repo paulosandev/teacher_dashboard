@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
+import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth/auth-options'
-import { MoodleAPIClient } from '@/lib/moodle/api-client'
-import { PrismaClient } from '@prisma/client'
 import OpenAI from 'openai'
-
-// Forzar runtime dinámico para evitar errores en build
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
+import { PrismaClient } from '@prisma/client'
+import { MoodleAPIClient } from '@/lib/moodle/api-client'
 
 // Singleton pattern para Prisma Client
 const globalForPrisma = globalThis as unknown as {
@@ -27,13 +23,93 @@ const openai = hasValidApiKey ? new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 }) : null
 
+// Función para transformar la respuesta markdown de OpenAI al formato esperado por el frontend
+function transformAnalysisResponse(rawAnalysisText: string): any {
+  // Si la respuesta viene como markdown, procesarla
+  if (typeof rawAnalysisText === 'string' && rawAnalysisText.includes('####')) {
+    // Dividir por dimensiones (#### encabezados)
+    const dimensions = rawAnalysisText.split('####').filter(section => section.trim().length > 0)
+    
+    const strengths = []
+    const alerts = []
+    const insights = []
+    let summary = 'Análisis de foro completado'
+    let nextStep = 'Continuar monitoreando la actividad'
+
+    dimensions.forEach((dimension, index) => {
+      const lines = dimension.split('\n').filter(line => line.trim().length > 0)
+      const title = lines[0]?.trim() || `Dimensión ${index + 1}`
+      
+      // Extraer puntos principales de cada dimensión
+      const bulletPoints = lines.filter(line => line.trim().startsWith('*') || line.trim().startsWith('-'))
+        .map(line => line.replace(/^[\*\-]\s*/, '').trim())
+        .filter(point => point.length > 0)
+      
+      // Extraer acción sugerida
+      const actionLine = lines.find(line => line.toLowerCase().includes('acción sugerida'))
+      const action = actionLine ? actionLine.replace(/^\*\*.*?\*\*:?\s*/, '').trim() : ''
+      
+      // Categorizar por tipo de dimensión
+      if (title.toLowerCase().includes('participación') || title.toLowerCase().includes('engagement')) {
+        insights.push(...bulletPoints)
+        if (action) nextStep = action
+      } else if (title.toLowerCase().includes('problema') || title.toLowerCase().includes('riesgo') || title.toLowerCase().includes('alerta')) {
+        alerts.push(...bulletPoints)
+      } else {
+        strengths.push(...bulletPoints)
+      }
+    })
+
+    // Crear resumen corto
+    if (dimensions.length > 0) {
+      const firstDimension = dimensions[0].split('\n').filter(line => line.trim().length > 0)
+      if (firstDimension.length > 1) {
+        const firstBullet = firstDimension.find(line => line.trim().startsWith('*') || line.trim().startsWith('-'))
+        if (firstBullet) {
+          summary = firstBullet.replace(/^[\*\-]\s*/, '').replace(/\*\*/g, '').substring(0, 200) + (firstBullet.length > 200 ? '...' : '')
+        }
+      }
+    }
+
+    return {
+      summary: summary,
+      positives: strengths.slice(0, 3), // Limitar para el resumen
+      alerts: alerts.slice(0, 3),
+      insights: insights.slice(0, 3),
+      recommendation: nextStep,
+      markdownContent: rawAnalysisText, // Guardar el markdown original para la vista detallada
+      dimensions: dimensions // Guardar las dimensiones para renderizado individual
+    }
+  }
+
+  // Si es la estructura legacy JSON
+  const rawAnalysis = typeof rawAnalysisText === 'string' ? 
+    JSON.parse(rawAnalysisText) : rawAnalysisText
+
+  return {
+    summary: rawAnalysis.summary || 'Análisis completado',
+    positives: rawAnalysis.positives || rawAnalysis.strengths || [],
+    alerts: rawAnalysis.alerts || rawAnalysis.weaknesses || [],
+    insights: rawAnalysis.insights || rawAnalysis.opportunities || [],
+    recommendation: rawAnalysis.recommendation || rawAnalysis.nextStep || 'Continuar monitoreando'
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
-    // Verificar autenticación
     const session = await getServerSession(authOptions)
     
+    console.log('🔍 Verificando sesión para análisis:')
+    console.log('  - Sesión existe:', !!session)
+    console.log('  - Usuario existe:', !!session?.user)
+    console.log('  - Token Moodle existe:', !!session?.user?.moodleToken)
+    console.log('  - Usuario ID:', session?.user?.moodleUserId)
+    
     if (!session?.user?.moodleToken) {
-      return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
+      console.log('❌ Error de autenticación: No hay sesión activa o token de Moodle')
+      return NextResponse.json({ 
+        error: 'No hay sesión activa o token de Moodle' 
+      }, { status: 401 })
     }
 
     // Verificar expiración del token
@@ -60,32 +136,6 @@ export async function POST(request: NextRequest) {
 
     console.log(`🧠 Verificando análisis existente para ${activityType}: ${activityData.name}`)
 
-    // TEMPORALMENTE DESHABILITADO: No usar caché para forzar regeneración con formato nuevo
-    // Verificar si ya existe un análisis reciente (menos de 4 horas)
-    // const fourHoursAgo = new Date(Date.now() - (4 * 60 * 60 * 1000))
-    // const existingAnalysis = await prisma.activityAnalysis.findFirst({
-    //   where: {
-    //     moodleCourseId: courseId,
-    //     activityId: activityId.toString(),
-    //     activityType: activityType,
-    //     lastUpdated: {
-    //       gte: fourHoursAgo
-    //     },
-    //     isValid: true
-    //   }
-    // })
-
-    // if (existingAnalysis) {
-    //   console.log(`♻️ Usando análisis en cache para ${activityData.name}`)
-    //   
-    //   return NextResponse.json({
-    //     success: true,
-    //     analysis: {
-    //       // ... análisis en caché
-    //     }
-    //   })
-    // }
-
     console.log(`🆕 FORZANDO NUEVO ANÁLISIS (caché deshabilitado temporalmente)`)
 
     console.log(`🧠 Generando nuevo análisis para ${activityType}: ${activityData.name}`)
@@ -107,27 +157,48 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Crear cliente API con el token de julioprofe (profesor con permisos completos)
-    const professorToken = '3d39bc049d32b05fa10088e55d910d00' // Token de julioprofe con permisos de profesor
-    const professorUserId = 29895 // ID de julioprofe en Moodle
-    console.log('🔑 Usando token de profesor para análisis completo de datos')
-    console.log(`👨‍🏫 Profesor ID: ${professorUserId} (julioprofe)`)
-    const client = new MoodleAPIClient(process.env.MOODLE_URL!, professorToken)
+    // Crear cliente de Moodle usando la sesión del usuario
+    const client = new MoodleAPIClient(
+      process.env.MOODLE_URL || '',
+      session.user.moodleToken || ''
+    )
+    const currentUserId = session.user.moodleUserId || null
+
+    // Obtener información del curso para el prompt dinámico
+    let courseName = 'este curso'
+    try {
+      const courseInfo = await client.getCourseInfo(courseId)
+      if (courseInfo?.fullname) {
+        courseName = courseInfo.fullname.toLowerCase()
+      }
+      console.log(`📚 Curso detectado: ${courseName}`)
+    } catch (error) {
+      console.log('⚠️ No se pudo obtener el nombre del curso, usando valor genérico')
+    }
 
     let analysisResult = null
 
     // Análisis específico por tipo de actividad
     if (activityType === 'forum') {
-      analysisResult = await analyzeForum(client, activityData, openai!, professorUserId)
+      analysisResult = await analyzeForum(client, activityData, openai!, currentUserId, courseName)
     } else if (activityType === 'assign') {
-      analysisResult = await analyzeAssignment(client, activityData, openai!)
+      analysisResult = await analyzeAssignment(client, activityData, openai!, courseName)
     } else if (activityType === 'feedback' || activityType === 'quiz' || activityType === 'choice') {
-      analysisResult = await analyzeGenericActivity(client, activityData, openai!, activityType)
+      analysisResult = await analyzeGenericActivity(client, activityData, openai!, activityType, courseName)
     } else {
       return NextResponse.json({ 
         error: `Tipo de actividad no soportado: ${activityType}` 
       }, { status: 400 })
     }
+
+    // Transformar la respuesta de OpenAI al formato esperado por el frontend
+    const transformedResult = transformAnalysisResponse(analysisResult.analysisText || analysisResult)
+    
+    console.log('🔄 Datos transformados para DB:')
+    console.log('  - Summary:', transformedResult.summary?.substring(0, 100) + '...')
+    console.log('  - Positives:', transformedResult.positives?.length || 0)
+    console.log('  - Alerts:', transformedResult.alerts?.length || 0)
+    console.log('  - Insights:', transformedResult.insights?.length || 0)
 
     // Guardar el análisis en la base de datos
     try {
@@ -141,31 +212,27 @@ export async function POST(request: NextRequest) {
       })
 
       if (existing) {
-        // Actualizar existente
+        // Actualizar el registro existente
         await prisma.activityAnalysis.update({
           where: { id: existing.id },
           data: {
-            summary: analysisResult.summary,
-            positives: analysisResult.positives || [],
-            alerts: analysisResult.alerts || [],
-            insights: analysisResult.insights || [],
-            recommendation: analysisResult.recommendation || 'Análisis completado',
-            fullAnalysis: analysisResult.fullAnalysis || analysisResult.summary,
-            activityData: activityData,
+            activityName: activityData.name,
+            summary: typeof transformedResult.summary === 'string' ? transformedResult.summary : JSON.stringify(transformedResult.summary || {}),
+            positives: Array.isArray(transformedResult.positives) ? transformedResult.positives : [],
+            alerts: Array.isArray(transformedResult.alerts) ? transformedResult.alerts : [],
+            insights: Array.isArray(transformedResult.insights) ? transformedResult.insights : [],
+            recommendation: typeof transformedResult.recommendation === 'string' ? transformedResult.recommendation : 'Análisis completado',
             llmResponse: {
-              model: 'gpt-5-mini',
-              generatedAt: new Date(),
-              // Nuevo formato dinámico
-              sections: analysisResult.sections,
-              // Mantener compatibilidad con formato anterior
-              metricsTable: analysisResult.metricsTable,
-              structuredInsights: analysisResult.structuredInsights
+              markdownContent: transformedResult.markdownContent,
+              dimensions: transformedResult.dimensions,
+              originalResponse: analysisResult
             },
-            lastUpdated: new Date()
+            lastUpdated: new Date(),
+            isValid: true
           }
         })
       } else {
-        // Crear nuevo
+        // Crear nuevo registro
         await prisma.activityAnalysis.create({
           data: {
             courseId: courseId,
@@ -173,22 +240,18 @@ export async function POST(request: NextRequest) {
             activityId: activityId.toString(),
             activityType: activityType,
             activityName: activityData.name,
-            summary: analysisResult.summary,
-            positives: analysisResult.positives || [],
-            alerts: analysisResult.alerts || [],
-            insights: analysisResult.insights || [],
-            recommendation: analysisResult.recommendation || 'Análisis completado',
-            fullAnalysis: analysisResult.fullAnalysis || analysisResult.summary,
-            activityData: activityData,
+            summary: typeof transformedResult.summary === 'string' ? transformedResult.summary : JSON.stringify(transformedResult.summary || {}),
+            positives: Array.isArray(transformedResult.positives) ? transformedResult.positives : [],
+            alerts: Array.isArray(transformedResult.alerts) ? transformedResult.alerts : [],
+            insights: Array.isArray(transformedResult.insights) ? transformedResult.insights : [],
+            recommendation: typeof transformedResult.recommendation === 'string' ? transformedResult.recommendation : 'Análisis completado',
             llmResponse: {
-              model: 'gpt-5-mini',
-              generatedAt: new Date(),
-              // Nuevo formato dinámico
-              sections: analysisResult.sections,
-              // Mantener compatibilidad con formato anterior
-              metricsTable: analysisResult.metricsTable,
-              structuredInsights: analysisResult.structuredInsights
-            }
+              markdownContent: transformedResult.markdownContent,
+              dimensions: transformedResult.dimensions,
+              originalResponse: analysisResult
+            },
+            lastUpdated: new Date(),
+            isValid: true
           }
         })
       }
@@ -199,12 +262,60 @@ export async function POST(request: NextRequest) {
       // No fallar si hay error en la base de datos, solo continuar
     }
 
-    const response: any = {
-      success: true,
-      analysis: analysisResult
+    // Crear secciones estructuradas para el DynamicSectionRenderer
+    const sections = []
+    if (transformedResult.markdownContent) {
+      const markdownSections = transformedResult.markdownContent.split(/(?=^####\s)/gm)
+        .filter(section => section.trim().length > 0)
+      
+      markdownSections.forEach((section, index) => {
+        const lines = section.split('\n').filter(line => line.trim().length > 0)
+        const titleLine = lines[0]?.trim().replace(/^#+\s*/, '') || `Dimensión ${index + 1}`
+        
+        // Extraer puntos (bullets) del contenido
+        const bulletPoints = lines.filter(line => line.trim().startsWith('*') || line.trim().startsWith('-'))
+          .map(line => line.replace(/^[\*\-]\s*/, '').trim())
+          .filter(point => point.length > 0)
+        
+        if (bulletPoints.length > 0) {
+          sections.push({
+            title: titleLine,
+            format: 'bullet-list',
+            content: bulletPoints,
+            icon: '📊' // Icono por defecto
+          })
+        }
+      })
     }
 
-    // Incluir información adicional si se solicita
+    // Preparar respuesta con toda la información recopilada
+    const response = {
+      success: true,
+      analysis: {
+        // Datos transformados para compatibilidad con el frontend
+        ...transformedResult,
+        // Secciones estructuradas para el detail view
+        sections: sections,
+        // Datos originales para análisis detallado
+        rawData: analysisResult,
+        llmResponse: {
+          ...analysisResult,
+          markdownContent: transformedResult.markdownContent,
+          dimensions: transformedResult.dimensions
+        },
+        fullAnalysis: transformedResult.markdownContent, // Para compatibilidad con el detail view
+        // Metadatos
+        activityId: activityData.id,
+        activityType: activityType,
+        activityName: activityData.name,
+        generatedAt: new Date().toISOString()
+      },
+      metadata: {
+        generatedAt: new Date().toISOString(),
+        openaiModel: 'gpt-5-mini'
+      }
+    }
+
     if (includeDetailedInfo) {
       response.prompt = analysisResult.prompt || 'No disponible'
       response.collectedData = {
@@ -216,698 +327,251 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(response)
-
-  } catch (error: any) {
-    console.error('❌ Error en análisis de actividad:', error)
+  } catch (error) {
+    console.error('❌ Error en /api/analysis/activity:', error)
     return NextResponse.json(
-      { error: error.message || 'Error interno del servidor' },
+      { 
+        error: 'Error interno del servidor',
+        details: error instanceof Error ? error.message : 'Error desconocido'
+      },
       { status: 500 }
     )
   }
 }
 
-async function analyzeForum(client: MoodleAPIClient, forumData: any, openai: OpenAI, professorUserId: number) {
+async function analyzeForum(client: MoodleAPIClient, forumData: any, openai: OpenAI, currentUserId: number | null, courseName: string) {
   console.log(`💬 Analizando foro: ${forumData.name}`)
 
-  // Determinar si es un foro general o una discusión específica
-  const isSpecificDiscussion = forumData.forumDetails?.discussions?.length === 1
-  const discussionData = isSpecificDiscussion ? forumData.forumDetails.discussions[0] : null
-  
-  // Preparar datos para el análisis con nueva estructura jerárquica
-  const analysisData = {
-    name: forumData.name,
-    description: forumData.intro || '',
-    config: forumData.forumDetails || {},
-    discussions: forumData.forumDetails?.discussions || [],
-    allPosts: discussionData?.posts || forumData.forumDetails?.allPosts || [],
-    isSpecificDiscussion: isSpecificDiscussion,
-    discussionData: discussionData,
-    // NUEVO: Agregar datos de jerarquía y contenido optimizado
-    hierarchy: discussionData?.hierarchy || null,
-    contentSummary: discussionData?.contentSummary || null,
-    stats: {
-      totalDiscussions: forumData.forumDetails?.numdiscussions || 0,
-      totalPosts: forumData.forumDetails?.totalPosts || 0,
-      uniqueParticipants: forumData.forumDetails?.uniqueParticipants || 0,
-      avgPostsPerParticipant: forumData.forumDetails?.avgPostsPerParticipant || 0,
-      // NUEVO: Estadísticas jerárquicas (con fallback)
-      maxDepth: discussionData?.contentSummary?.stats?.maxDepth || 0,
-      teacherPosts: discussionData?.contentSummary?.stats?.teacherPosts || (discussionData?.posts || []).filter(p => p.isTeacherPost).length || 0,
-      studentPosts: discussionData?.contentSummary?.stats?.studentPosts || (discussionData?.posts || []).filter(p => !p.isTeacherPost).length || 0,
-      totalWords: discussionData?.contentSummary?.stats?.totalWords || (discussionData?.posts || []).reduce((sum, p) => sum + (p.wordCount || 0), 0) || 0,
-      conversationFlow: discussionData?.contentSummary?.conversationFlow || `${(discussionData?.posts || []).length} post(s) total`
-    }
-  }
+  const prompt = `
+Eres un asistente del profesor en la Universidad UTEL. Tu tarea consiste en ayudarle a identificar insights accionables que contribuyan al cumplimiento de los objetivos del curso acerca del comportamiento de sus estudiantes dentro de las actividades en el foro de discusión. El propósito es que, aunque el profesor no participa directamente en la dinámica del foro, pueda mantener una visión clara de lo que ocurre en él y, en caso necesario, intervenga de manera pertinente durante su próxima videoconferencia con los estudiantes (openclass).
 
-  console.log(`📤 DATOS ENVIADOS A PROCESAR - FORO:`)
-  console.log(`   📋 Datos del foro:`, JSON.stringify(analysisData, null, 2))
-  console.log(`   📊 Estadísticas: ${analysisData.stats.totalDiscussions} discusiones, ${analysisData.stats.totalPosts} posts`)
-  console.log(`   👥 ${analysisData.stats.uniqueParticipants} participantes únicos`)
+- Redacta con un estilo conversacional dirigido al profesor de quien eres asistente, utilizando el principio de minto pyramid (no menciones que estás redactando utilizando este principio) donde la conclusión son los insights accionales.
+- El análisis debe estructurarse en al menos 5 dimensiones. Cada dimensión debe presentarse con el formato siguiente:
+  #### [Nombre de la dimensión]
+  * Incluye hallazgos clave en viñetas, redactados de forma breve y clara.
+  * Cada hallazgo debe resaltar con negritas los elementos relevantes.
+  **Acción sugerida:** redactar una recomendación específica, breve y accionable para el profesor.
+- Ordena las dimensiones de mayor a menor impacto.
+- El formato de entrega solo es markdown.
+- El análisis debe limitarse únicamente al reporte solicitado, sin incluir preguntas, sugerencias adicionales, invitaciones a continuar ni ofertas de recursos complementarios.
+- El análisis debe iniciar directamente con los insights accionables, sin incluir introducciones, frases de encuadre, ni explicaciones preliminares.
+- Simpre incluye insights accionables acerca de nivel de participación y si surgen dudas o temas de conversación fuera de la consigna de la discusión.
 
-  // Crear prompt dinámico UNIVERSAL para formato consistente
-  let prompt: string
-  
-  // NUEVO: FORMATO ESTRUCTURADO UNIVERSAL para todas las actividades
-  if (analysisData.isSpecificDiscussion && analysisData.discussionData) {
-    // Prompt para discusión individual con FORMATO ESTRUCTURADO DINÁMICO
-    const discussion = analysisData.discussionData
-    // Usar ID del profesor para filtrado consistente
-    const currentUserId = professorUserId
-    
-    // Buscar metadatos reales en los posts
-    const teacherPost = discussion.posts?.find((p: any) => p.isTeacherPost) || null
-    const realStudentMetadata = teacherPost?.realStudentMetadata || null
-    
-    console.log(`📊 Análisis con metadatos reales:`, realStudentMetadata)
-    
-    // Usar metadatos reales si están disponibles
-    const studentResponseInfo = realStudentMetadata ? 
-      `INFORMACIÓN REAL DE ESTUDIANTES:
-- Respuestas reales confirmadas: ${realStudentMetadata.totalStudentReplies}
-- Última actividad de estudiante: ${realStudentMetadata.lastModifiedUser}
-- Fecha de última actividad: ${new Date(realStudentMetadata.lastModifiedTime * 1000).toLocaleString()}
-- Hay participación real confirmada: Sí
-- Palabras promedio estimadas: ${realStudentMetadata.avgWordsEstimate}
+${JSON.stringify(forumData.forumDetails?.discussions || forumData.discussions || [], null, 2)}`
 
-⚠️ IMPORTANTE: Esta discusión tiene ${realStudentMetadata.totalStudentReplies} respuestas reales de estudiantes, pero el contenido específico no está disponible por limitaciones técnicas del API de Moodle.` 
-      : 'No se detectó participación de estudiantes'
-    
-    prompt = `
-Eres un experto en análisis educativo. Analiza la siguiente DISCUSIÓN EDUCATIVA y genera un análisis con formato estructurado dinámico:
+  // Crear timestamp y nombre de archivo únicos
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const activityName = (forumData.name || 'forum').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30)
 
-## CONTEXTO DE LA DISCUSIÓN:
-- **Título**: "${discussion.name || discussion.subject}"
-- **Descripción**: ${analysisData.description}
-- **Posts totales**: ${discussion.posts?.length || 0}
-- **Estructura de conversación**: ${analysisData.stats.conversationFlow}
-- **Profundidad máxima**: ${analysisData.stats.maxDepth} niveles de respuestas
-- **Distribución**: ${analysisData.stats.teacherPosts} aportaciones del profesor, ${analysisData.stats.studentPosts} aportaciones de estudiantes
-- **Total palabras**: ${analysisData.stats.totalWords}
-
-## ESTADÍSTICAS EXACTAS QUE DEBES USAR:
-⚠️ IMPORTANTE: Usa EXACTAMENTE estas estadísticas en tu análisis, NO las calcules nuevamente:
-${analysisData.stats.teacherPosts > 0 ? `- Aportaciones del profesor: ${analysisData.stats.teacherPosts}` : ''}
-- Aportaciones totales: ${discussion.posts?.length || 0}
-- Participantes únicos: ${analysisData.stats.uniqueParticipants}
-${(() => {
-  // Identificar profesores que sí participaron
-  const professorNames = ['Junior Rafael Figueroa Olmedo', 'Patricia Abigail Alejandria Vallejos', 'Jose Antonio Moguel Rivera', 'Erick Torres Carreño'];
-  const participatingProfessors: Set<string> = new Set();
-  
-  discussion.posts?.forEach((p: any) => {
-    if (professorNames.includes(p.userFullName)) {
-      participatingProfessors.add(p.userFullName);
-    }
-  });
-  
-  if (participatingProfessors.size > 0) {
-    return `📚 Profesores participantes: ${Array.from(participatingProfessors).join(', ')}`;
-  }
-  return '';
-})()}  
-- Posts totales: ${discussion.posts?.length || 0}
-- Participantes únicos: ${analysisData.stats.uniqueParticipants}
-
-## DATOS DE PARTICIPACIÓN:
-${studentResponseInfo}
-
-## ESTRUCTURA JERÁRQUICA:
-${(() => {
-  if (!analysisData.hierarchy || analysisData.hierarchy.length === 0) {
-    return 'No disponible - verificar si hay respuestas anidadas';
-  }
-  
-  // Función para renderizar jerarquía de forma compacta
-  const renderHierarchy = (items: any[], depth = 0): string => {
-    return items.slice(0, 10).map(item => {
-      const indent = '  '.repeat(depth);
-      const preview = item.message ? item.message.substring(0, 100) + '...' : '';
-      let result = `${indent}├─ ${item.author}: "${preview}"\n`;
-      if (item.children && item.children.length > 0) {
-        result += renderHierarchy(item.children, depth + 1);
-      }
-      return result;
-    }).join('');
-  };
-  
-  return renderHierarchy(analysisData.hierarchy);
-})()}
-
-## CONTENIDO COMPLETO Y ESTRUCTURA DE LA DISCUSIÓN:
-${(() => {
-  const posts = discussion.posts || [];
-  const totalPosts = posts.length;
-  // Lista de nombres conocidos de profesores
-  const professorNames = [
-    'Junior Rafael Figueroa Olmedo', 
-    'Patricia Abigail Alejandria Vallejos', 
-    'Jose Antonio Moguel Rivera',
-    'Erick Torres Carreño',
-    'NOEMI ADRIANA MORALES MÉNDEZ'
-  ];
-  
-  // Detectar automáticamente IDs de profesores
-  const otherProfessorIds: number[] = [];
-  posts.forEach((post: any) => {
-    if (!post.isTeacherPost && professorNames.includes(post.userFullName) && !otherProfessorIds.includes(post.userId)) {
-      otherProfessorIds.push(post.userId);
-    }
-  });
-  
-  // Estrategia adaptativa según cantidad de posts
-  if (totalPosts <= 10) {
-    // Pocos posts: incluir todo completo
-    return posts.map((post: any) => `
-${'  '.repeat(post.level || 0)}**${post.userFullName}** (${post.isTeacherPost || otherProfessorIds.includes(post.userId) || professorNames.includes(post.userFullName) ? 'Profesor' : 'Estudiante'}) - Nivel ${post.level || 0}:
-${'  '.repeat(post.level || 0)}"${post.message}"
-${'  '.repeat(post.level || 0)}↳ ${post.childrenCount || 0} respuesta(s)
-`).join('\n');
-  } else if (totalPosts <= 30) {
-    // Posts moderados: mensaje limitado a 500 chars
-    return posts.map((post: any) => `
-**${post.userFullName}** (${post.isTeacherPost || otherProfessorIds.includes(post.userId) || professorNames.includes(post.userFullName) ? 'Profesor' : 'Estudiante'}):
-"${post.message.substring(0, 500)}${post.message.length > 500 ? '...' : ''}"
-`).join('\n');
-  } else {
-    // Muchos posts: muestreo estratégico
-    const profPosts = posts.filter((p: any) => p.isTeacherPost || otherProfessorIds.includes(p.userId));
-    const studentPosts = posts.filter((p: any) => !p.isTeacherPost && !otherProfessorIds.includes(p.userId));
-    
-    return `📊 Total: ${totalPosts} aportaciones (${profPosts.length} de profesores, ${studentPosts.length} de estudiantes)
-    
-MUESTRA DE APORTACIONES:
-${posts.slice(0, 20).map((post: any) => `
-**${post.userFullName}** (${post.isTeacherPost || otherProfessorIds.includes(post.userId) || professorNames.includes(post.userFullName) ? 'Profesor' : 'Estudiante'}):
-"${post.message.substring(0, 300)}..."
-`).join('\n')}`;
-  }
-})() || 'No hay posts disponibles'}
-
----
-
-**GENERA UN ANÁLISIS CON SECCIONES DINÁMICAS Y ESPECÍFICAS AL CONTEXTO**
-
-Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido real. Evita títulos genéricos. Adapta los nombres según el contexto de la actividad.
-
-**EJEMPLOS DE TÍTULOS DINÁMICOS:**
-- "Panorama General del Foro"
-- "Patrones de Participación" 
-- "Calidad de Interacción"
-- "Análisis de Engagement"
-- "Distribución Temporal"
-- "Profundidad de Discusión"
-- "Tendencias de Actividad"
-- "Insights Pedagógicos"
-- "Oportunidades de Mejora"
-- "Estrategias Recomendadas"
-
-**INSTRUCCIONES PARA FORMATO DINÁMICO:**
-Como experto analista, decide la mejor forma de presentar cada aspecto del análisis. Puedes crear entre 3-6 secciones, cada una con el formato más apropiado:
-
-**FORMATOS DISPONIBLES:**
-- **table**: Para datos comparativos (formato "Header1 | Header2\nRow1 | Row2")
-- **numbered-list**: Para pasos secuenciales o prioridades (array de strings)
-- **bullet-list**: Para puntos sin orden específico (array de strings)
-- **text**: Para explicaciones narrativas (string con markdown)
-- **cards**: Para métricas destacadas (array de {title, value, unit?, trend?})
-- **metrics**: Para indicadores clave (array de {label, value, unit?})
-
-**INSTRUCCIONES CRÍTICAS SOBRE LAS MÉTRICAS:**
-1. SIEMPRE usa las estadísticas exactas proporcionadas en "ESTADÍSTICAS EXACTAS QUE DEBES USAR"
-2. Si ves "Posts de estudiantes: 2", tu análisis DEBE reflejar que hay 2 posts de estudiantes
-3. NO recalcules ni asumas métricas diferentes a las proporcionadas
-4. En la sección "metrics", usa EXACTAMENTE los valores proporcionados
-
-**COLORES SUGERIDOS:** blue, green, yellow, red, purple, gray
-**ICONOS:** Usa emojis relevantes (📊 📈 📋 ⚠️ 💡 🎯 📝 etc.)
-
-**RESPONDE ÚNICAMENTE EN FORMATO JSON:**
-{
-  "summary": "Resumen ejecutivo conciso (1-2 líneas)",
-  "sections": [
-    {
-      "id": "section-1",
-      "title": "Título descriptivo y específico",
-      "format": "table|numbered-list|bullet-list|text|cards|metrics",
-      "content": "Contenido según el formato elegido",
-      "priority": 1,
-      "icon": "📊",
-      "color": "blue"
-    }
-  ]
-}
-`
-  } else {
-    // Prompt para foro general con FORMATO ESTRUCTURADO DINÁMICO UNIVERSAL
-    prompt = `
-Eres un experto en análisis educativo. Analiza el siguiente FORO EDUCATIVO y genera un análisis con formato estructurado dinámico:
-
-## PANORAMA DEL FORO:
-- **Nombre**: ${analysisData.name}
-- **Propósito**: ${analysisData.description}
-- **Actividad total**: ${analysisData.stats.totalDiscussions} discusiones, ${analysisData.stats.totalPosts} posts
-- **Participación**: ${analysisData.stats.uniqueParticipants} participantes únicos (promedio: ${analysisData.stats.avgPostsPerParticipant} posts por persona)
-
-## DISCUSIONES PRINCIPALES:
-${analysisData.discussions.slice(0, 5).map((d: any) => `
-**"${d.name || d.subject}"**
-- Respuestas: ${d.numreplies} | Estudiantes participando: ${d.studentsParticipating || 0}
-- Contenido: ${d.message ? d.message.substring(0, 200) + '...' : 'Sin contenido inicial disponible'}
-`).join('\n')}
-
-## EJEMPLOS DE PARTICIPACIÓN:
-${analysisData.allPosts?.filter((p: any) => p.userId !== professorUserId).slice(0, 3).map((post: any) => `
-**En "${post.discussionName}":**
-"${post.message.substring(0, 200)}${post.message.length > 200 ? '...' : ''}"
-`).join('\n') || 'No se encontraron posts de estudiantes para mostrar'}
-
----
-
-**GENERA UN ANÁLISIS CON SECCIONES DINÁMICAS Y ESPECÍFICAS AL CONTEXTO**
-
-Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido real del foro. Evita títulos genéricos. Adapta los nombres según las características específicas del foro.
-
-**EJEMPLOS DE TÍTULOS DINÁMICOS PARA FOROS:**
-- "Panorama General del Foro"
-- "Patrones de Participación"
-- "Calidad de Interacción"
-- "Distribución de Actividad" 
-- "Tendencias de Engagement"
-- "Dinámicas de Discusión"
-- "Análisis de Contenido"
-- "Comportamiento Estudiantil"
-- "Oportunidades de Mejora"
-- "Estrategias Pedagógicas"
-
-**INSTRUCCIONES PARA FORMATO DINÁMICO:**
-Como experto analista educativo, decide la mejor forma de presentar el análisis del foro. Crea entre 3-6 secciones con el formato más apropiado para cada tipo de información:
-
-**FORMATOS DISPONIBLES:**
-- **table**: Para datos comparativos (formato "Header1 | Header2\nRow1 | Row2")
-- **numbered-list**: Para pasos secuenciales o prioridades (array de strings)
-- **bullet-list**: Para puntos sin orden específico (array de strings)
-- **text**: Para explicaciones narrativas (string con markdown)
-- **cards**: Para métricas destacadas (array de {title, value, unit?, trend?})
-- **metrics**: Para indicadores clave (array de {label, value, unit?})
-
-**DATOS DISPONIBLES PARA MÉTRICAS:**
-- Discusiones: ${analysisData.stats.totalDiscussions}
-- Posts: ${analysisData.stats.totalPosts}
-- Participantes: ${analysisData.stats.uniqueParticipants}
-- Promedio posts/persona: ${analysisData.stats.avgPostsPerParticipant}
-
-**RESPONDE ÚNICAMENTE EN FORMATO JSON:**
-{
-  "summary": "Resumen ejecutivo del foro (1-2 líneas)",
-  "sections": [
-    {
-      "id": "section-1",
-      "title": "Título específico para esta información",
-      "format": "table|numbered-list|bullet-list|text|cards|metrics",
-      "content": "Contenido apropiado para el formato",
-      "priority": 1,
-      "icon": "📊",
-      "color": "blue"
-    }
-  ]
-}
-`
-  }
-
-  console.log(`🚀 ENVIANDO A OpenAI - ${analysisData.isSpecificDiscussion ? 'DISCUSIÓN' : 'FORO'}:`)
-  console.log(`   🔗 Modelo: gpt-5-mini`)
-  console.log(`   📝 Tipo de contenido: ${analysisData.isSpecificDiscussion ? 'Discusión individual' : 'Foro con múltiples discusiones'}`)
-  console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
-  console.log(`   ⚙️ Configuración: max_completion_tokens=4000 (modelo gpt-5-mini)`)
-
-  // CAPTURAR PROMPT COMPLETO PARA DEBUGGING
-  const fs = require('fs');
-  const promptData = {
-    timestamp: new Date().toISOString(),
-    activityType: 'forum',
-    activityName: forumData.name,
-    activityId: forumData.id,
-    systemMessage: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. Incluye datos cuantitativos en metricsTable cuando sea relevante, y separa insights en numerados (para orden específico) y bullets (para puntos generales). El fullAnalysis debe usar markdown with secciones ##.",
-    userPrompt: prompt,
-    rawData: analysisData,
+  // GUARDAR REQUEST A OPENAI EN ARCHIVO
+  const requestBody = {
     model: "gpt-5-mini",
-    maxTokens: 4000
-  };
-  
+    messages: [
+      {
+        role: "user",
+        content: prompt
+      }
+    ],
+    max_completion_tokens: 4000
+  }
+
+  const fs = require('fs');
+  const requestFileName = `openai-request-forum-${activityName}-${timestamp}.json`
+  const requestFilePath = `openai-logs/${requestFileName}`
+
   try {
-    fs.writeFileSync('/tmp/ultimo-prompt-enviado-openai.json', JSON.stringify(promptData, null, 2));
-    console.log('💾 Prompt completo guardado en /tmp/ultimo-prompt-enviado-openai.json');
+    fs.writeFileSync(requestFilePath, JSON.stringify({
+      timestamp: new Date().toISOString(),
+      activityType: 'forum',
+      activityName: forumData.name,
+      activityId: forumData.id,
+      requestBody: requestBody,
+      rawActivityData: analysisData
+    }, null, 2))
+    console.log(`📄 REQUEST guardado en: ${requestFilePath}`)
   } catch (writeError) {
-    console.log('⚠️ No se pudo guardar el prompt completo:', writeError.message);
+    console.log('⚠️ No se pudo guardar el request:', writeError.message)
   }
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      messages: [
-        {
-          role: "system",
-          content: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. IMPORTANTE: Los títulos de secciones NO deben tener formato markdown (##) en el contenido, van en el campo 'title'. El contenido debe ser texto limpio. Usa terminología educativa: 'aportaciones' en lugar de 'posts'. Cuando menciones participación de profesores, usa sus nombres específicos."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      max_completion_tokens: 4000
-    })
-
+    console.log('🤖 Llamando a OpenAI con prompt de longitud:', prompt.length)
+    console.log('📊 Request body:', JSON.stringify(requestBody, null, 2).substring(0, 500) + '...')
+    
+    const completion = await openai.chat.completions.create(requestBody)
+    console.log('🔍 OpenAI completion received:', !!completion)
+    console.log('🔍 Choices length:', completion.choices?.length)
+    
     const analysisText = completion.choices[0]?.message?.content || ''
-    
-    console.log('📝 Respuesta de OpenAI (primeros 500 chars):', analysisText.substring(0, 500))
-    
-    // Procesar la respuesta JSON
-    let analysis
+    console.log('🔍 Analysis text length:', analysisText.length)
+    console.log('🔍 Analysis text preview:', analysisText.substring(0, 200) + '...')
+
+    // GUARDAR RESPONSE DE OPENAI EN ARCHIVO
+    const responseFileName = `openai-response-forum-${activityName}-${timestamp}.json`
+    const responseFilePath = `openai-logs/${responseFileName}`
+
     try {
-      analysis = JSON.parse(analysisText)
-      console.log('✅ JSON parseado correctamente')
-      console.log('📊 Campos presentes:')
-      console.log('  - summary:', analysis.summary ? '✅' : '❌')
-      console.log('  - sections:', analysis.sections ? `✅ (${analysis.sections.length} secciones)` : '❌')
-      if (analysis.sections) {
-        analysis.sections.forEach((section: any, i: number) => {
-          console.log(`    ${i+1}. "${section.title}" (${section.format}) ${section.icon || ''}`)
-        })
-      }
-      
-      // Mantener compatibilidad con formato anterior
-      if (!analysis.sections && (analysis.metricsTable || analysis.structuredInsights)) {
-        console.log('📋 Formato anterior detectado, manteniendo compatibilidad')
-        console.log('  - metricsTable:', analysis.metricsTable ? '✅' : '❌')
-        console.log('  - structuredInsights:', analysis.structuredInsights ? '✅' : '❌')
-      }
-      console.log('  - fullAnalysis:', analysis.fullAnalysis ? '✅' : '❌')
-    } catch (parseError) {
-      console.error('❌ Error parseando JSON de OpenAI:', parseError)
-      console.error('❌ Respuesta recibida no es JSON válido:', analysisText.substring(0, 200))
-      // Fallback a análisis básico si falla el parsing
-      analysis = {
-        summary: 'Análisis generado con formato de respaldo',
-        fullAnalysis: analysisText,
-        positives: ['Contenido disponible para revisión'],
-        alerts: ['Formato de respuesta no estructurado'],
-        insights: ['Requiere revisión manual'],
-        recommendation: 'Revisar configuración del análisis'
-      }
+      fs.writeFileSync(responseFilePath, JSON.stringify({
+        timestamp: new Date().toISOString(),
+        activityType: 'forum',
+        activityName: forumData.name,
+        activityId: forumData.id,
+        model: 'gpt-5-mini',
+        rawResponse: analysisText,
+        usage: completion.usage,
+        fullCompletionObject: completion
+      }, null, 2))
+      console.log(`📄 RESPONSE guardado en: ${responseFilePath}`)
+    } catch (writeError) {
+      console.log('⚠️ No se pudo guardar el response:', writeError.message)
     }
-    
-    console.log(`✅ Análisis de foro completado para: ${forumData.name}`)
-    
+
+    // Procesar la respuesta markdown
+    if (!analysisText || analysisText.trim() === '') {
+      console.log('❌ OpenAI devolvió respuesta vacía')
+      console.log('❌ Completion object:', JSON.stringify(completion, null, 2))
+      throw new Error('Empty response from OpenAI')
+    }
+
+    console.log('✅ Análisis de foro completado para:', forumData.name)
+    console.log('📝 Respuesta recibida es markdown, longitud:', analysisText.length)
+
     return {
-      ...analysis,
+      analysisText: analysisText, // Texto completo de markdown
       activityId: forumData.id,
       activityType: 'forum',
       activityName: forumData.name,
-      rawData: analysisData,
-      prompt: prompt, // Guardar el prompt usado
+      rawData: {
+        discussions: forumData.forumDetails?.discussions || forumData.discussions || []
+      },
+      prompt: prompt,
       generatedAt: new Date().toISOString()
     }
-
   } catch (error) {
     console.error('❌ Error en análisis de foro:', error)
     throw new Error('Error al generar análisis del foro')
   }
 }
 
-async function analyzeAssignment(client: MoodleAPIClient, assignmentData: any, openai: OpenAI) {
+async function analyzeAssignment(client: MoodleAPIClient, assignmentData: any, openai: OpenAI, courseName: string) {
   console.log(`📝 Analizando asignación: ${assignmentData.name}`)
 
-  // Preparar datos para el análisis
+  // Preparar datos de análisis de forma flexible
   const analysisData = {
-    name: assignmentData.name,
-    description: assignmentData.intro || '',
-    config: assignmentData.assignDetails || {},
+    name: assignmentData.name || 'Asignación sin nombre',
+    description: assignmentData.intro || assignmentData.description || '',
+    config: assignmentData.assignDetails || assignmentData.config || {},
     stats: {
-      submissionCount: assignmentData.assignDetails?.submissionCount || 0,
-      gradeCount: assignmentData.assignDetails?.gradeCount || 0,
-      avgGrade: assignmentData.assignDetails?.avgGrade || 0,
-      gradingProgress: assignmentData.assignDetails?.gradingProgress || 0
+      submissionCount: assignmentData.submissionCount || 0,
+      gradeCount: assignmentData.gradeCount || 0,
+      avgGrade: assignmentData.avgGrade || 'N/A',
+      gradingProgress: assignmentData.gradingProgress || 0
     },
     dates: {
-      duedate: assignmentData.duedate,
-      cutoffdate: assignmentData.cutoffdate,
-      status: assignmentData.status
+      status: assignmentData.status || 'Activa'
     }
   }
 
-  console.log(`📤 DATOS ENVIADOS A PROCESAR - ASIGNACIÓN:`)
-  console.log(`   📋 Datos de la asignación:`, JSON.stringify(analysisData, null, 2))
-  console.log(`   📊 Entregas: ${analysisData.stats.submissionCount}, Calificadas: ${analysisData.stats.gradeCount}`)
-  console.log(`   📈 Progreso: ${analysisData.stats.gradingProgress}%, Promedio: ${analysisData.stats.avgGrade}`)
-
-  // Prompt ESTRUCTURADO DINÁMICO para asignaciones
   const prompt = `
-Eres un experto en análisis educativo. Analiza la siguiente ASIGNACIÓN EDUCATIVA y genera un análisis con formato estructurado dinámico:
+Eres un asistente del profesor del curso de ${courseName} en Utel Universidad, tu tarea es hacer un análisis del comportamiento de la siguiente actividad educativa y compartir insights al profesor. Responde ÚNICAMENTE en formato JSON válido con un análisis dinámico basado en los datos proporcionados:
 
-## DATOS DE LA ASIGNACIÓN:
-- **Nombre**: ${analysisData.name}
-- **Descripción**: ${analysisData.description}
-- **Estado**: ${analysisData.dates.status}
-- **Entregas recibidas**: ${analysisData.stats.submissionCount}
-- **Calificaciones completadas**: ${analysisData.stats.gradeCount}
-- **Promedio de calificación**: ${analysisData.stats.avgGrade}
-- **Progreso de calificación**: ${analysisData.stats.gradingProgress}%
+${JSON.stringify(analysisData, null, 2)}`
 
-## CONFIGURACIÓN:
-- **Intentos máximos**: ${analysisData.config.maxattempts === -1 ? 'Ilimitados' : analysisData.config.maxattempts}
-- **Borradores permitidos**: ${analysisData.config.submissiondrafts ? 'Sí' : 'No'}
-- **Calificación ciega**: ${analysisData.config.blindmarking ? 'Sí' : 'No'}
+  // Crear timestamp y nombre de archivo únicos
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const activityName = (assignmentData.name || 'assignment').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30)
 
----
-
-**GENERA UN ANÁLISIS CON SECCIONES DINÁMICAS Y ESPECÍFICAS AL CONTEXTO**
-
-Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido real de la asignación. Evita títulos genéricos. Adapta los nombres según las características específicas de la asignación.
-
-**EJEMPLOS DE TÍTULOS DINÁMICOS PARA ASIGNACIONES:**
-- "Panorama de Entregas"
-- "Análisis de Cumplimiento"
-- "Patrones de Submission"
-- "Calidad de Trabajos"
-- "Tendencias de Calificación"
-- "Efectividad Pedagógica"
-- "Configuración Académica"
-- "Insights de Rendimiento"
-- "Oportunidades de Mejora"
-- "Estrategias Docentes"
-
-**INSTRUCCIONES PARA FORMATO DINÁMICO:**
-Como experto analista educativo, decide la mejor forma de presentar cada aspecto del análisis. Crea entre 3-6 secciones con el formato más apropiado:
-
-**FORMATOS DISPONIBLES:**
-- **table**: Para datos comparativos (formato "Header1 | Header2\nRow1 | Row2")
-- **numbered-list**: Para pasos secuenciales o prioridades (array de strings)
-- **bullet-list**: Para puntos sin orden específico (array de strings)
-- **text**: Para explicaciones narrativas (string con markdown)
-- **cards**: Para métricas destacadas (array de {title, value, unit?, trend?})
-- **metrics**: Para indicadores clave (array de {label, value, unit?})
-
-**RESPONDE ÚNICAMENTE EN FORMATO JSON:**
-{
-  "summary": "Resumen ejecutivo conciso (1-2 líneas)",
-  "sections": [
-    {
-      "id": "section-1",
-      "title": "Título descriptivo y específico",
-      "format": "table|numbered-list|bullet-list|text|cards|metrics",
-      "content": "Contenido según el formato elegido",
-      "priority": 1,
-      "icon": "📊",
-      "color": "blue"
-    }
-  ]
-}
-`
-
-  console.log(`🚀 ENVIANDO A OpenAI - ASIGNACIÓN:`)
-  console.log(`   🔗 Modelo: gpt-5-mini`)
-  console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
-  console.log(`   ⚙️ Configuración: max_completion_tokens=4000 (modelo gpt-5-mini)`)
-
-  // CAPTURAR PROMPT COMPLETO PARA DEBUGGING
-  const fs = require('fs');
-  const promptData = {
-    timestamp: new Date().toISOString(),
-    activityType: 'assign',
-    activityName: assignmentData.name,
-    activityId: assignmentData.id,
-    systemMessage: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. Incluye datos cuantitativos en metricsTable cuando sea relevante, y separa insights en numerados (para orden específico) y bullets (para puntos generales). El fullAnalysis debe usar markdown con secciones ##.",
-    userPrompt: prompt,
-    rawData: analysisData,
+  // GUARDAR REQUEST A OPENAI EN ARCHIVO
+  const requestBody = {
     model: "gpt-5-mini",
-    maxTokens: 4000
-  };
-  
+    messages: [
+      {
+        role: "user",
+        content: prompt
+      }
+    ],
+    max_completion_tokens: 4000
+  }
+
+  const fs = require('fs');
+  const requestFileName = `openai-request-assign-${activityName}-${timestamp}.json`
+  const requestFilePath = `openai-logs/${requestFileName}`
+
   try {
-    fs.writeFileSync('/tmp/ultimo-prompt-enviado-openai.json', JSON.stringify(promptData, null, 2));
-    console.log('💾 Prompt completo guardado en /tmp/ultimo-prompt-enviado-openai.json');
+    fs.writeFileSync(requestFilePath, JSON.stringify({
+      timestamp: new Date().toISOString(),
+      activityType: 'assign',
+      activityName: assignmentData.name,
+      activityId: assignmentData.id,
+      requestBody: requestBody,
+      rawActivityData: analysisData
+    }, null, 2))
+    console.log(`📄 REQUEST guardado en: ${requestFilePath}`)
   } catch (writeError) {
-    console.log('⚠️ No se pudo guardar el prompt completo:', writeError.message);
+    console.log('⚠️ No se pudo guardar el request:', writeError.message)
   }
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      messages: [
-        {
-          role: "system",
-          content: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. IMPORTANTE: Los títulos de secciones NO deben tener formato markdown (##) en el contenido, van en el campo 'title'. El contenido debe ser texto limpio. Usa terminología educativa: 'aportaciones' en lugar de 'posts'. Cuando menciones participación de profesores, usa sus nombres específicos."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      max_completion_tokens: 4000
-    })
-
+    const completion = await openai.chat.completions.create(requestBody)
     const analysisText = completion.choices[0]?.message?.content || ''
-    
-    console.log('📝 Respuesta de OpenAI (primeros 500 chars):', analysisText.substring(0, 500))
-    
+
+    // GUARDAR RESPONSE DE OPENAI EN ARCHIVO
+    const responseFileName = `openai-response-assign-${activityName}-${timestamp}.json`
+    const responseFilePath = `openai-logs/${responseFileName}`
+
+    try {
+      fs.writeFileSync(responseFilePath, JSON.stringify({
+        timestamp: new Date().toISOString(),
+        activityType: 'assign',
+        activityName: assignmentData.name,
+        activityId: assignmentData.id,
+        model: 'gpt-5-mini',
+        rawResponse: analysisText,
+        usage: completion.usage,
+        fullCompletionObject: completion
+      }, null, 2))
+      console.log(`📄 RESPONSE guardado en: ${responseFilePath}`)
+    } catch (writeError) {
+      console.log('⚠️ No se pudo guardar el response:', writeError.message)
+    }
+
     // Procesar la respuesta JSON
     let analysis
     try {
+      if (!analysisText || analysisText.trim() === '') {
+        throw new Error('Empty response from OpenAI')
+      }
       analysis = JSON.parse(analysisText)
       console.log('✅ JSON parseado correctamente')
-      console.log('📊 Campos presentes:')
-      console.log('  - summary:', analysis.summary ? '✅' : '❌')
-      console.log('  - sections:', analysis.sections ? `✅ (${analysis.sections.length} secciones)` : '❌')
-      if (analysis.sections) {
-        analysis.sections.forEach((section: any, i: number) => {
-          console.log(`    ${i+1}. "${section.title}" (${section.format}) ${section.icon || ''}`)
-        })
-      }
-      
-      // Mantener compatibilidad con formato anterior
-      if (!analysis.sections && (analysis.metricsTable || analysis.structuredInsights)) {
-        console.log('📋 Formato anterior detectado, manteniendo compatibilidad')
-        console.log('  - metricsTable:', analysis.metricsTable ? '✅' : '❌')
-        console.log('  - structuredInsights:', analysis.structuredInsights ? '✅' : '❌')
-      }
     } catch (parseError) {
-      console.error('❌ Error parseando JSON de OpenAI:', parseError)
-      // Fallback a análisis básico si falla el parsing
+      console.log('❌ Error parseando JSON de OpenAI:', parseError)
+      console.log('❌ Respuesta recibida no es JSON válido:', analysisText)
       analysis = {
-        summary: 'Análisis generado con formato de respaldo',
-        fullAnalysis: analysisText,
-        positives: ['Contenido disponible para revisión'],
-        alerts: ['Formato de respuesta no estructurado'],
-        insights: ['Requiere revisión manual'],
-        recommendation: 'Revisar configuración del análisis'
+        summary: analysisText.substring(0, 500) || 'Análisis completado',
+        positives: [],
+        alerts: [],
+        insights: [],
+        recommendation: 'Análisis completado'
       }
     }
-    
+
     console.log(`✅ Análisis de asignación completado para: ${assignmentData.name}`)
-    
+
     return {
       ...analysis,
       activityId: assignmentData.id,
       activityType: 'assign',
       activityName: assignmentData.name,
       rawData: analysisData,
-      prompt: prompt, // Guardar el prompt usado
+      prompt: prompt,
       generatedAt: new Date().toISOString()
     }
-
   } catch (error) {
     console.error('❌ Error en análisis de asignación:', error)
     throw new Error('Error al generar análisis de la asignación')
   }
 }
 
-function parseFlexibleAnalysis(text: string) {
-  // Procesar la respuesta de forma flexible - toda la respuesta como un análisis completo
-  // Dividir por párrafos si hay múltiples
-  const paragraphs = text
-    .split('\n\n')
-    .map(p => p.trim())
-    .filter(p => p.length > 20) // Filtrar párrafos muy cortos
-  
-  if (paragraphs.length <= 1) {
-    // Si es un solo bloque, usar todo como resumen
-    return {
-      summary: text.trim(),
-      positives: [],
-      alerts: [],
-      insights: [],
-      recommendation: '',
-      fullAnalysis: text.trim()
-    }
-  } else {
-    // Si hay múltiples párrafos, usar el primero como resumen y el resto como insights
-    return {
-      summary: paragraphs[0],
-      positives: [],
-      alerts: [],
-      insights: paragraphs.slice(1),
-      recommendation: '',
-      fullAnalysis: text.trim()
-    }
-  }
-}
-
-function parseForumAnalysis(text: string) {
-  // Función para extraer secciones del análisis de foro
-  const sections = {
-    summary: extractSection(text, ['RESUMEN GENERAL', 'RESUMEN DE PARTICIPACIÓN']),
-    positives: extractListSection(text, ['ASPECTOS POSITIVOS', 'ELEMENTOS POSITIVOS']),
-    alerts: extractListSection(text, ['ÁREAS DE MEJORA', 'ALERTAS', 'PROBLEMAS']),
-    insights: extractListSection(text, ['INSIGHTS CLAVE', 'ELEMENTOS CLAVE']),
-    recommendation: extractSection(text, ['RECOMENDACIÓN DOCENTE', 'ACCIÓN RECOMENDADA'])
-  }
-  
-  return sections
-}
-
-function parseAssignmentAnalysis(text: string) {
-  // Función para extraer secciones del análisis de asignación
-  const sections = {
-    summary: extractSection(text, ['RESUMEN DE ENTREGAS', 'RESUMEN GENERAL']),
-    positives: extractListSection(text, ['ASPECTOS POSITIVOS', 'ELEMENTOS POSITIVOS']),
-    alerts: extractListSection(text, ['ALERTAS IMPORTANTES', 'PROBLEMAS']),
-    insights: extractListSection(text, ['ANÁLISIS PEDAGÓGICO', 'INSIGHTS PEDAGÓGICOS']),
-    recommendation: extractSection(text, ['ACCIÓN RECOMENDADA', 'RECOMENDACIÓN'])
-  }
-  
-  return sections
-}
-
-function extractSection(text: string, keywords: string[]): string {
-  for (const keyword of keywords) {
-    const regex = new RegExp(`${keyword}[^:]*:?([\\s\\S]*?)(?=\\n\\d+\\.|\\n[A-Z]{2,}|$)`, 'i')
-    const match = text.match(regex)
-    if (match && match[1]) {
-      return match[1].trim().replace(/^\*\*|\*\*$/g, '').trim()
-    }
-  }
-  return 'No disponible'
-}
-
-function extractListSection(text: string, keywords: string[]): string[] {
-  for (const keyword of keywords) {
-    const regex = new RegExp(`${keyword}[^:]*:([\\s\\S]*?)(?=\\n\\d+\\.|\\n[A-Z]{2,}|$)`, 'i')
-    const match = text.match(regex)
-    if (match && match[1]) {
-      const items = match[1]
-        .split(/\n/)
-        .map(line => line.trim())
-        .filter(line => line.startsWith('-') || line.startsWith('•') || line.startsWith('*'))
-        .map(line => line.replace(/^[-•*]\s*/, '').trim())
-        .filter(line => line.length > 10)
-      
-      return items.length > 0 ? items : ['Análisis en progreso']
-    }
-  }
-  return ['No disponible']
-}
-
-async function analyzeGenericActivity(client: MoodleAPIClient, activityData: any, openai: OpenAI, activityType: string) {
+async function analyzeGenericActivity(client: MoodleAPIClient, activityData: any, openai: OpenAI, activityType: string, courseName: string) {
   console.log(`🎯 Analizando actividad ${activityType}: ${activityData.name}`)
 
   // Mapeo de tipos de actividad
@@ -919,179 +583,112 @@ async function analyzeGenericActivity(client: MoodleAPIClient, activityData: any
 
   const typeLabel = typeLabels[activityType] || 'Actividad'
 
-  // Preparar datos para el análisis
+  // Preparar datos de análisis de forma flexible
   const analysisData = {
-    name: activityData.name,
-    description: activityData.intro || '',
-    status: activityData.status,
+    name: activityData.name || `${typeLabel} sin nombre`,
+    description: activityData.intro || activityData.description || '',
+    status: activityData.status || 'Activa',
     type: typeLabel,
     participants: activityData.participants || 0,
     responses: activityData.responses || 0
   }
 
-  console.log(`📤 DATOS ENVIADOS A PROCESAR - ${typeLabel.toUpperCase()}:`)
-  console.log(`   📋 Datos de la actividad:`, JSON.stringify(analysisData, null, 2))
-  console.log(`   👥 Participantes: ${analysisData.participants}, Respuestas: ${analysisData.responses}`)
-  console.log(`   📊 Estado: ${analysisData.status}`)
-
-  // Prompt ESTRUCTURADO DINÁMICO para actividades genéricas
   const prompt = `
-Eres un experto en análisis educativo. Analiza la siguiente ACTIVIDAD EDUCATIVA y genera un análisis con formato estructurado dinámico:
+Eres un asistente del profesor del curso de ${courseName} en Utel Universidad, tu tarea es hacer un análisis del comportamiento de la siguiente actividad educativa y compartir insights al profesor. Responde ÚNICAMENTE en formato JSON válido con un análisis dinámico basado en los datos proporcionados:
 
-## DATOS DE LA ACTIVIDAD:
-- **Nombre**: ${analysisData.name}
-- **Tipo**: ${analysisData.type}
-- **Descripción**: ${analysisData.description}
-- **Estado**: ${analysisData.status}
-- **Participantes**: ${analysisData.participants}
-- **Respuestas**: ${analysisData.responses}
+${JSON.stringify(analysisData, null, 2)}`
 
----
+  // Crear timestamp y nombre de archivo únicos
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const activityName = (activityData.name || activityType).replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30)
 
-**GENERA UN ANÁLISIS CON SECCIONES DINÁMICAS Y ESPECÍFICAS AL CONTEXTO**
-
-Crea entre 5-7 secciones usando títulos descriptivos que reflejen el contenido real de la actividad. Evita títulos genéricos. Adapta los nombres según el tipo específico de actividad (${typeLabel}).
-
-**EJEMPLOS DE TÍTULOS DINÁMICOS PARA ${typeLabel.toUpperCase()}:**
-- "Panorama de Participación"
-- "Análisis de Respuestas"
-- "Patrones de Engagement"
-- "Calidad de Interacción"
-- "Tendencias de Actividad"
-- "Efectividad Pedagógica"
-- "Comportamiento Estudiantil"
-- "Insights de Aprendizaje"
-- "Oportunidades de Mejora"
-- "Estrategias Recomendadas"
-
-**INSTRUCCIONES ESPECIALES PARA PRESENTACIÓN VISUAL:**
-- Si tienes datos cuantitativos importantes (métricas, porcentajes, conteos), incluye una tabla en "metricsTable" usando formato "Indicador | Valor"
-- Para análisis complejos que requieren numeración específica, usa "structuredInsights.numbered"
-- Para puntos clave sin orden específico, usa "structuredInsights.bullets"
-- Incluir tanto formatos estructurados como tradicionales para compatibilidad
-
-**RESPONDE ÚNICAMENTE EN FORMATO JSON:**
-{
-  "summary": "Resumen ejecutivo del análisis (2-3 líneas)",
-  "fullAnalysis": "Análisis completo en markdown con secciones ## dinámicas",
-  "positives": ["aspecto positivo 1", "aspecto positivo 2"],
-  "alerts": ["alerta importante 1", "alerta importante 2"],
-  "insights": ["insight clave 1", "insight clave 2"],
-  "recommendation": "Recomendación principal específica",
-  "metricsTable": "Indicador | Valor observado\nTipo de actividad | ${analysisData.name || 'Actividad educativa'}\nEstado | ${analysisData.status || 'Activa'}\nParticipantes | ${analysisData.participants}\nRespuestas | ${analysisData.responses}",
-  "structuredInsights": {
-    "numbered": ["1. Insight prioritario sobre la actividad", "2. Observación sobre configuración"],
-    "bullets": ["• Aspecto destacado", "• Área de atención", "• Recomendación específica"]
-  }
-}
-`
-
-  console.log(`🚀 ENVIANDO A OpenAI - ${typeLabel.toUpperCase()}:`)
-  console.log(`   🔗 Modelo: gpt-5-mini`)
-  console.log(`   📝 Prompt (primeros 200 chars):`, prompt.substring(0, 200) + '...')
-  console.log(`   ⚙️ Configuración: max_completion_tokens=4000 (modelo gpt-5-mini)`)
-
-  // CAPTURAR PROMPT COMPLETO PARA DEBUGGING
-  const fs = require('fs');
-  const promptData = {
-    timestamp: new Date().toISOString(),
-    activityType: activityType,
-    activityName: activityData.name,
-    activityId: activityData.id,
-    systemMessage: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. Incluye datos cuantitativos en metricsTable cuando sea relevante, y separa insights en numerados (para orden específico) y bullets (para puntos generales). El fullAnalysis debe usar markdown con secciones ##.",
-    userPrompt: prompt,
-    rawData: analysisData,
+  // GUARDAR REQUEST A OPENAI EN ARCHIVO
+  const requestBody = {
     model: "gpt-5-mini",
-    maxTokens: 4000
-  };
-  
+    messages: [
+      {
+        role: "user",
+        content: prompt
+      }
+    ],
+    max_completion_tokens: 4000
+  }
+
+  const fs = require('fs');
+  const requestFileName = `openai-request-${activityType}-${activityName}-${timestamp}.json`
+  const requestFilePath = `openai-logs/${requestFileName}`
+
   try {
-    fs.writeFileSync('/tmp/ultimo-prompt-enviado-openai.json', JSON.stringify(promptData, null, 2));
-    console.log('💾 Prompt completo guardado en /tmp/ultimo-prompt-enviado-openai.json');
+    fs.writeFileSync(requestFilePath, JSON.stringify({
+      timestamp: new Date().toISOString(),
+      activityType: activityType,
+      activityName: activityData.name,
+      activityId: activityData.id,
+      requestBody: requestBody,
+      rawActivityData: analysisData
+    }, null, 2))
+    console.log(`📄 REQUEST guardado en: ${requestFilePath}`)
   } catch (writeError) {
-    console.log('⚠️ No se pudo guardar el prompt completo:', writeError.message);
+    console.log('⚠️ No se pudo guardar el request:', writeError.message)
   }
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      messages: [
-        {
-          role: "system",
-          content: "Eres un experto en análisis educativo. Debes responder ÚNICAMENTE en formato JSON válido con la estructura exacta solicitada. IMPORTANTE: Los títulos de secciones NO deben tener formato markdown (##) en el contenido, van en el campo 'title'. El contenido debe ser texto limpio. Usa terminología educativa: 'aportaciones' en lugar de 'posts'. Cuando menciones participación de profesores, usa sus nombres específicos."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      max_completion_tokens: 4000
-    })
-
+    const completion = await openai.chat.completions.create(requestBody)
     const analysisText = completion.choices[0]?.message?.content || ''
-    
-    console.log('📝 Respuesta de OpenAI (primeros 500 chars):', analysisText.substring(0, 500))
-    
+
+    // GUARDAR RESPONSE DE OPENAI EN ARCHIVO
+    const responseFileName = `openai-response-${activityType}-${activityName}-${timestamp}.json`
+    const responseFilePath = `openai-logs/${responseFileName}`
+
+    try {
+      fs.writeFileSync(responseFilePath, JSON.stringify({
+        timestamp: new Date().toISOString(),
+        activityType: activityType,
+        activityName: activityData.name,
+        activityId: activityData.id,
+        model: 'gpt-5-mini',
+        rawResponse: analysisText,
+        usage: completion.usage,
+        fullCompletionObject: completion
+      }, null, 2))
+      console.log(`📄 RESPONSE guardado en: ${responseFilePath}`)
+    } catch (writeError) {
+      console.log('⚠️ No se pudo guardar el response:', writeError.message)
+    }
+
     // Procesar la respuesta JSON
     let analysis
     try {
+      if (!analysisText || analysisText.trim() === '') {
+        throw new Error('Empty response from OpenAI')
+      }
       analysis = JSON.parse(analysisText)
       console.log('✅ JSON parseado correctamente')
-      console.log('📊 Campos presentes:')
-      console.log('  - summary:', analysis.summary ? '✅' : '❌')
-      console.log('  - sections:', analysis.sections ? `✅ (${analysis.sections.length} secciones)` : '❌')
-      if (analysis.sections) {
-        analysis.sections.forEach((section: any, i: number) => {
-          console.log(`    ${i+1}. "${section.title}" (${section.format}) ${section.icon || ''}`)
-        })
-      }
-      
-      // Mantener compatibilidad con formato anterior
-      if (!analysis.sections && (analysis.metricsTable || analysis.structuredInsights)) {
-        console.log('📋 Formato anterior detectado, manteniendo compatibilidad')
-        console.log('  - metricsTable:', analysis.metricsTable ? '✅' : '❌')
-        console.log('  - structuredInsights:', analysis.structuredInsights ? '✅' : '❌')
-      }
     } catch (parseError) {
-      console.error('❌ Error parseando JSON de OpenAI:', parseError)
-      // Fallback a análisis básico si falla el parsing
+      console.log('❌ Error parseando JSON de OpenAI:', parseError)
+      console.log('❌ Respuesta recibida no es JSON válido:', analysisText)
       analysis = {
-        summary: 'Análisis generado con formato de respaldo',
-        fullAnalysis: analysisText,
-        positives: ['Contenido disponible para revisión'],
-        alerts: ['Formato de respuesta no estructurado'],
-        insights: ['Requiere revisión manual'],
-        recommendation: 'Revisar configuración del análisis'
+        summary: analysisText.substring(0, 500) || 'Análisis completado',
+        positives: [],
+        alerts: [],
+        insights: [],
+        recommendation: 'Análisis completado'
       }
     }
-    
+
     console.log(`✅ Análisis de ${typeLabel} completado para: ${activityData.name}`)
-    
+
     return {
       ...analysis,
       activityId: activityData.id,
       activityType: activityType,
       activityName: activityData.name,
       rawData: analysisData,
-      prompt: prompt, // Guardar el prompt usado
+      prompt: prompt,
       generatedAt: new Date().toISOString()
     }
-
   } catch (error) {
     console.error(`❌ Error en análisis de ${typeLabel}:`, error)
     throw new Error(`Error al generar análisis de ${typeLabel}`)
   }
-}
-
-function parseGenericAnalysis(text: string) {
-  // Función para extraer secciones del análisis genérico
-  const sections = {
-    summary: extractSection(text, ['RESUMEN DE PARTICIPACIÓN', 'RESUMEN GENERAL']),
-    positives: extractListSection(text, ['ASPECTOS POSITIVOS', 'ELEMENTOS POSITIVOS']),
-    alerts: extractListSection(text, ['ÁREAS DE MEJORA', 'PROBLEMAS']),
-    insights: extractListSection(text, ['INSIGHTS PEDAGÓGICOS', 'ELEMENTOS PEDAGÓGICOS']),
-    recommendation: extractSection(text, ['RECOMENDACIÓN DOCENTE', 'ACCIÓN RECOMENDADA'])
-  }
-  
-  return sections
 }

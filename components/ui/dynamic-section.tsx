@@ -11,6 +11,25 @@ interface DynamicSectionProps {
 }
 
 export function DynamicSectionRenderer({ section, className = "" }: DynamicSectionProps) {
+  // Función para limpiar caracteres de markdown y especiales
+  const cleanText = (text: string): string => {
+    if (!text) return ''
+    return text
+      .replace(/\*\*(.*?)\*\*/g, '$1')           // **texto** → texto
+      .replace(/\*(.*?)\*/g, '$1')              // *texto* → texto
+      .replace(/~(.*?)~/g, '$1')                // ~texto~ → texto
+      .replace(/`(.*?)`/g, '$1')                // `texto` → texto
+      .replace(/~(?=\d)/g, '')                  // Eliminar ~ que van antes de números (~59 → 59)
+      .replace(/~/g, '')                        // Eliminar ~ restantes
+      .replace(/\*\*Acción sugerida:\*\*/g, 'Acción sugerida:') // Casos específicos
+      .replace(/\*Acción sugerida:\*/g, 'Acción sugerida:')
+      .replace(/^\*\s+/gm, '')                  // * al inicio de línea
+      .replace(/^\*\*\s+/gm, '')                // ** al inicio de línea
+      .replace(/\*\*/g, '')                     // ** restantes
+      .replace(/\*/g, '')                       // * restantes
+      .trim()
+  }
+
   // Mantener diseño consistente: fondo blanco, box-shadow-sm, border-radius 16px
   const getCardClasses = () => {
     return 'bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow'
@@ -31,21 +50,27 @@ export function DynamicSectionRenderer({ section, className = "" }: DynamicSecti
 
       case 'numbered-list':
         if (Array.isArray(section.content)) {
-          return <AnalysisList items={section.content} numbered={true} />
+          // Limpiar caracteres de markdown para mejor presentación
+          const cleanedContent = section.content.map((item: string) => cleanText(item))
+          return <AnalysisList items={cleanedContent} numbered={true} />
         }
         break
 
       case 'bullet-list':
         if (Array.isArray(section.content)) {
-          return <AnalysisList items={section.content} numbered={false} />
+          // Limpiar caracteres de markdown para mejor presentación
+          const cleanedContent = section.content.map((item: string) => cleanText(item))
+          return <AnalysisList items={cleanedContent} numbered={false} />
         }
         break
 
       case 'text':
         if (typeof section.content === 'string') {
+          // Limpiar caracteres de markdown para mejor presentación
+          const cleanedContent = cleanText(section.content)
           return (
             <div className="max-w-none text-neutral-dark font-inter text-sm">
-              <ContentParser content={section.content} />
+              <ContentParser content={cleanedContent} />
             </div>
           )
         }

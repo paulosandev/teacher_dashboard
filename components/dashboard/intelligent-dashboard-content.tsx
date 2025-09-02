@@ -1215,10 +1215,10 @@ export function IntelligentDashboardContent({
               </div>
             )}
 
-            {/* Puntos parseados del análisis anterior (mantener compatibilidad) */}
+            {/* Puntos parseados del análisis anterior (solo si no hay sections) */}
             {(() => {
               const { points: analysisPoints } = parseAnalysisIntoPoints(analysis)
-              if (analysisPoints.length > 0 && !analysis.metricsTable && !analysis.structuredInsights) {
+              if (analysisPoints.length > 0 && !analysis.sections && !analysis.metricsTable && !analysis.structuredInsights) {
                 return (
                   <div className={`grid gap-6 ${analysisPoints.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
                     {analysisPoints.map((point, index) => {

@@ -107,3 +107,6 @@ Dockerfile.worker
 docker-compose.yml
 railway.json
 vercel.json
+
+# OpenAI logs
+openai-logs/

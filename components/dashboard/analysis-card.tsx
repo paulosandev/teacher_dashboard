@@ -16,6 +16,7 @@ import { AnalysisCardData } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ContentParser } from '@/components/ui/content-parser'
+import { AnalysisList } from '@/components/ui/analysis-list'
 
 interface AnalysisCardProps {
   data: AnalysisCardData
@@ -25,6 +26,25 @@ interface AnalysisCardProps {
 
 export default function AnalysisCard({ data, onViewMore, onReanalyze }: AnalysisCardProps) {
   const [isReanalyzing, setIsReanalyzing] = useState(false)
+
+  // Función para limpiar caracteres de markdown y especiales
+  const cleanText = (text: string): string => {
+    if (!text) return ''
+    return text
+      .replace(/\*\*(.*?)\*\*/g, '$1')           // **texto** → texto
+      .replace(/\*(.*?)\*/g, '$1')              // *texto* → texto
+      .replace(/~(.*?)~/g, '$1')                // ~texto~ → texto
+      .replace(/`(.*?)`/g, '$1')                // `texto` → texto
+      .replace(/~(?=\d)/g, '')                  // Eliminar ~ que van antes de números (~59 → 59)
+      .replace(/~/g, '')                        // Eliminar ~ restantes
+      .replace(/\*\*Acción sugerida:\*\*/g, 'Acción sugerida:') // Casos específicos
+      .replace(/\*Acción sugerida:\*/g, 'Acción sugerida:')
+      .replace(/^\*\s+/gm, '')                  // * al inicio de línea
+      .replace(/^\*\*\s+/gm, '')                // ** al inicio de línea
+      .replace(/\*\*/g, '')                     // ** restantes
+      .replace(/\*/g, '')                       // * restantes
+      .trim()
+  }
 
   const getTypeIcon = () => {
     switch (data.type) {
@@ -72,6 +92,12 @@ export default function AnalysisCard({ data, onViewMore, onReanalyze }: Analysis
     data.llmResponse.structuredInsights
   )
 
+  // Verificar si tenemos análisis en formato markdown con dimensiones
+  const hasMarkdownAnalysis = data.llmResponse && (
+    data.llmResponse.markdownContent || 
+    data.llmResponse.dimensions
+  )
+
   // Función para renderizar contenido mejorado con componentes visuales
   const renderEnhancedContent = (content: string | any, type: 'insights' | 'recommendations' | 'general' = 'general') => {
     if (typeof content === 'string') {
@@ -105,7 +131,66 @@ export default function AnalysisCard({ data, onViewMore, onReanalyze }: Analysis
           </div>
         </header>
 
-        {hasEnrichedData ? (
+        {hasMarkdownAnalysis ? (
+          // Formato markdown con dimensiones
+          <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+              <div className="flex items-center gap-2 text-blue-700 font-medium mb-2">
+                <FontAwesomeIcon icon={faFileAlt} className="w-4 h-4" />
+                Análisis por Dimensiones
+              </div>
+              <p className="text-blue-600 text-sm">
+                {data.llmResponse.dimensions?.length || 0} dimensiones de análisis identificadas con insights accionables
+              </p>
+            </div>
+            
+            {/* Mostrar resumen de las primeras dimensiones */}
+            {data.positives.length > 0 && (
+              <div className="flex items-start">
+                <FontAwesomeIcon 
+                  icon={faUsers} 
+                  className="w-5 h-5 text-green-600 mt-0.5 mr-3 flex-shrink-0"
+                />
+                <div>
+                  <strong className="font-semibold text-gray-700">Principales hallazgos:</strong>
+                  <span className="text-gray-600 ml-1">
+                    {cleanText(data.positives[0] || '').substring(0, 250) + (data.positives[0]?.length > 250 ? '...' : '')}
+                  </span>
+                </div>
+              </div>
+            )}
+            
+            {/* Mostrar alertas si las hay */}
+            {data.alerts.length > 0 && (
+              <div className="flex items-start">
+                <FontAwesomeIcon 
+                  icon={faExclamationTriangle} 
+                  className="w-5 h-5 text-red-600 mt-0.5 mr-3 flex-shrink-0"
+                />
+                <div>
+                  <strong className="font-semibold text-gray-700">Aspectos a mejorar:</strong>
+                  <span className="text-gray-600 ml-1">
+                    {cleanText(data.alerts[0] || '').substring(0, 250) + (data.alerts[0]?.length > 250 ? '...' : '')}
+                  </span>
+                </div>
+              </div>
+            )}
+            
+            {/* Próxima acción */}
+            <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+              <div className="flex items-center gap-2 text-green-700 font-medium mb-2">
+                <FontAwesomeIcon icon={faFileAlt} className="w-4 h-4" />
+                Próxima Acción Recomendada
+              </div>
+              <p className="text-green-600 text-sm">
+                {typeof data.recommendation === 'string' 
+                  ? cleanText(data.recommendation).substring(0, 200) + (data.recommendation.length > 200 ? '...' : '')
+                  : cleanText(data.recommendation?.action || 'Ver análisis detallado')
+                }
+              </p>
+            </div>
+          </div>
+        ) : hasEnrichedData ? (
           <div className="space-y-4">
             {/* Resumen mejorado */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gray-50 rounded-lg">
@@ -221,7 +306,7 @@ export default function AnalysisCard({ data, onViewMore, onReanalyze }: Analysis
                 <div>
                   <strong className="font-semibold text-gray-700">Fortalezas:</strong>
                   <span className="text-gray-600 ml-1">
-                    {data.strengths.map(s => typeof s === 'string' ? s : s.description).join(', ')}
+                    {data.strengths.map(s => cleanText(typeof s === 'string' ? s : s.description)).join(', ')}
                   </span>
                 </div>
               </div>
@@ -237,7 +322,7 @@ export default function AnalysisCard({ data, onViewMore, onReanalyze }: Analysis
                 <div>
                   <strong className="font-semibold text-gray-700">Alertas:</strong>
                   <span className="text-gray-600 ml-1">
-                    {data.alerts.map(a => typeof a === 'string' ? a : a.description).join('; ')}
+                    {data.alerts.map(a => cleanText(typeof a === 'string' ? a : a.description)).join('; ')}
                   </span>
                 </div>
               </div>
@@ -252,7 +337,7 @@ export default function AnalysisCard({ data, onViewMore, onReanalyze }: Analysis
               <div>
                 <strong className="font-semibold text-gray-700">Próximo paso docente:</strong>
                 <span className="text-gray-600 ml-1">
-                  {typeof data.nextStep === 'string' ? data.nextStep : data.nextStep.action}
+                  {cleanText(typeof data.nextStep === 'string' ? data.nextStep : data.nextStep.action)}
                 </span>
               </div>
             </div>

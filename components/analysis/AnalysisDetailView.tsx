@@ -9,6 +9,7 @@ import { AnalysisTable } from '@/components/ui/analysis-table'
 import { AnalysisList } from '@/components/ui/analysis-list'
 import { ContentParser } from '@/components/ui/content-parser'
 import { FormattedText } from '@/components/ui/formatted-text'
+import { DimensionCard } from '@/components/analysis/DimensionCard'
 
 interface AnalysisDetailData {
   id: string
@@ -31,6 +32,8 @@ interface AnalysisDetailData {
   forumsCount?: number
   rawData?: any
   llmResponse?: any
+  markdownContent?: string
+  dimensions?: string[]
 }
 
 interface AnalysisDetailViewProps {
@@ -143,6 +146,71 @@ export function AnalysisDetailView({ data }: AnalysisDetailViewProps) {
           </CardHeader>
           <CardContent>
             <ContentParser content={data.llmResponse.metricsTable} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* DEBUG: Ver qué datos tenemos */}
+      {console.log('🔍 DEBUG AnalysisDetailView data:', {
+        hasMarkdownContent: !!data.markdownContent,
+        markdownPreview: data.markdownContent?.substring(0, 200),
+        hasDimensions: !!data.dimensions,
+        dimensionsLength: data.dimensions?.length,
+        llmResponse: data.llmResponse
+      })}
+      
+      {/* Dimensiones del análisis (formato markdown) */}
+      {data.markdownContent && (
+        <div className="space-y-6">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              Análisis por Dimensiones
+            </h2>
+            <p className="text-gray-600">
+              Insights accionables organizados por área de impacto
+            </p>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            {(() => {
+              // Dividir el análisis completo por títulos ####
+              const sections = data.markdownContent.split(/(?=^####\s)/gm)
+                .filter(section => section.trim().length > 0)
+              
+              return sections.map((section, index) => {
+                const lines = section.split('\n').filter(line => line.trim().length > 0)
+                const title = lines[0]?.trim().replace(/^#+\s*/, '') || `Dimensión ${index + 1}`
+                
+                return (
+                  <DimensionCard
+                    key={`dimension-${index}`}
+                    title={title}
+                    content={section}
+                    index={index}
+                  />
+                )
+              })
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* Contenido markdown completo (si no hay dimensiones) */}
+      {data.markdownContent && !data.dimensions && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Análisis Detallado</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div 
+              className="prose prose-sm max-w-none"
+              dangerouslySetInnerHTML={{
+                __html: data.markdownContent
+                  .replace(/####\s*(.*)/g, '<h4 class="text-lg font-semibold text-gray-800 mt-6 mb-3">$1</h4>')
+                  .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                  .replace(/^\*\s+(.*)$/gm, '<li>$1</li>')
+                  .replace(/(<li>.*<\/li>)/gs, '<ul class="list-disc list-inside space-y-1">$1</ul>')
+              }}
+            />
           </CardContent>
         </Card>
       )}

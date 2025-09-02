@@ -11,6 +11,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { DimensionCard } from '@/components/analysis/DimensionCard'
 
 interface AnalysisModalProps {
   isOpen: boolean
@@ -67,42 +68,38 @@ export function AnalysisModal({ isOpen, onClose, analysis, activityName, activit
 
         {/* Content */}
         <div className="p-6 space-y-6">
-          {/* Análisis Completo o Resumen General */}
-          {analysis.fullAnalysis ? (
-            <div className="bg-blue-50 rounded-lg p-4">
-              <div className="flex items-center space-x-2 mb-3">
-                <FontAwesomeIcon icon={faBrain} className="text-blue-600" />
-                <h3 className="text-lg font-semibold text-blue-900">Análisis Educativo Completo</h3>
+          {/* Dimensiones del análisis (formato markdown) */}
+          {analysis.fullAnalysis && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  Análisis por Dimensiones
+                </h2>
+                <p className="text-gray-600">
+                  Insights accionables organizados por área de impacto
+                </p>
               </div>
-              <div className="text-blue-800 leading-relaxed prose prose-sm max-w-none prose-headings:text-blue-900 prose-strong:text-blue-900 prose-em:text-blue-700 prose-blockquote:text-blue-700 prose-blockquote:border-blue-300">
-                <ReactMarkdown 
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    // Personalizar estilos de componentes específicos
-                    h1: ({children}) => <h1 className="text-xl font-bold text-blue-900 mb-3">{children}</h1>,
-                    h2: ({children}) => <h2 className="text-lg font-semibold text-blue-900 mb-2">{children}</h2>,
-                    h3: ({children}) => <h3 className="text-md font-medium text-blue-900 mb-2">{children}</h3>,
-                    ul: ({children}) => <ul className="list-disc list-inside space-y-1 ml-2">{children}</ul>,
-                    ol: ({children}) => <ol className="list-decimal list-inside space-y-1 ml-2">{children}</ol>,
-                    blockquote: ({children}) => <blockquote className="border-l-4 border-blue-300 pl-4 italic text-blue-700 my-3">{children}</blockquote>,
-                    table: ({children}) => <table className="w-full border-collapse border border-blue-300 my-3">{children}</table>,
-                    th: ({children}) => <th className="border border-blue-300 bg-blue-100 px-3 py-2 text-left font-semibold">{children}</th>,
-                    td: ({children}) => <td className="border border-blue-300 px-3 py-2">{children}</td>,
-                    code: ({children}) => <code className="bg-blue-100 px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
-                    pre: ({children}) => <pre className="bg-blue-100 p-3 rounded overflow-x-auto">{children}</pre>
-                  }}
-                >
-                  {analysis.fullAnalysis}
-                </ReactMarkdown>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {(() => {
+                  // Dividir el análisis completo por títulos ####
+                  const sections = analysis.fullAnalysis.split(/(?=^####\s)/gm)
+                    .filter((section: string) => section.trim().length > 0)
+                  
+                  return sections.map((section: string, index: number) => {
+                    const lines = section.split('\n').filter((line: string) => line.trim().length > 0)
+                    const title = lines[0]?.trim().replace(/^#+\s*/, '') || `Dimensión ${index + 1}`
+                    
+                    return (
+                      <DimensionCard
+                        key={`dimension-${index}`}
+                        title={title}
+                        content={section}
+                        index={index}
+                      />
+                    )
+                  })
+                })()}
               </div>
-            </div>
-          ) : (
-            <div className="bg-blue-50 rounded-lg p-4">
-              <div className="flex items-center space-x-2 mb-3">
-                <FontAwesomeIcon icon={faLightbulb} className="text-blue-600" />
-                <h3 className="text-lg font-semibold text-blue-900">Resumen General</h3>
-              </div>
-              <p className="text-blue-800 leading-relaxed">{analysis.summary}</p>
             </div>
           )}
 

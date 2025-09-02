@@ -55,6 +55,8 @@ async function getAnalysisData(analysisId: string) {
       confidence: analysis.confidence || undefined,
       rawData: analysis.rawData as any,
       llmResponse: analysis.llmResponse as any,
+      markdownContent: analysis.llmResponse?.markdownContent,
+      dimensions: analysis.llmResponse?.dimensions,
       // Campos específicos para el análisis
       courseName: analysis.course.name,
       groupName: analysis.group?.name,
