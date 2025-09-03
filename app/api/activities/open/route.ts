@@ -171,7 +171,20 @@ export async function GET(request: NextRequest) {
     
     console.log('🔑 Usando token del profesor logueado para acceso completo')
     console.log(`👨‍🏫 Profesor: ${session.user.name} (ID: ${professorUserId})`)
-    const client = new MoodleAPIClient(process.env.MOODLE_URL!, professorToken)
+    
+    // Determinar URL base del aula desde la sesión o usar fallback
+    let aulaBaseUrl = process.env.MOODLE_URL || 'https://av141.utel.edu.mx'
+    
+    if (session.user.moodleUrl) {
+      // Extraer URL base de la API URL (ej: https://aula101.utel.edu.mx/webservice/rest/server.php -> https://aula101.utel.edu.mx)
+      const urlParts = session.user.moodleUrl.match(/^(https:\/\/[^\/]+)/)
+      if (urlParts && urlParts[1]) {
+        aulaBaseUrl = urlParts[1]
+        console.log(`🏫 URL del aula detectada desde sesión: ${aulaBaseUrl}`)
+      }
+    }
+    
+    const client = new MoodleAPIClient(session.user.moodleUrl || process.env.MOODLE_API_URL!, professorToken)
 
     const now = Math.floor(Date.now() / 1000)
     const activities: any[] = []
@@ -436,7 +449,7 @@ export async function GET(request: NextRequest) {
                   }
                   
                   // URL específica de la discusión
-                  const discussionUrl = `${process.env.MOODLE_URL}/mod/forum/discuss.php?d=${discussion.discussion || discussion.id}`
+                  const discussionUrl = `${aulaBaseUrl}/mod/forum/discuss.php?d=${discussion.discussion || discussion.id}`
                   
                   activities.push({
                     id: discussion.id, // Usar el ID de la discusión
@@ -520,7 +533,7 @@ export async function GET(request: NextRequest) {
                   cutoffdate: forum.cutoffdate,
                   duedate: forum.duedate,
                   status: status,
-                  url: `${process.env.MOODLE_URL}/mod/forum/view.php?id=${forum.cmid}`,
+                  url: `${aulaBaseUrl}/mod/forum/view.php?id=${forum.cmid}`,
                   courseid: forum.course,
                   groupId: groupId,
                   authorUserId: parseInt(session.user.id),
@@ -666,7 +679,7 @@ export async function GET(request: NextRequest) {
               duedate: assignment.duedate,
               cutoffdate: assignment.cutoffdate,
               status: status,
-              url: moduleUrlMap[urlKey] || `${process.env.MOODLE_URL}/mod/assign/view.php?id=${assignment.cmid}`,
+              url: moduleUrlMap[urlKey] || `${aulaBaseUrl}/mod/assign/view.php?id=${assignment.cmid}`,
               courseid: parseInt(courseId),
               groupId: groupId, // Grupo para el que se filtró
               // Información detallada de la asignación

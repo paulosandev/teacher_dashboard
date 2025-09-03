@@ -472,7 +472,20 @@ async function analyzeAssignment(client: MoodleAPIClient, assignmentData: any, o
   }
 
   const prompt = `
-Eres un asistente del profesor del curso de ${courseName} en Utel Universidad, tu tarea es hacer un análisis del comportamiento de la siguiente actividad educativa y compartir insights al profesor. Responde ÚNICAMENTE en formato JSON válido con un análisis dinámico basado en los datos proporcionados:
+Eres un asistente del profesor en la Universidad UTEL. Tu tarea consiste en ayudarle a identificar insights educativos accionables sobre esta tarea/asignación para que pueda intervenir de manera pertinente durante su próxima videoconferencia con los estudiantes (openclass).
+
+- Enfócate en aspectos pedagógicos relevantes: calidad de las entregas, patrones de comportamiento estudiantil, oportunidades de mejora en el aprendizaje.
+- Evita mencionar métricas técnicas específicas (como números de submissionCount, avgGrade, etc.). En su lugar, interpreta estos datos y ofrece insights educativos.
+- Redacta con un estilo conversacional dirigido al profesor, utilizando el principio de minto pyramid donde la conclusión son los insights accionables.
+- El análisis debe estructurarse en al menos 4 dimensiones. Cada dimensión debe presentarse con el formato siguiente:
+  #### [Nombre de la dimensión]
+  * Incluye hallazgos clave en viñetas, redactados de forma breve y clara.
+  * Cada hallazgo debe resaltar con negritas los elementos relevantes.
+  **Acción sugerida:** redactar una recomendación específica, breve y accionable para el profesor.
+- Ordena las dimensiones de mayor a menor impacto educativo.
+- El formato de entrega solo es markdown.
+- El análisis debe limitarse únicamente al reporte solicitado, sin incluir preguntas, sugerencias adicionales, invitaciones a continuar ni ofertas de recursos complementarios.
+- El análisis debe iniciar directamente con los insights accionables, sin incluir introducciones, frases de encuadre, ni explicaciones preliminares.
 
 ${JSON.stringify(analysisData, null, 2)}`
 
@@ -534,30 +547,17 @@ ${JSON.stringify(analysisData, null, 2)}`
       console.log('⚠️ No se pudo guardar el response:', writeError.message)
     }
 
-    // Procesar la respuesta JSON
-    let analysis
-    try {
-      if (!analysisText || analysisText.trim() === '') {
-        throw new Error('Empty response from OpenAI')
-      }
-      analysis = JSON.parse(analysisText)
-      console.log('✅ JSON parseado correctamente')
-    } catch (parseError) {
-      console.log('❌ Error parseando JSON de OpenAI:', parseError)
-      console.log('❌ Respuesta recibida no es JSON válido:', analysisText)
-      analysis = {
-        summary: analysisText.substring(0, 500) || 'Análisis completado',
-        positives: [],
-        alerts: [],
-        insights: [],
-        recommendation: 'Análisis completado'
-      }
+    // Procesar la respuesta markdown
+    if (!analysisText || analysisText.trim() === '') {
+      console.log('❌ OpenAI devolvió respuesta vacía')
+      throw new Error('Empty response from OpenAI')
     }
 
-    console.log(`✅ Análisis de asignación completado para: ${assignmentData.name}`)
+    console.log('✅ Análisis de asignación completado para:', assignmentData.name)
+    console.log('📝 Respuesta recibida es markdown, longitud:', analysisText.length)
 
     return {
-      ...analysis,
+      analysisText: analysisText, // Texto completo de markdown
       activityId: assignmentData.id,
       activityType: 'assign',
       activityName: assignmentData.name,
@@ -594,7 +594,20 @@ async function analyzeGenericActivity(client: MoodleAPIClient, activityData: any
   }
 
   const prompt = `
-Eres un asistente del profesor del curso de ${courseName} en Utel Universidad, tu tarea es hacer un análisis del comportamiento de la siguiente actividad educativa y compartir insights al profesor. Responde ÚNICAMENTE en formato JSON válido con un análisis dinámico basado en los datos proporcionados:
+Eres un asistente del profesor en la Universidad UTEL. Tu tarea consiste en ayudarle a identificar insights educativos accionables sobre esta ${typeLabel.toLowerCase()} para que pueda intervenir de manera pertinente durante su próxima videoconferencia con los estudiantes (openclass).
+
+- Enfócate en aspectos pedagógicos relevantes: participación estudiantil, patrones de comportamiento, calidad de las respuestas, oportunidades de mejora en el aprendizaje.
+- Evita mencionar métricas técnicas específicas (como números de participants, responses, etc.). En su lugar, interpreta estos datos y ofrece insights educativos.
+- Redacta con un estilo conversacional dirigido al profesor, utilizando el principio de minto pyramid donde la conclusión son los insights accionables.
+- El análisis debe estructurarse en al menos 3 dimensiones. Cada dimensión debe presentarse con el formato siguiente:
+  #### [Nombre de la dimensión]
+  * Incluye hallazgos clave en viñetas, redactados de forma breve y clara.
+  * Cada hallazgo debe resaltar con negritas los elementos relevantes.
+  **Acción sugerida:** redactar una recomendación específica, breve y accionable para el profesor.
+- Ordena las dimensiones de mayor a menor impacto educativo.
+- El formato de entrega solo es markdown.
+- El análisis debe limitarse únicamente al reporte solicitado, sin incluir preguntas, sugerencias adicionales, invitaciones a continuar ni ofertas de recursos complementarios.
+- El análisis debe iniciar directamente con los insights accionables, sin incluir introducciones, frases de encuadre, ni explicaciones preliminares.
 
 ${JSON.stringify(analysisData, null, 2)}`
 
@@ -656,30 +669,17 @@ ${JSON.stringify(analysisData, null, 2)}`
       console.log('⚠️ No se pudo guardar el response:', writeError.message)
     }
 
-    // Procesar la respuesta JSON
-    let analysis
-    try {
-      if (!analysisText || analysisText.trim() === '') {
-        throw new Error('Empty response from OpenAI')
-      }
-      analysis = JSON.parse(analysisText)
-      console.log('✅ JSON parseado correctamente')
-    } catch (parseError) {
-      console.log('❌ Error parseando JSON de OpenAI:', parseError)
-      console.log('❌ Respuesta recibida no es JSON válido:', analysisText)
-      analysis = {
-        summary: analysisText.substring(0, 500) || 'Análisis completado',
-        positives: [],
-        alerts: [],
-        insights: [],
-        recommendation: 'Análisis completado'
-      }
+    // Procesar la respuesta markdown
+    if (!analysisText || analysisText.trim() === '') {
+      console.log('❌ OpenAI devolvió respuesta vacía')
+      throw new Error('Empty response from OpenAI')
     }
 
     console.log(`✅ Análisis de ${typeLabel} completado para: ${activityData.name}`)
+    console.log('📝 Respuesta recibida es markdown, longitud:', analysisText.length)
 
     return {
-      ...analysis,
+      analysisText: analysisText, // Texto completo de markdown
       activityId: activityData.id,
       activityType: activityType,
       activityName: activityData.name,

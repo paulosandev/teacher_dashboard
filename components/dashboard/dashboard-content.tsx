@@ -320,7 +320,7 @@ export default function DashboardContent({
                   No hay curso seleccionado
                 </p>
                 <p className="text-gray-600 mb-6 max-w-md">
-                  Selecciona un curso y grupo del menú superior para ver el análisis de actividades y participación estudiantil.
+                  Selecciona un curso y grupo del menú superior
                 </p>
                 <div className="flex items-center space-x-2 text-sm text-gray-500">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

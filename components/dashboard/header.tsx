@@ -63,9 +63,8 @@ export default function DashboardHeader({
                     />
                   </svg>
                 </div>
-                <span className="bg-primary-light text-green-900 px-4 py-3 rounded-md text-sm font-medium flex items-center gap-2">
-                  <FontAwesomeIcon icon={faPencilAlt} className="w-3 h-3 text-icon-dark" />
-                  Portal docente
+                <span className="text-green-900 text-xl font-bold flex items-center gap-2">
+                  Reporte de Asistente Docente
                 </span>
               </Link>
             </div>
@@ -79,7 +78,7 @@ export default function DashboardHeader({
           {/* Notificaciones y perfil */}
           <div className="flex items-center space-x-4">
             <div className="relative cursor-pointer">
-              <FontAwesomeIcon icon={faBell} className="w-5 h-5 text-neutral-dark" />
+              
               {notificationCount > 0 && (
                 <span className="absolute -top-3 -right-2 w-4 h-4 bg-primary-dark rounded-full text-xs flex items-center justify-center">
                   <span className="text-white text-xs font-bold">{notificationCount}</span>

@@ -818,19 +818,13 @@ export function IntelligentDashboardContent({
         if (section.format === 'numbered-list' || section.format === 'bullet-list') {
           // Si es una lista, tomar los primeros elementos
           if (Array.isArray(section.content)) {
-            summaryPoints.push(...section.content.slice(0, 2).map((item: string) => 
-              item.length > 100 ? item.substring(0, 100) + '...' : item
-            ))
+            summaryPoints.push(...section.content.slice(0, 3).map((item: string) => item))
           }
         } else if (section.format === 'text' && section.content) {
           // Si es texto, extraer la primera oración o párrafo
           const firstParagraph = section.content.split('\n')[0]
           if (firstParagraph && firstParagraph.length > 20) {
-            summaryPoints.push(
-              firstParagraph.length > 100 
-                ? firstParagraph.substring(0, 100) + '...' 
-                : firstParagraph
-            )
+            summaryPoints.push(firstParagraph)
           }
         } else if (section.format === 'metrics' && Array.isArray(section.content)) {
           // Si son métricas, crear un resumen de las más importantes
@@ -855,9 +849,7 @@ export function IntelligentDashboardContent({
         if (lines.length > 1) {
           const content = lines.slice(1, 3).join(' ')
           if (content.length > 20) {
-            summaryPoints.push(
-              content.length > 100 ? content.substring(0, 100) + '...' : content
-            )
+            summaryPoints.push(content)
           }
         }
       })
@@ -875,7 +867,7 @@ export function IntelligentDashboardContent({
   }, [analysisResults])
 
   // Función auxiliar para crear resúmenes coherentes para cards
-  const createCardSummary = (text: string, maxWords: number = 15) => {
+  const createCardSummary = (text: string, maxWords: number = 150) => {
     if (!text) return ''
     
     const words = text.split(' ')
@@ -1074,24 +1066,12 @@ export function IntelligentDashboardContent({
       <div className="max-w-[1132px] mx-auto mb-4 px-4 sm:px-6 lg:px-3">
         {/* Header de seguimiento */}
         <section className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">
-            Informe de seguimiento
-          </h1>
-          
-          <button 
-            onClick={navigateBackToDashboard}
-            className="flex items-center space-x-2 text-primary-darker hover:text-primary transition-colors mb-6"
-          >
-            <FontAwesomeIcon icon={faArrowLeft} className="text-sm" />
-            <span>Volver al dashboard general</span>
-          </button>
-
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-gray-900">
-              Información detallada - {detailView.activity.name}
-            </h2>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Reporte de {detailView.activity.name}
+            </h1>
             
-            {/* Chip con fecha de análisis */}
+            {/* Chip con fecha y hora de análisis */}
             {analysis && (
               <div className="flex items-center space-x-2 bg-primary-light text-primary-darker px-4 py-2 rounded-full text-sm font-medium">
                 <span>📅</span>
@@ -1099,10 +1079,21 @@ export function IntelligentDashboardContent({
                   day: 'numeric', 
                   month: 'short',
                   year: 'numeric'
+                })} - {new Date(analysis.generatedAt).toLocaleTimeString('es-ES', {
+                  hour: '2-digit',
+                  minute: '2-digit'
                 })}</span>
               </div>
             )}
           </div>
+          
+          <button 
+            onClick={navigateBackToDashboard}
+            className="flex items-center space-x-2 text-primary-darker hover:text-primary transition-colors mb-6"
+          >
+            <FontAwesomeIcon icon={faArrowLeft} className="text-sm" />
+            <span>Volver</span>
+          </button>
         </section>
 
         {/* Mostrar componentes visuales dinámicos */}
@@ -1437,13 +1428,12 @@ export function IntelligentDashboardContent({
               rel="noopener noreferrer"
               className="px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white shadow-sm transition-colors"
           >
-            No encuentras tu curso?
+            ¿No encuentras tu curso?
           </a>
         </div>
         
         <p className="text-gray-600 mb-2">
-        Te mostramos un resumen de las actividades de tus cursos
-        </p>
+        En este dashboard encontrará un resumen de los hallazgos que su <strong>Asistente Docente</strong> ha identificado sobre la participación en foros y la entrega de tareas, junto con recomendaciones para fortalecer su acompañamiento académico        </p>
         
         {/* Indicador de caché sutil debajo del texto principal */}
         {selectedCourse && (() => {
@@ -1456,15 +1446,13 @@ export function IntelligentDashboardContent({
             
             return (
               <div className="flex items-center gap-2 mb-4">
-                <p className="text-xs text-gray-400">
-                  📦 Datos en caché {minutesUntilUpdate > 0 && `(actualización automática en ${minutesUntilUpdate}min)`}
-                </p>
+                
                 <button
                   onClick={() => forceRefreshCurrentCourse()}
                   className="text-xs text-blue-600 hover:text-blue-700 hover:underline"
                   disabled={isAnalyzingBatch || isLoadingCourse}
                 >
-                  actualizar
+                  
                 </button>
               </div>
             )
@@ -1505,7 +1493,7 @@ export function IntelligentDashboardContent({
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-4">
                 <h2 className="text-2xl font-bold text-gray-900">
-                  Resumen de actividades
+                  Actividades analizadas
                 </h2>
                 {/* Indicador de caché */}
                 {selectedCourse && courseDataCache[selectedCourse] && !isLoadingCourse && (
@@ -1547,7 +1535,7 @@ export function IntelligentDashboardContent({
                     No hay curso seleccionado
                   </p>
                   <p className="text-gray-600 mb-6 max-w-md">
-                    Selecciona un curso del menú superior para ver el análisis de actividades y participación estudiantil.
+                    Selecciona un curso del menú superior
                   </p>
                   <div className="flex items-center space-x-2 text-sm text-gray-500">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1693,44 +1681,8 @@ export function IntelligentDashboardContent({
                             }
                             
                             if (analysisExtract && analysisExtract.summaryPoints) {
-                              // Mostrar puntos del análisis como lista no numerada
-                              const { summaryPoints } = analysisExtract
-                              
-                              return (
-                                <div className="flex-grow overflow-y-auto">
-                                  {summaryPoints.length > 0 ? (
-                                    <div className="space-y-3">
-                                      {summaryPoints.map((point: string, idx: number) => (
-                                        <div key={idx} className="flex items-start space-x-2">
-                                          <span className="text-primary-darker mt-1 flex-shrink-0">•</span>
-                                          <p 
-                                            className="text-neutral-dark font-inter text-sm leading-relaxed"
-                                            dangerouslySetInnerHTML={{ 
-                                              __html: point
-                                                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // **texto** → <strong>texto</strong>
-                                                .replace(/\*(.*?)\*/g, '<em>$1</em>')              // *texto* → <em>texto</em>
-                                                .replace(/`(.*?)`/g, '<code>$1</code>')            // `texto` → <code>texto</code>
-                                                .replace(/~/g, '')                                 // ~ sueltos
-                                                .replace(/\|/g, '')                               // | pipes
-                                                .replace(/\\\\/g, '')                               // \\ backslash
-                                                .replace(/^[\*\-\+]\s+/gm, '')                    // *, -, + al inicio
-                                                .replace(/^\d+\.\s+/gm, '')                       // 1. 2. etc al inicio
-                                                .replace(/\s+/g, ' ')                             // Múltiples espacios → uno
-                                                .trim()
-                                            }}
-                                          />
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <div className="bg-white rounded-lg p-4">
-                                      <p className="text-neutral-dark font-inter text-sm leading-relaxed">
-                                        Análisis disponible
-                                      </p>
-                                    </div>
-                                  )}
-                                </div>
-                              )
+                              // TEMPORALMENTE VACÍO - Sin contenido de análisis
+                              return null
                             } else {
                               // Solo mostrar indicador de análisis pendiente
                               return (
@@ -1750,7 +1702,7 @@ export function IntelligentDashboardContent({
                         {/* Footer con botones de acción - siempre en la parte inferior */}
                         <div className="flex justify-between items-center mt-6">
                           {/* Botones de la izquierda */}
-                          <div className="flex items-center space-x-3">
+                          <div className="flex items-center space-x-1">
                             {/* Botón de análisis forzado */}
                             <button
                               onClick={() => analyzeActivity(activity)}
@@ -1758,8 +1710,9 @@ export function IntelligentDashboardContent({
                               className={`px-3 py-2 rounded-lg text-sm font-medium font-inter transition-all flex items-center space-x-2 ${
                                 analyzingActivity === `${activity.type}_${activity.id}`
                                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                  : 'bg-button-light text-icon-dark hover:shadow-[0_4px_10px_0_rgba(0,0,0,0.20)] shadow-[0_2px_6px_0_rgba(0,0,0,0.10)]'
+                                  : ' text-icon-dark'
                               }`}
+                              title="Actualizar"
                             >
                               {analyzingActivity === `${activity.type}_${activity.id}` ? (
                                 <>
@@ -1768,8 +1721,8 @@ export function IntelligentDashboardContent({
                                 </>
                               ) : (
                                 <>
-                                  <FontAwesomeIcon icon={faBrain} />
-                                  <span>Analizar</span>
+                                  <FontAwesomeIcon icon={faRefresh} />
+                                  <span></span>
                                 </>
                               )}
                             </button>
@@ -1780,26 +1733,34 @@ export function IntelligentDashboardContent({
                                 href={activity.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="px-3 py-2 rounded-lg text-sm font-medium font-inter transition-all flex items-center space-x-2 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:shadow-[0_4px_10px_0_rgba(59,130,246,0.15)] shadow-[0_2px_6px_0_rgba(59,130,246,0.10)]"
-                                title="Abrir en Moodle"
+                                className="px-3 py-2 rounded-lg text-sm font-medium font-inter transition-all flex items-center space-x-2  text-icon-dark "
+                                title="Ir al aula"
                               >
-                                <FontAwesomeIcon icon={faExternalLinkAlt} />
-                                <span>Ver en Moodle</span>
+                                <FontAwesomeIcon icon={faExternalLinkAlt}  />
+                                <span></span>
                               </a>
                             )}
                           </div>
                           
-                          {/* Ver más como en el diseño de referencia */}
-                          <button 
-                            onClick={() => {
-                              // Navegar a la vista de detalle
-                              navigateToDetail(activity)
-                            }}
-                            className="text-primary-darker font-semibold font-inter text-sm flex items-center space-x-1 hover:text-primary transition-colors"
-                          >
-                            <span>Ver más</span>
-                            <FontAwesomeIcon icon={faChevronDown} className="rotate-[-90deg]" />
-                          </button>
+                          {/* Ver más con el mismo estilo que Actualizar - Ocultar durante análisis */}
+                          {(() => {
+                            const activityKey = `${activity.type}_${activity.id}`
+                            const isAnalyzing = analyzingActivity === activityKey
+                            
+                            return !isAnalyzing && !(isAnalyzingBatch && !analysisResults[activityKey]) && (
+                              <button 
+                                onClick={() => {
+                                  // Navegar a la vista de detalle
+                                  navigateToDetail(activity)
+                                }}
+                                title="Ver más"
+                                className="px-3 py-2 rounded-lg text-sm font-medium font-inter transition-all flex items-center space-x-2 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:shadow-[0_4px_10px_0_rgba(0,0,0,0.20)] shadow-[0_2px_6px_0_rgba(0,0,0,0.10)]"
+                              >
+                                <span>Ver más</span>
+                                <FontAwesomeIcon icon={faChevronDown} className="rotate-[-90deg]" />
+                              </button>
+                            )
+                          })()}
                         </div>
                       </div>
                     )

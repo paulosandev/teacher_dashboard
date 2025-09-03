@@ -74,7 +74,7 @@ export default function LoginPage() {
               Iniciando sesión exitosamente
             </h3>
             <p className="text-sm text-gray-600">
-              Cargando tu dashboard personalizado...
+              Cargando tu reporte de Asistente Docente...
             </p>
           </div>
         </div>
@@ -103,13 +103,10 @@ export default function LoginPage() {
               </div>
             </div>
             
-            <div className="inline-flex items-center gap-2 bg-primary-light text-green-800 px-4 py-2 rounded-md text-sm font-medium mb-4">
-              <FontAwesomeIcon icon={faPencilAlt} className="w-4 h-4 text-icon-dark" />
-              Portal docente
-            </div>
+            
             
             <h2 className="text-2xl font-bold text-primary-darker">
-              Sistema de Análisis Académico
+              Reporte de Asistente Docente
             </h2>
             <p className="mt-2 text-sm text-gray-600">
               Ingrese sus credenciales de Moodle para acceder al portal
@@ -127,7 +124,7 @@ export default function LoginPage() {
             <div className="space-y-4">
               <div>
                 <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-                  Usuario Moodle
+                  Matrícula del Aula Virtual
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -147,7 +144,7 @@ export default function LoginPage() {
                   />
                 </div>
                 <p className="mt-1 text-xs text-gray-500">
-                  Usa tu nombre de usuario de Moodle (ejemplo: 112323)
+                  Usa tu matrícula de Aula Virtual (ejemplo: 010000017)
                 </p>
               </div>
               
@@ -204,7 +201,7 @@ export default function LoginPage() {
         
         {/* Footer */}
         <p className="text-center text-xs text-gray-500">
-          © 2025 Sistema de Análisis Académico. Todos los derechos reservados.
+        © 2025 Derechos Reservados Scala Higher Education, SC | Utel Universidad
         </p>
       </div>
     </div>
