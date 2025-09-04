@@ -42,8 +42,7 @@ export class AulaConfigService {
       { id: '110', name: 'Aula 110' },
     ]
 
-    // TEMPORAL: Solo AV141 para pruebas - comentando aulas numeradas
-    /*
+    // Configurar aulas numeradas (101-110) usando tokens del .env
     for (const aula of aulas) {
       const token = process.env[`MOODLE_SERVICE_TOKEN_AULA${aula.id}`]
       const url = process.env[`MOODLE_SERVICE_URL_AULA${aula.id}`]
@@ -62,7 +61,6 @@ export class AulaConfigService {
         })
       }
     }
-    */
 
     // Agregar AV141 si existe
     const av141Token = process.env.MOODLE_API_TOKEN
