@@ -222,3 +222,213 @@ model AnalysisQueue {
   @@index([requestedAt])
   @@index([courseId])
 }
+
+// ============================================
+// NUEVAS TABLAS PARA SISTEMA BATCH
+// ============================================
+
+// Modelo para almacenar información de cada aula UTEL
+model Aula {
+  id              String   @id @default(cuid())
+  aulaId          String   @unique // "101", "102", "av141", etc.
+  name            String   // "Aula 101", "AV141", etc.
+  baseUrl         String   // "https://aula101.utel.edu.mx"
+  apiUrl          String   // URL completa del webservice
+  isActive        Boolean  @default(true)
+  lastSync        DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relaciones
+  courses         AulaCourse[]
+  activities      CourseActivity[]
+  analyses        BatchAnalysis[]
+  
+  @@index([aulaId])
+  @@index([isActive])
+}
+
+// Modelo para cursos activos en cada aula
+model AulaCourse {
+  id              String   @id @default(cuid())
+  aulaId          String   // "101", "102", etc.
+  courseId        Int      // ID del curso en Moodle
+  courseName      String   // Nombre completo del curso
+  shortName       String?  // Nombre corto del curso
+  categoryName    String?  // Categoría del curso
+  isActive        Boolean  @default(true)
+  startDate       DateTime?
+  endDate         DateTime?
+  teacherIds      Json?    // Array de IDs de profesores
+  teacherNames    Json?    // Array de nombres de profesores
+  enrollmentCount Int?     // Número de estudiantes matriculados
+  rawData         Json     // Datos completos del curso desde Moodle
+  lastSync        DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relaciones
+  aula            Aula     @relation(fields: [aulaId], references: [aulaId], onDelete: Cascade)
+  activities      CourseActivity[]
+  analyses        BatchAnalysis[]
+  
+  @@unique([aulaId, courseId])
+  @@index([aulaId])
+  @@index([courseId])
+  @@index([isActive])
+  @@index([lastSync])
+  @@index([teacherIds])
+}
+
+// Modelo para actividades (tareas, foros, etc.) de cada curso
+model CourseActivity {
+  id              String   @id @default(cuid())
+  aulaId          String   // "101", "102", etc.
+  courseId        Int      // ID del curso en Moodle
+  activityId      Int      // ID de la actividad en Moodle
+  type            String   // "forum", "assign", "quiz", etc.
+  name            String   // Nombre de la actividad
+  description     String?  @db.Text // Descripción completa
+  dueDate         DateTime?
+  cutoffDate      DateTime?
+  openDate        DateTime?
+  closeDate       DateTime?
+  visible         Boolean  @default(true)
+  url             String?  // URL directa a la actividad
+  
+  // Estadísticas específicas por tipo
+  forumData       Json?    // Datos específicos de foros (discusiones, posts, etc.)
+  assignmentData  Json?    // Datos específicos de tareas (entregas, calificaciones, etc.)
+  quizData        Json?    // Datos específicos de cuestionarios
+  
+  // Datos completos de Moodle
+  rawData         Json     // Todos los datos de la actividad
+  
+  // Control de sincronización
+  lastDataSync    DateTime @default(now()) // Última vez que se sincronizaron los datos
+  needsAnalysis   Boolean  @default(true)  // Si necesita análisis
+  analysisCount   Int      @default(0)     // Número de análisis generados
+  
+  // Metadatos
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relaciones
+  aula            Aula          @relation(fields: [aulaId], references: [aulaId], onDelete: Cascade)
+  course          AulaCourse    @relation(fields: [aulaId, courseId], references: [aulaId, courseId], onDelete: Cascade)
+  analyses        BatchAnalysis[]
+  
+  @@unique([aulaId, courseId, activityId, type])
+  @@index([aulaId])
+  @@index([courseId])
+  @@index([activityId])
+  @@index([type])
+  @@index([dueDate])
+  @@index([needsAnalysis])
+  @@index([lastDataSync])
+}
+
+// Modelo para análisis generados por el sistema batch
+model BatchAnalysis {
+  id              String   @id @default(cuid())
+  aulaId          String   // "101", "102", etc.
+  courseId        Int      // ID del curso
+  activityId      Int?     // ID de la actividad (null para análisis de curso completo)
+  activityType    String?  // Tipo de actividad (null para análisis de curso)
+  
+  // Tipo de análisis
+  analysisType    String   // "COURSE_OVERVIEW", "ACTIVITY_DETAIL", "FORUM_ANALYSIS", "ASSIGNMENT_ANALYSIS"
+  analysisScope   String   // "COURSE", "ACTIVITY", "BATCH"
+  
+  // Resultados del análisis en formato markdown
+  analysisText    String   @db.Text // Análisis principal en markdown
+  summary         String?  @db.Text // Resumen ejecutivo
+  keyInsights     Json?    // Insights principales estructurados
+  recommendations Json?    // Recomendaciones específicas
+  alertFlags      Json?    // Alertas o problemas identificados
+  
+  // Secciones estructuradas para el dashboard
+  sections        Json?    // Secciones dinámicas para el DynamicSectionRenderer
+  
+  // Datos de entrada y procesamiento
+  inputData       Json     // Datos que se usaron para generar el análisis
+  llmPrompt       String?  @db.Text // Prompt usado para generar el análisis
+  llmResponse     String?  @db.Text // Respuesta completa del LLM
+  processingTime  Int?     // Tiempo de procesamiento en ms
+  
+  // Metadatos de calidad
+  confidence      Float?   // Nivel de confianza del análisis (0-1)
+  dataCompleteness Float?  // Completitud de los datos usados (0-1)
+  studentsAnalyzed Int?    // Número de estudiantes en el análisis
+  
+  // Control de versiones y vigencia
+  batchJobId      String?  // ID del job batch que lo generó
+  isLatest        Boolean  @default(true) // Si es el análisis más reciente
+  expiresAt       DateTime // Cuándo expira este análisis
+  generatedAt     DateTime @default(now())
+  
+  // Relaciones
+  aula            Aula           @relation(fields: [aulaId], references: [aulaId], onDelete: Cascade)
+  course          AulaCourse     @relation(fields: [aulaId, courseId], references: [aulaId, courseId], onDelete: Cascade)
+  activity        CourseActivity? @relation(fields: [aulaId, courseId, activityId, activityType], references: [aulaId, courseId, activityId, type], onDelete: Cascade)
+  
+  @@index([aulaId])
+  @@index([courseId])
+  @@index([activityId])
+  @@index([analysisType])
+  @@index([isLatest])
+  @@index([expiresAt])
+  @@index([generatedAt])
+  @@index([batchJobId])
+}
+
+// Modelo para jobs de sincronización batch
+model BatchJob {
+  id              String   @id @default(cuid())
+  jobType         String   // "FULL_SYNC", "AULA_SYNC", "ANALYSIS_BATCH"
+  scope           String   // "ALL_AULAS", "SINGLE_AULA", "COURSE_LIST"
+  targetAulas     Json?    // Array de aulas a procesar (null = todas)
+  targetCourses   Json?    // Array de cursos específicos (null = todos)
+  
+  // Estado del job
+  status          String   // "QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"
+  priority        Int      @default(0) // Prioridad del job
+  
+  // Progreso y estadísticas
+  totalSteps      Int?     // Número total de pasos
+  currentStep     Int?     // Paso actual
+  processedAulas  Int      @default(0)
+  processedCourses Int     @default(0)
+  processedActivities Int  @default(0)
+  generatedAnalyses Int    @default(0)
+  
+  // Resultados y errores
+  successCount    Int      @default(0)
+  errorCount      Int      @default(0)
+  errors          Json?    // Array de errores encontrados
+  summary         Json?    // Resumen del job completado
+  
+  // Metadatos de ejecución
+  scheduledFor    DateTime? // Cuándo debe ejecutarse (para jobs programados)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  duration        Int?     // Duración en ms
+  triggeredBy     String?  // "CRON", "MANUAL", "API"
+  requestedBy     String?  // Usuario que lo solicitó (si aplica)
+  
+  // Control de la ejecución
+  maxRetries      Int      @default(3)
+  retryCount      Int      @default(0)
+  lastError       String?  @db.Text
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([status])
+  @@index([jobType])
+  @@index([priority])
+  @@index([scheduledFor])
+  @@index([startedAt])
+  @@index([createdAt])
+  @@index([triggeredBy])
+}
