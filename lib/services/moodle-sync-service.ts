@@ -373,7 +373,57 @@ export class MoodleSyncService {
         throw new Error(`Moodle Error: ${data.errorcode} - ${data.message}`)
       }
 
-      return Array.isArray(data) ? data : []
+      const forums = Array.isArray(data) ? data : []
+      
+      // Para cada foro, intentar obtener sus discusiones
+      for (const forum of forums) {
+        try {
+          const discussionsUrl = `${config.apiUrl}?wstoken=${config.token}&wsfunction=mod_forum_get_forum_discussions&moodlewsrestformat=json&forumid=${forum.id}`
+          const discussionsResponse = await fetch(discussionsUrl)
+          
+          if (discussionsResponse.ok) {
+            const discussionsData = await discussionsResponse.json()
+            if (discussionsData.discussions && Array.isArray(discussionsData.discussions)) {
+              console.log(`  📋 ${discussionsData.discussions.length} discusiones encontradas en foro "${forum.name}"`)
+              
+              // NUEVO: Para cada discusión, obtener los posts individuales
+              for (const discussion of discussionsData.discussions) {
+                try {
+                  const discussionId = discussion.discussion || discussion.id
+                  const postsUrl = `${config.apiUrl}?wstoken=${config.token}&wsfunction=mod_forum_get_forum_discussion_posts&moodlewsrestformat=json&discussionid=${discussionId}`
+                  const postsResponse = await fetch(postsUrl)
+                  
+                  if (postsResponse.ok) {
+                    const postsData = await postsResponse.json()
+                    if (postsData.posts && Array.isArray(postsData.posts)) {
+                      discussion.posts = postsData.posts
+                      console.log(`    💬 Discusión "${discussion.name}": ${postsData.posts.length} posts obtenidos`)
+                    } else {
+                      discussion.posts = []
+                    }
+                  } else {
+                    discussion.posts = []
+                  }
+                } catch (postsError) {
+                  console.warn(`⚠️ Error obteniendo posts de discusión ${discussion.id}:`, postsError)
+                  discussion.posts = []
+                }
+              }
+              
+              forum.discussions = discussionsData.discussions
+              // Guardar el ID de la primera discusión para generar URLs correctas
+              if (discussionsData.discussions.length > 0) {
+                forum.firstDiscussionId = discussionsData.discussions[0].discussion || discussionsData.discussions[0].id
+              }
+            }
+          }
+        } catch (discError) {
+          // Si falla obtener discusiones, continuar sin ellas
+          console.warn(`⚠️ No se pudieron obtener discusiones del foro ${forum.id}`)
+        }
+      }
+
+      return forums
     } catch (error) {
       console.error(`❌ Error obteniendo foros del curso ${courseId} en aula ${config.id}:`, error)
       return []
@@ -437,9 +487,11 @@ export class MoodleSyncService {
         submissions: activity.submissions || [],
         grade: (activity as MoodleAssignment).grade
       }
-    } else if (type === 'forum' && 'discussions' in activity) {
+    } else if (type === 'forum') {
       activityData['forumData'] = {
-        discussions: activity.discussions || []
+        discussions: activity.discussions || [],
+        firstDiscussionId: activity.firstDiscussionId || null,
+        numdiscussions: activity.discussions?.length || 0
       }
     }
 
@@ -507,6 +559,83 @@ export class MoodleSyncService {
       totalActivities,
       lastSync,
       byAula
+    }
+  }
+
+  /**
+   * Sincronizar datos de un aula específica por ID
+   */
+  async syncAulaData(aulaId: string): Promise<{
+    success: boolean
+    coursesProcessed?: number
+    analysisGenerated?: number
+    activitiesProcessed?: number
+    message?: string
+  }> {
+    try {
+      console.log(`🔄 [UNIFIED] Sincronizando aula ${aulaId} con análisis completo`)
+      
+      // Buscar configuración del aula
+      const aulaConfig = aulaConfigService.getAulaConfig(aulaId)
+      
+      if (!aulaConfig) {
+        return {
+          success: false,
+          message: `Configuración no encontrada para aula ${aulaId}`
+        }
+      }
+
+      // PASO 1: Sincronizar actividades
+      console.log(`📋 [UNIFIED] Paso 1: Sincronizando actividades para aula ${aulaId}`)
+      const syncResult = await this.syncAula(aulaConfig)
+      
+      if (!syncResult.success) {
+        return {
+          success: false,
+          coursesProcessed: syncResult.coursesCount || 0,
+          activitiesProcessed: syncResult.activitiesCount || 0,
+          analysisGenerated: 0,
+          message: `Error sincronizando aula ${aulaId}: ${syncResult.errors.join(', ')}`
+        }
+      }
+
+      console.log(`✅ [UNIFIED] Sincronización completada: ${syncResult.activitiesCount} actividades`)
+
+      // PASO 2: Ejecutar análisis de IA
+      console.log(`🧠 [UNIFIED] Paso 2: Ejecutando análisis de IA para actividades pendientes`)
+      let analysisGenerated = 0
+      
+      try {
+        // Importar dinámicamente el servicio de análisis
+        const { batchAnalysisService } = await import('@/lib/services/batch-analysis-service')
+        
+        // Ejecutar análisis solo para actividades de esta aula que necesiten análisis
+        const analysisResult = await batchAnalysisService.processAllPendingAnalyses()
+        
+        analysisGenerated = analysisResult.generatedAnalyses
+        console.log(`✅ [UNIFIED] Análisis de IA completado: ${analysisGenerated} análisis generados`)
+        
+      } catch (analysisError) {
+        console.error(`⚠️ [UNIFIED] Error en análisis de IA para aula ${aulaId}:`, analysisError)
+        // No fallar todo el proceso por errores de análisis
+      }
+      
+      console.log(`🎉 [UNIFIED] Proceso completo para aula ${aulaId}: ${syncResult.activitiesCount} actividades sincronizadas, ${analysisGenerated} análisis generados`)
+      
+      return {
+        success: true,
+        coursesProcessed: syncResult.coursesCount || 0,
+        activitiesProcessed: syncResult.activitiesCount || 0,
+        analysisGenerated: analysisGenerated, // ✅ AHORA REAL
+        message: `Aula ${aulaId} procesada completamente: ${syncResult.activitiesCount} actividades, ${analysisGenerated} análisis`
+      }
+      
+    } catch (error) {
+      console.error(`❌ [UNIFIED] Error procesando aula ${aulaId}:`, error)
+      return {
+        success: false,
+        message: `Error procesando aula ${aulaId}: ${error}`
+      }
     }
   }
 }
