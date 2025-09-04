@@ -97,7 +97,7 @@ export const authOptions: NextAuthOptions = {
     },
     
     async session({ session, token }) {
-      if (session.user && token.id) {
+      if (session.user && token && token.id) {
         // No consultamos BD, usamos solo datos del token
         session.user.id = token.id as string
         session.user.email = token.email as string
@@ -115,7 +115,7 @@ export const authOptions: NextAuthOptions = {
     async redirect({ url, baseUrl }) {
       // Si es una redirección después del login exitoso, ir a dashboard v2
       if (url === baseUrl || url === baseUrl + '/dashboard') {
-        return baseUrl + '/dashboard/v2'
+        return baseUrl + '/3'
       }
       
       // Si la URL ya es absoluta y está en el mismo dominio, usarla
@@ -129,7 +129,7 @@ export const authOptions: NextAuthOptions = {
       }
       
       // Por defecto, ir a dashboard v2
-      return baseUrl + '/dashboard/v2'
+      return baseUrl + '/dashboard/v3'
     }
   },
   

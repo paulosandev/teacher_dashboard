@@ -30,28 +30,19 @@ export class CronScheduler {
 
     console.log('🕐 Inicializando programador de tareas automáticas...')
 
-    // Job de 8:00 AM (todos los días)
+    // Job matutino: 08:00 AM (limpieza → carga → análisis)
     this.morningJob = cron.schedule('0 8 * * *', async () => {
-      console.log('\n🌅 ===== ACTUALIZACIÓN MATUTINA PROGRAMADA =====')
-      await autoUpdateService.executeUpdate('scheduled')
+      console.log('\n🌅 ===== PROCESO BATCH MATUTINO =====')
+      await this.executeFullProcess('morning')
     }, {
       scheduled: true,
-      timezone: "America/Mexico_City" // Ajusta según tu zona horaria
+      timezone: "America/Mexico_City"
     })
 
-    // Job de 6:00 PM (todos los días)
+    // Job vespertino: 03:10 PM (limpieza → carga → análisis)
     this.afternoonJob = cron.schedule('0 18 * * *', async () => {
-      console.log('\n🌆 ===== ACTUALIZACIÓN VESPERTINA PROGRAMADA =====')
-      await autoUpdateService.executeUpdate('scheduled')
-    }, {
-      scheduled: true,
-      timezone: "America/Mexico_City" // Ajusta según tu zona horaria
-    })
-
-    // Job de limpieza de caché viejo (cada día a las 2:00 AM)
-    cron.schedule('0 2 * * *', async () => {
-      console.log('\n🧹 ===== LIMPIEZA DE CACHÉ PROGRAMADA =====')
-      await this.cleanOldCache()
+      console.log('\n🌆 ===== PROCESO BATCH VESPERTINO =====')
+      await this.executeFullProcess('afternoon')
     }, {
       scheduled: true,
       timezone: "America/Mexico_City"
@@ -70,9 +61,8 @@ export class CronScheduler {
     this.isInitialized = true
 
     console.log('✅ Programador de tareas inicializado:')
-    console.log('   📅 Actualización matutina: 8:00 AM (México)')
-    console.log('   📅 Actualización vespertina: 6:00 PM (México)')
-    console.log('   📅 Limpieza de caché: 2:00 AM (México)')
+    console.log('   📅 Proceso matutino: 08:00 AM (México) - Limpieza → Carga → Análisis')
+    console.log('   📅 Proceso vespertino: 06:00 PM (México) - Limpieza → Carga → Análisis')
     console.log('   📅 Health check: Cada hora')
   }
 
@@ -105,11 +95,39 @@ export class CronScheduler {
   }
 
   /**
+   * Ejecutar proceso completo: limpieza → carga → análisis
+   */
+  private async executeFullProcess(period: 'morning' | 'afternoon') {
+    const startTime = Date.now()
+    console.log(`\n🚀 [${period.toUpperCase()}] Iniciando proceso completo...`)
+
+    try {
+      // Paso 1: Limpieza de caché
+      console.log('\n🧹 PASO 1: Limpiando caché obsoleto...')
+      await this.cleanOldCache()
+
+      // Paso 2: Carga y análisis de actividades
+      console.log('\n📊 PASO 2: Ejecutando carga y análisis...')
+      const result = await autoUpdateService.executeUpdate('scheduled')
+
+      const totalTime = ((Date.now() - startTime) / 1000 / 60).toFixed(2)
+      console.log(`\n✅ [${period.toUpperCase()}] Proceso completo finalizado en ${totalTime} minutos`)
+      
+      return result
+
+    } catch (error) {
+      const totalTime = ((Date.now() - startTime) / 1000 / 60).toFixed(2)
+      console.error(`\n❌ [${period.toUpperCase()}] Error en proceso completo (${totalTime} min):`, error)
+      throw error
+    }
+  }
+
+  /**
    * Ejecutar actualización manual (para pruebas o emergencias)
    */
   async triggerManualUpdate() {
     console.log('\n🔧 ===== ACTUALIZACIÓN MANUAL SOLICITADA =====')
-    return await autoUpdateService.executeUpdate('manual')
+    return await this.executeFullProcess('manual' as any)
   }
 
   /**

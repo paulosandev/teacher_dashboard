@@ -7,6 +7,7 @@ import { MoodleAPIClient } from '@/lib/moodle/api-client'
 import { CourseAnalysisService } from '@/lib/services/analysis-service'
 import { getIntegratedEnrolmentClient } from '@/lib/db/integrated-enrolment-client'
 import { serviceTokenManager } from '@/lib/services/service-token-manager'
+import { processStateService } from '@/lib/services/process-state-service'
 import fs from 'fs/promises'
 import path from 'path'
 
@@ -61,80 +62,54 @@ export class AutoUpdateService {
       console.log(`\n🔄 ========== INICIANDO ACTUALIZACIÓN AUTOMÁTICA (${type.toUpperCase()}) ==========`)
       console.log(`📅 Timestamp: ${new Date().toISOString()}`)
 
-      // Paso 1: Obtener todos los profesores con sus aulas
-      const teachers = await this.getAllTeachersWithAulas()
-      console.log(`👥 Encontrados ${teachers.length} profesores únicos`)
+      // Paso 1: Obtener todas las aulas con sus profesores
+      const aulas = await this.getAllAulasWithTeachers()
+      console.log(`🏫 Encontradas ${aulas.length} aulas únicas para procesar`)
 
-      // Paso 2: Para cada profesor, obtener sus cursos y actualizar
-      for (const teacher of teachers) {
+      // Inicializar estado compartido
+      await processStateService.initProcess(type === 'manual' ? 'manual' : 'cron', aulas.length)
+
+      // Paso 2: Para cada aula, procesar todos sus profesores y cursos
+      for (let i = 0; i < aulas.length; i++) {
+        const aula = aulas[i]
         try {
-          console.log(`\n👨‍🏫 Procesando profesor: ${teacher.username} (${teacher.aulas.length} aulas)`)
+          console.log(`\n🏫 Procesando aula: ${aula.aulaId} (${aula.teacherCount} profesores)`)
           
-          for (const aula of teacher.aulas) {
-            try {
-              // Obtener token para esta aula
-              const token = await this.getTokenForTeacher(teacher.username, aula.aulaId)
-              
-              if (!token) {
-                console.log(`⚠️ No se pudo obtener token para ${teacher.username} en ${aula.aulaId}`)
-                continue
-              }
-
-              // Crear cliente Moodle para esta aula
-              const moodleClient = new MoodleAPIClient(aula.aulaUrl, token)
-              
-              // Obtener cursos del profesor en esta aula
-              const courses = await moodleClient.getTeacherCoursesWithGroups(teacher.username)
-              
-              console.log(`📚 ${courses.length} cursos encontrados en ${aula.aulaId}`)
-
-              // Actualizar cada curso
-              for (const course of courses) {
-                for (const group of course.groups) {
-                  const courseGroupKey = `${course.id}|${group.id}`
-                  
-                  try {
-                    console.log(`  📖 Actualizando curso ${course.fullname} - ${group.name}`)
-                    
-                    // Actualizar actividades
-                    const activities = await this.updateActivities(moodleClient, course.id, group.id)
-                    activitiesUpdated += activities
-                    
-                    // Regenerar análisis
-                    const analysisService = new CourseAnalysisService()
-                    const analysis = await analysisService.analyzeCourse(
-                      course.id.toString(),
-                      group.id.toString(),
-                      teacher.username,
-                      token
-                    )
-                    
-                    if (analysis) {
-                      analysisGenerated++
-                      console.log(`    ✅ Análisis generado exitosamente`)
-                    }
-                    
-                    coursesUpdated++
-                    
-                  } catch (error) {
-                    const errorMsg = `Error actualizando ${courseGroupKey}: ${error}`
-                    console.error(`    ❌ ${errorMsg}`)
-                    errors.push(errorMsg)
-                  }
-                }
-              }
-              
-            } catch (error) {
-              const errorMsg = `Error procesando aula ${aula.aulaId}: ${error}`
-              console.error(`  ❌ ${errorMsg}`)
-              errors.push(errorMsg)
-            }
+          // Actualizar estado compartido
+          await processStateService.updateProgress({
+            currentStep: `Procesando aula ${i + 1}/${aulas.length}`,
+            processedAulas: i,
+            currentAula: aula.aulaId
+          })
+          
+          // Usar el servicio de sincronización de Moodle existente para esta aula
+          console.log(`🔄 Ejecutando sincronización completa para aula ${aula.aulaId}`)
+          
+          // Importar dinámicamente el servicio
+          const { MoodleSyncService } = await import('@/lib/services/moodle-sync-service')
+          const syncService = new MoodleSyncService()
+          
+          // Ejecutar sincronización completa para esta aula
+          const result = await syncService.syncAulaData(aula.aulaId)
+          
+          if (result.success) {
+            coursesUpdated += result.coursesProcessed || 0
+            analysisGenerated += result.analysisGenerated || 0
+            activitiesUpdated += result.activitiesProcessed || 0
+            
+            console.log(`✅ Aula ${aula.aulaId} procesada: ${result.coursesProcessed} cursos, ${result.analysisGenerated} análisis`)
+          } else {
+            const errorMsg = `Error en aula ${aula.aulaId}: ${result.message}`
+            console.error(`❌ ${errorMsg}`)
+            errors.push(errorMsg)
+            await processStateService.addError(errorMsg)
           }
           
         } catch (error) {
-          const errorMsg = `Error procesando profesor ${teacher.username}: ${error}`
+          const errorMsg = `Error procesando aula ${aula.aulaId}: ${error}`
           console.error(`❌ ${errorMsg}`)
           errors.push(errorMsg)
+          await processStateService.addError(errorMsg)
         }
       }
 
@@ -161,12 +136,25 @@ export class AutoUpdateService {
       console.log(`  - Duración: ${(duration / 1000).toFixed(2)} segundos`)
       console.log(`================================================\n`)
 
+      // Finalizar estado compartido
+      await processStateService.finishProcess(true)
+      await processStateService.updateProgress({
+        processedAulas: aulas.length,
+        totalAnalysis: analysisGenerated,
+        processedAnalysis: analysisGenerated,
+        totalCourses: coursesUpdated,
+        processedCourses: coursesUpdated
+      })
+
       this.lastUpdate = new Date()
       return log
 
     } catch (error) {
       console.error('❌ Error crítico en actualización automática:', error)
       errors.push(`Error crítico: ${error}`)
+      
+      // Marcar proceso como fallido
+      await processStateService.finishProcess(false, `Error crítico: ${error}`)
       
       return {
         timestamp: new Date(),
@@ -183,50 +171,40 @@ export class AutoUpdateService {
   }
 
   /**
-   * Obtener todos los profesores con sus aulas
+   * Obtener todas las aulas con sus profesores
    */
-  private async getAllTeachersWithAulas(): Promise<Array<{
-    username: string
-    email: string
-    aulas: Array<{aulaId: string, aulaUrl: string}>
+  private async getAllAulasWithTeachers(): Promise<Array<{
+    aulaId: string
+    aulaName: string
+    aulaUrl: string
+    teacherCount: number
   }>> {
     const enrolmentClient = getIntegratedEnrolmentClient()
     
     try {
-      // Obtener profesores únicos con sus aulas
+      // Obtener aulas únicas con conteo de profesores
       const results = await enrolmentClient.executeQuery(`
-        SELECT DISTINCT username, email, idAula
+        SELECT 
+          idAula,
+          COUNT(DISTINCT username) as teacherCount
         FROM enrolment 
         WHERE roles_id = 17
         AND suspendido = 0
-        ORDER BY username
+        GROUP BY idAula
+        ORDER BY idAula
       `)
 
-      // Agrupar por profesor
-      const teachersMap = new Map<string, {
-        username: string
-        email: string
-        aulas: Array<{aulaId: string, aulaUrl: string}>
-      }>()
+      const aulas = results.map(row => ({
+        aulaId: row.idAula,
+        aulaName: row.idAula, // Por ahora usar ID como nombre
+        aulaUrl: this.buildAulaUrl(row.idAula),
+        teacherCount: parseInt(row.teacherCount) || 0
+      }))
 
-      for (const row of results) {
-        const key = row.username
-        
-        if (!teachersMap.has(key)) {
-          teachersMap.set(key, {
-            username: row.username,
-            email: row.email,
-            aulas: []
-          })
-        }
-
-        teachersMap.get(key)!.aulas.push({
-          aulaId: row.idAula,
-          aulaUrl: this.buildAulaUrl(row.idAula)
-        })
-      }
-
-      return Array.from(teachersMap.values())
+      console.log(`🏫 Encontradas ${aulas.length} aulas únicas con profesores activos`)
+      console.log(`👥 Total de profesores únicos en todas las aulas: ${aulas.reduce((sum, aula) => sum + aula.teacherCount, 0)}`)
+      
+      return aulas
       
     } catch (error) {
       console.error('Error obteniendo profesores:', error)
