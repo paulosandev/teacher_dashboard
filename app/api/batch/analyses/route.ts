@@ -54,59 +54,34 @@ export async function GET(request: NextRequest) {
       whereClause.analysisType = analysisType
     }
 
-    // Consultar análisis pre-generados
-    const analyses = await prisma.batchAnalysis.findMany({
-      where: whereClause,
-      include: {
-        aula: {
-          select: {
-            aulaId: true,
-            name: true
-          }
-        },
-        course: {
-          select: {
-            courseId: true,
-            courseName: true,
-            shortName: true
-          }
-        },
-        activity: {
-          select: {
-            activityId: true,
-            name: true,
-            type: true,
-            dueDate: true
-          }
-        }
-      },
+    // Consultar análisis pre-generados desde ActivityAnalysis
+    const whereActivityAnalysis: any = {}
+    
+    if (courseId) {
+      // El courseId viene en formato "courseId|groupId", extraer solo courseId
+      const numericCourseId = courseId.includes('|') ? 
+        courseId.split('|')[0] : courseId
+      whereActivityAnalysis.courseId = `${aulaId}-${numericCourseId}`
+    }
+
+    if (activityId) {
+      whereActivityAnalysis.activityId = activityId
+    }
+
+    if (analysisType) {
+      whereActivityAnalysis.activityType = analysisType
+    }
+
+    const analyses = await prisma.activityAnalysis.findMany({
+      where: whereActivityAnalysis,
       orderBy: [
-        { isLatest: 'desc' },
         { generatedAt: 'desc' }
       ],
       take: limit
     })
 
     // Obtener estadísticas generales del sistema
-    const [totalAnalyses, totalActivities, totalCourses] = await Promise.all([
-      prisma.batchAnalysis.count({
-        where: { 
-          aulaId: aulaId,
-          expiresAt: { gt: new Date() }
-        }
-      }),
-      
-      prisma.courseActivity.count({
-        where: { aulaId: aulaId }
-      }),
-      
-      prisma.aulaCourse.count({
-        where: { 
-          aulaId: aulaId,
-          isActive: true
-        }
-      })
-    ])
+    const totalAnalyses = await prisma.activityAnalysis.count()
 
     const response = {
       success: true,
@@ -120,33 +95,36 @@ export async function GET(request: NextRequest) {
         limit
       },
       results: {
-        analyses: analyses.map(analysis => ({
-          id: analysis.id,
-          aulaId: analysis.aulaId,
-          courseId: analysis.courseId,
-          courseName: analysis.course.courseName,
-          activityId: analysis.activityId,
-          activityName: analysis.activity?.name,
-          activityType: analysis.activityType,
-          analysisType: analysis.analysisType,
-          analysisScope: analysis.analysisScope,
-          analysisText: analysis.analysisText,
-          summary: analysis.summary,
-          keyInsights: analysis.keyInsights,
-          recommendations: analysis.recommendations,
-          sections: analysis.sections,
-          confidence: analysis.confidence,
-          generatedAt: analysis.generatedAt,
-          isLatest: analysis.isLatest
-        })),
+        analyses: analyses.map(analysis => {
+          // Extraer la URL de activityData si existe
+          const activityUrl = analysis.activityData?.url || 
+                            analysis.activityData?.activityInfo?.url ||
+                            null
+          
+          return {
+            id: analysis.id,
+            aulaId: aulaId,
+            courseId: analysis.courseId,
+            moodleCourseId: analysis.moodleCourseId,
+            activityId: analysis.activityId,
+            activityName: analysis.activityName,
+            activityType: analysis.activityType,
+            activityUrl: activityUrl, // Incluir URL de la actividad
+            analysisContent: analysis.fullAnalysis,
+            summary: analysis.summary,
+            keyInsights: analysis.insights,
+            positives: analysis.positives,
+            alerts: analysis.alerts,
+            recommendation: analysis.recommendation,
+            generatedAt: analysis.generatedAt
+          }
+        }),
         count: analyses.length,
         hasMore: analyses.length === limit
       },
       systemStats: {
         totalAnalyses,
-        totalActivities,
-        totalCourses,
-        aulaName: analyses[0]?.aula?.name || `Aula ${aulaId}`
+        aulaName: `Aula ${aulaId}`
       },
       timestamp: new Date().toISOString(),
       queryTime: Date.now() - startTime

@@ -9,7 +9,7 @@ import { faUser, faLock, faIdCard, faSpinner, faExclamationCircle, faPencilAlt }
 export default function LoginPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl') || '/dashboard/v2'
+  const callbackUrl = searchParams.get('callbackUrl') || '/dashboard/v3'
   
   const [loading, setLoading] = useState(false)
   const [redirecting, setRedirecting] = useState(false)

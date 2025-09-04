@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { PrismaClient } from '@prisma/client'
+import { autoUpdateService } from '@/lib/services/auto-update-service'
+import { processStateService } from '@/lib/services/process-state-service'
 
 // Use global prisma instance to avoid connection issues
 declare global {
@@ -53,9 +55,27 @@ export async function GET() {
     // Análisis recientes simplificados por ahora
     const recentAnalyses = [] as any[]
 
+    // Obtener estado real del servicio de actualización y proceso compartido
+    const updateServiceStatus = autoUpdateService.getStatus()
+    const processState = await processStateService.getState()
+    const progressPercentage = await processStateService.getProgressPercentage()
+    const elapsedTime = await processStateService.getElapsedTime()
+
+    // Obtener hora en zona horaria de México
+    const mexicoTime = new Date().toLocaleString('en-CA', {
+      timeZone: 'America/Mexico_City',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).replace(', ', 'T') + '-06:00'
+
     const response = {
       success: true,
-      timestamp: new Date().toISOString(),
+      timestamp: mexicoTime,
       summary: {
         totalActivities,
         analyzedActivities: totalActivities - activitiesNeedingAnalysis, // Calculado
@@ -67,9 +87,68 @@ export async function GET() {
       aulaBreakdown: detailedStats,
       recentAnalyses,
       systemStatus: {
-        isProcessing: activitiesNeedingAnalysis > 0,
+        isProcessing: processState.isActive || updateServiceStatus.isUpdating || activitiesNeedingAnalysis > 0,
         totalAulas: aulaStats.length,
-        lastUpdate: new Date().toISOString()
+        lastUpdate: processState.lastUpdate ? 
+          new Date(processState.lastUpdate).toLocaleString('en-CA', {
+            timeZone: 'America/Mexico_City',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          }).replace(', ', 'T') + '-06:00' : mexicoTime,
+        updateService: updateServiceStatus
+      },
+      // Agregar información detallada del proceso actual
+      processDetails: {
+        isActive: processState.isActive,
+        processType: processState.processType,
+        currentStep: processState.currentStep,
+        progress: {
+          aulas: {
+            total: processState.totalAulas,
+            processed: processState.processedAulas,
+            current: processState.currentAula,
+            percentage: progressPercentage
+          },
+          courses: {
+            total: processState.totalCourses,
+            processed: processState.processedCourses
+          },
+          analysis: {
+            total: processState.totalAnalysis,
+            processed: processState.processedAnalysis
+          }
+        },
+        timing: {
+          startTime: processState.startTime ? 
+            new Date(processState.startTime).toLocaleString('en-CA', {
+              timeZone: 'America/Mexico_City',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: false
+            }).replace(', ', 'T') + '-06:00' : null,
+          elapsedTime,
+          estimatedCompletion: processState.estimatedCompletion ?
+            new Date(processState.estimatedCompletion).toLocaleString('en-CA', {
+              timeZone: 'America/Mexico_City',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: false
+            }).replace(', ', 'T') + '-06:00' : null
+        },
+        errors: processState.errors
       }
     }
 
@@ -80,10 +159,22 @@ export async function GET() {
   } catch (error) {
     console.error('❌ [STATUS] Error consultando estado:', error)
     
+    // Obtener hora en zona horaria de México para errores también
+    const mexicoTime = new Date().toLocaleString('en-CA', {
+      timeZone: 'America/Mexico_City',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).replace(', ', 'T') + '-06:00'
+
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Error desconocido',
-      timestamp: new Date().toISOString()
+      timestamp: mexicoTime
     }, { status: 500 })
   }
 }

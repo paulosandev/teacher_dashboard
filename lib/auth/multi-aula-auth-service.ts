@@ -49,26 +49,16 @@ class MultiAulaAuthService {
     console.log(`🔐 Iniciando autenticación multi-aula para: ${username}`)
 
     try {
-      // PASO 1: Buscar en qué aulas está enrolado el profesor
-      const enrolmentClient = getIntegratedEnrolmentClient()
-      
-      // Buscar por username (matrícula) en la base de datos
-      const userEnrolments = await this.findUserEnrolments(username)
-      
-      if (userEnrolments.length === 0) {
-        console.log(`❌ Usuario ${username} no encontrado como profesor en ninguna aula`)
-        return {
-          success: false,
-          user: {} as any,
-          totalAulas: 0,
-          validAulas: 0,
-          invalidAulas: 0,
-          aulaResults: [],
-          error: 'Usuario no encontrado como profesor en el sistema'
+      // PASO 1: TEMPORAL - Solo usar AV141 sin consultar base de datos de enrolments
+      console.log(`🔧 MODO TEMPORAL: Solo validando en AV141`)
+      const userEnrolments = [
+        {
+          aulaId: 'av141',
+          aulaUrl: 'https://av141.utel.edu.mx'
         }
-      }
+      ]
 
-      console.log(`📚 Usuario encontrado en ${userEnrolments.length} aulas: ${userEnrolments.map(e => e.aulaId).join(', ')}`)
+      console.log(`📚 Usuario validándose en ${userEnrolments.length} aula: ${userEnrolments.map(e => e.aulaId).join(', ')}`)
 
       // PASO 2: Validar credenciales en cada aula donde está enrolado
       const aulaResults: AulaAuthResult[] = []

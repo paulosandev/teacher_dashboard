@@ -51,11 +51,11 @@ export interface AulaInfo {
 
 class IntegratedEnrolmentClient {
   private readonly TEACHER_ROLE_ID = 17
-  private readonly DB_HOST = 'wsdata.ce9oduyxts26.us-west-1.rds.amazonaws.com'
-  private readonly DB_PORT = 3306
-  private readonly DB_USER = 'datos'
-  private readonly DB_PASSWORD = 'PP7Su9e433aNZP956'
-  private readonly DB_NAME = 'heroku_e6e033d354ff64c'
+  private readonly DB_HOST = process.env.ENROLMENT_DB_HOST || 'localhost'
+  private readonly DB_PORT = parseInt(process.env.ENROLMENT_DB_PORT || '3307')
+  private readonly DB_USER = process.env.ENROLMENT_DB_USER || 'datos'
+  private readonly DB_PASSWORD = process.env.ENROLMENT_DB_PASSWORD || 'PP7Su9e433aNZP956'
+  private readonly DB_NAME = process.env.ENROLMENT_DB_NAME || 'heroku_e6e033d354ff64c'
 
   private connection: Connection | null = null
   private isConnected = false
@@ -111,7 +111,9 @@ class IntegratedEnrolmentClient {
       user: this.DB_USER,
       password: this.DB_PASSWORD,
       database: this.DB_NAME,
-      connectTimeout: 10000
+      connectTimeout: 60000, // 60 segundos para túnel SSH
+      idleTimeout: 300000, // 5 minutos de inactividad
+      ssl: false // Deshabilitado para túnel SSH local
     })
     
     console.log('✅ Conexión MySQL establecida')

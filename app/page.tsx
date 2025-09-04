@@ -6,7 +6,7 @@ export default async function Home() {
   
   if (session) {
     // Si ya está autenticado, redirigir al dashboard v2
-    redirect('/dashboard/v2')
+    redirect('/dashboard/v3')
   } else {
     // Si no está autenticado, redirigir al login
     redirect('/auth/login')
