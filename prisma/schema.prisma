@@ -5,9 +5,9 @@ generator client {
 }
 
 // Configuración para desarrollo (PostgreSQL) y producción (MySQL)
-// Para cambiar a MySQL en producción, usar: npm run prisma:mysql
+// Para cambiar a MySQL en producción, configurar DATABASE_PROVIDER=mysql en .env
 datasource db {
-  provider = "postgresql"  // Cambiar a "mysql" para producción
+  provider = env("DATABASE_PROVIDER")  // Variable de entorno: "postgresql" o "mysql"
   url      = env("DATABASE_URL")
 }
 
