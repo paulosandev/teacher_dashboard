@@ -46,7 +46,7 @@ export default function DashboardHeader({
           {/* Logo, título y navegación */}
           <div className="flex items-center space-x-6">
             <div className="flex items-center space-x-3">
-              <Link href="/dashboard/v2" className="flex items-center space-x-3">
+              <Link href="/dashboard/v3" className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-full flex items-center justify-center">
                   <svg width="44" height="40" viewBox="0 0 44 40" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path
