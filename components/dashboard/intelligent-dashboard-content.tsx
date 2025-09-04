@@ -1590,7 +1590,7 @@ export function IntelligentDashboardContent({
                 {/* Cards de actividades abiertas - Acumulativas */}
                 {openActivities.length > 0 ? (
                   <div className="mb-8">
-                    <div className={`grid gap-6 ${getVisibleActivities.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-2'} auto-rows-fr`}>
+                    <div className={`grid gap-6 ${getVisibleActivities.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-2'}`}>
                   {getVisibleActivities.map((activity, index) => {
                     const getActivityIcon = (type: string) => {
                       switch (type) {
@@ -1639,7 +1639,7 @@ export function IntelligentDashboardContent({
                     }
 
                     return (
-                      <div key={activity.id} className="bg-white border border-gray-300 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col h-full">
+                      <div key={activity.id} className="bg-white border border-gray-300 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col min-h-[200px]">
                         {/* Header - siempre en la parte superior */}
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center space-x-2">
@@ -1653,17 +1653,17 @@ export function IntelligentDashboardContent({
                           </span>
                         </div>
                         
-                        {/* Contenido con flex-grow para ocupar el espacio disponible */}
-                        <div className="flex-grow flex flex-col">
-                          {/* Análisis inteligente, loader o indicador sin análisis */}
-                          {(() => {
-                            const activityKey = `${activity.type}_${activity.id}`
-                            const isAnalyzing = analyzingActivity === activityKey
-                            const analysisExtract = getAnalysisExtract(activity)
-                            
-                            if (isAnalyzing || (isAnalyzingBatch && !analysisResults[activityKey])) {
-                              // Mostrar loader durante análisis
-                              return (
+                        {/* Contenido condicional - solo renderizar si hay algo que mostrar */}
+                        {(() => {
+                          const activityKey = `${activity.type}_${activity.id}`
+                          const isAnalyzing = analyzingActivity === activityKey
+                          const analysisExtract = getAnalysisExtract(activity)
+                          
+                          // Solo mostrar contenedor si está analizando o no hay análisis
+                          if (isAnalyzing || (isAnalyzingBatch && !analysisResults[activityKey])) {
+                            // Mostrar loader durante análisis
+                            return (
+                              <div className="flex-grow flex flex-col">
                                 <div className="flex-grow flex items-center justify-center">
                                   <div className="bg-blue-50 rounded-lg p-6 border border-blue-200 w-full">
                                     <div className="text-center">
@@ -1677,15 +1677,14 @@ export function IntelligentDashboardContent({
                                     </div>
                                   </div>
                                 </div>
-                              )
-                            }
-                            
-                            if (analysisExtract && analysisExtract.summaryPoints) {
-                              // TEMPORALMENTE VACÍO - Sin contenido de análisis
-                              return null
-                            } else {
-                              // Solo mostrar indicador de análisis pendiente
-                              return (
+                              </div>
+                            )
+                          }
+                          
+                          if (!analysisExtract || !analysisExtract.summaryPoints) {
+                            // Solo mostrar indicador de análisis pendiente
+                            return (
+                              <div className="flex-grow flex flex-col">
                                 <div className="flex-grow flex items-center justify-center">
                                   <div className="text-center text-gray-400">
                                     <FontAwesomeIcon icon={faBrain} size="2x" className="mb-3" />
@@ -1694,13 +1693,16 @@ export function IntelligentDashboardContent({
                                     </p>
                                   </div>
                                 </div>
-                              )
-                            }
-                          })()}
-                        </div>
+                              </div>
+                            )
+                          }
+                          
+                          // Si hay análisis pero no queremos mostrar nada, no renderizar nada
+                          return null
+                        })()}
                         
                         {/* Footer con botones de acción - siempre en la parte inferior */}
-                        <div className="flex justify-between items-center mt-6">
+                        <div className="flex justify-between items-center mt-auto pt-6">
                           {/* Botones de la izquierda */}
                           <div className="flex items-center space-x-1">
                             {/* Botón de análisis forzado */}
