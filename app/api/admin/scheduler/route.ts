@@ -1,21 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { 
-  setupHourlyUpdates, 
-  stopHourlyUpdates, 
-  getAutoUpdateQueueStatus,
-  autoUpdateQueue 
-} from '@/lib/schedulers/auto-update-scheduler'
+import { cronScheduler } from '@/lib/cron/scheduler'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const status = await getAutoUpdateQueueStatus()
+    const status = cronScheduler.getStatus()
     
     return NextResponse.json({
       success: true,
-      scheduler: {
-        status: status ? 'running' : 'error',
-        ...status
-      }
+      scheduler: status
     })
   } catch (error) {
     console.error('❌ Error obteniendo estado del scheduler:', error)
@@ -32,44 +26,56 @@ export async function POST(req: NextRequest) {
 
     switch (action) {
       case 'start':
-        await setupHourlyUpdates()
+        cronScheduler.initialize()
         return NextResponse.json({
           success: true,
-          message: 'Actualizaciones automáticas iniciadas'
+          message: 'Cron scheduler iniciado',
+          status: cronScheduler.getStatus()
         })
 
       case 'stop':
-        await stopHourlyUpdates()
+        cronScheduler.stop()
         return NextResponse.json({
           success: true,
-          message: 'Actualizaciones automáticas detenidas'
+          message: 'Cron scheduler detenido',
+          status: cronScheduler.getStatus()
+        })
+
+      case 'restart':
+        cronScheduler.restart()
+        return NextResponse.json({
+          success: true,
+          message: 'Cron scheduler reiniciado',
+          status: cronScheduler.getStatus()
         })
 
       case 'trigger':
-        // Ejecutar una actualización inmediata
-        await autoUpdateQueue.add(
-          'manual-trigger',
-          {
-            type: 'manual',
-            triggeredAt: new Date().toISOString()
-          }
-        )
+        const result = await cronScheduler.triggerManualUpdate()
         return NextResponse.json({
           success: true,
-          message: 'Actualización manual programada'
+          message: 'Actualización manual ejecutada',
+          result
         })
 
       case 'status':
-        const status = await getAutoUpdateQueueStatus()
+        const status = cronScheduler.getStatus()
         return NextResponse.json({
           success: true,
           status
         })
 
+      case 'validate':
+        const isValid = cronScheduler.validateJobs()
+        return NextResponse.json({
+          success: true,
+          valid: isValid,
+          status: cronScheduler.getStatus()
+        })
+
       default:
         return NextResponse.json({
           success: false,
-          error: 'Acción no válida. Use: start, stop, trigger, status'
+          error: 'Acción no válida. Use: start, stop, restart, trigger, status, validate'
         }, { status: 400 })
     }
 

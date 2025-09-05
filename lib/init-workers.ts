@@ -1,5 +1,5 @@
 // Archivo para inicializar workers automáticamente
-import { setupHourlyUpdates } from './schedulers/auto-update-scheduler'
+// Nota: El cron scheduler principal se inicializa automáticamente en instrumentation.ts
 
 let workersInitialized = false
 
@@ -22,10 +22,10 @@ export async function initializeWorkers() {
       const { startAnalysisQueueWorker } = await import('../workers/analysis-queue-worker')
       await startAnalysisQueueWorker()
       
-      // Configurar actualizaciones programadas
-      await setupHourlyUpdates()
+      // Nota: El cron scheduler principal ya se inicializa en instrumentation.ts
+      // No necesitamos inicializarlo aquí para evitar duplicados
       
-      console.log('✅ Workers y schedulers inicializados correctamente')
+      console.log('✅ Workers inicializados correctamente (cron scheduler ya activo)')
     } else {
       console.log('ℹ️ Workers deshabilitados en desarrollo (set ENABLE_SCHEDULER=true para habilitarlos)')
     }
