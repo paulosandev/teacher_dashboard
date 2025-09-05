@@ -40,7 +40,7 @@ export class CronScheduler {
     })
 
     // Job vespertino: 06:00 PM (limpieza → carga → análisis)
-    this.afternoonJob = cron.schedule('0 18 * * *', async () => {
+    this.afternoonJob = cron.schedule('20 18 * * *', async () => {
       console.log('\n🌆 ===== PROCESO BATCH VESPERTINO =====')
       await this.executeFullProcess('afternoon')
     }, {
