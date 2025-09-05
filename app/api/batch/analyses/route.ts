@@ -14,11 +14,13 @@ declare global {
 const prisma = globalThis.prisma || new PrismaClient()
 if (process.env.NODE_ENV !== 'production') globalThis.prisma = prisma
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   const startTime = Date.now()
   
   try {
-    const { searchParams } = new URL(request.url)
+    const { searchParams } = request.nextUrl
     const aulaId = searchParams.get('aulaId') || 'av141' // Default para testing
     const courseId = searchParams.get('courseId')
     const activityId = searchParams.get('activityId')

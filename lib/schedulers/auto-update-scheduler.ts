@@ -25,36 +25,51 @@ export const autoUpdateQueue = new Queue('auto-update-queue', {
 
 // En versiones modernas de BullMQ, el QueueScheduler no es necesario
 
-// Función para programar actualizaciones automáticas cada hora
-export async function setupHourlyUpdates() {
+// Función para programar actualizaciones automáticas a las 8:00 AM y 6:00 PM
+export async function setupScheduledUpdates() {
   try {
-    console.log('⏰ Configurando actualizaciones automáticas cada hora...')
+    console.log('⏰ Configurando actualizaciones automáticas a las 8:00 AM y 6:00 PM...')
 
     // Limpiar trabajos repetidos existentes para evitar duplicados
     const repeatableJobs = await autoUpdateQueue.getRepeatableJobs()
     for (const job of repeatableJobs) {
-      if (job.name === 'hourly-auto-update') {
+      if (job.name === 'scheduled-auto-update') {
         await autoUpdateQueue.removeRepeatableByKey(job.key)
         console.log('🗑️ Trabajo repetible existente eliminado')
       }
     }
 
-    // Programar actualización cada hora en punto
+    // Programar actualización matutina (8:00 AM)
     await autoUpdateQueue.add(
-      'hourly-auto-update',
+      'scheduled-auto-update',
       {
-        type: 'scheduled',
+        type: 'morning',
         timestamp: new Date().toISOString()
       },
       {
         repeat: {
-          pattern: '0 * * * *', // Cada hora en punto (minuto 0)
+          pattern: '0 8 * * *', // 8:00 AM todos los días
         },
-        jobId: 'hourly-auto-update-job' // ID fijo para evitar duplicados
+        jobId: 'morning-auto-update-job'
       }
     )
 
-    console.log('✅ Actualizaciones automáticas programadas cada hora')
+    // Programar actualización vespertina (6:00 PM)
+    await autoUpdateQueue.add(
+      'scheduled-auto-update',
+      {
+        type: 'afternoon',
+        timestamp: new Date().toISOString()
+      },
+      {
+        repeat: {
+          pattern: '0 18 * * *', // 6:00 PM todos los días
+        },
+        jobId: 'afternoon-auto-update-job'
+      }
+    )
+
+    console.log('✅ Actualizaciones automáticas programadas a las 8:00 AM y 6:00 PM')
 
     // También agregar una ejecución inmediata para probar
     await autoUpdateQueue.add(
@@ -104,7 +119,7 @@ export async function getAutoUpdateQueueStatus() {
 }
 
 // Función para parar las actualizaciones automáticas
-export async function stopHourlyUpdates() {
+export async function stopScheduledUpdates() {
   try {
     console.log('⏹️ Deteniendo actualizaciones automáticas...')
     
@@ -121,9 +136,12 @@ export async function stopHourlyUpdates() {
   }
 }
 
-// Inicializar el scheduler cuando se importe este módulo
+// DESACTIVADO: El sistema principal usa cronScheduler (node-cron) en instrumentation.ts
+// Este sistema BullMQ está desactivado para evitar duplicados
+/*
 if (process.env.NODE_ENV === 'production' || process.env.ENABLE_SCHEDULER === 'true') {
-  setupHourlyUpdates().catch(console.error)
+  setupScheduledUpdates().catch(console.error)
 }
+*/
 
 export default autoUpdateQueue

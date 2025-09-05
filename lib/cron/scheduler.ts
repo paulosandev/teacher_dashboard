@@ -1,6 +1,6 @@
 /**
  * Programador de tareas (Cron Jobs)
- * Ejecuta actualizaciones automáticas a las 8:00 AM y 4:00 PM
+ * Ejecuta actualizaciones automáticas a las 8:00 AM y 6:00 PM
  */
 
 import * as cron from 'node-cron'
@@ -39,7 +39,7 @@ export class CronScheduler {
       timezone: "America/Mexico_City"
     })
 
-    // Job vespertino: 03:10 PM (limpieza → carga → análisis)
+    // Job vespertino: 06:00 PM (limpieza → carga → análisis)
     this.afternoonJob = cron.schedule('0 18 * * *', async () => {
       console.log('\n🌆 ===== PROCESO BATCH VESPERTINO =====')
       await this.executeFullProcess('afternoon')
@@ -48,22 +48,11 @@ export class CronScheduler {
       timezone: "America/Mexico_City"
     })
 
-    // Job de monitoreo de salud (cada hora)
-    cron.schedule('0 * * * *', () => {
-      const status = autoUpdateService.getStatus()
-      console.log(`💚 Health check: Sistema ${status.isUpdating ? 'actualizando' : 'inactivo'}`)
-      console.log(`   Última actualización: ${status.lastUpdate?.toISOString() || 'Nunca'}`)
-      console.log(`   Próximas actualizaciones: ${status.nextScheduledUpdates.map(d => d.toISOString()).join(', ')}`)
-    }, {
-      scheduled: true
-    })
-
     this.isInitialized = true
 
     console.log('✅ Programador de tareas inicializado:')
     console.log('   📅 Proceso matutino: 08:00 AM (México) - Limpieza → Carga → Análisis')
     console.log('   📅 Proceso vespertino: 06:00 PM (México) - Limpieza → Carga → Análisis')
-    console.log('   📅 Health check: Cada hora')
   }
 
   /**
