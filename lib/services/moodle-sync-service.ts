@@ -278,24 +278,141 @@ export class MoodleSyncService {
   }
 
   /**
-   * Sincronizar actividades de un curso específico
+   * Sincronizar actividades de un curso específico usando detección avanzada
+   * UNIFICADO con la lógica del endpoint /api/group/activities
    */
   private async syncCourseActivities(config: AulaConfig, course: MoodleCourse): Promise<number> {
     let totalActivities = 0
 
     try {
-      // Obtener tareas del curso
-      const assignments = await this.getCourseAssignments(config, course.id)
-      for (const assignment of assignments) {
-        await this.syncActivity(config, course, assignment, 'assign')
-        totalActivities++
+      console.log(`📚 [SYNC AVANZADO] Detectando actividades del curso ${course.id} en aula ${config.id}`)
+
+      // PASO 1: Usar core_course_get_contents (método principal)
+      let activities: any[] = []
+
+      try {
+        const contentsUrl = `${config.apiUrl}?wstoken=${config.token}&wsfunction=core_course_get_contents&moodlewsrestformat=json&courseid=${course.id}`
+        const contentsResponse = await fetch(contentsUrl)
+
+        if (contentsResponse.ok) {
+          const contentsData = await contentsResponse.json()
+
+          if (!contentsData.errorcode && Array.isArray(contentsData)) {
+            console.log(`📋 [TOKEN USUARIO] Obtenidas ${contentsData.length} secciones del curso`)
+
+            // Procesar cada sección
+            for (const section of contentsData) {
+              if (section.modules && Array.isArray(section.modules)) {
+                for (const module of section.modules) {
+                  if (['assign', 'forum'].includes(module.modname)) {
+                    activities.push({
+                      ...module,
+                      sectionName: section.name,
+                      detectionMethod: 'core_course_get_contents'
+                    })
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (contentsError) {
+        console.warn(`⚠️ Error con core_course_get_contents, usando métodos alternativos:`, contentsError)
       }
 
-      // Obtener foros del curso
-      const forums = await this.getCourseForums(config, course.id)
-      for (const forum of forums) {
-        await this.syncActivity(config, course, forum, 'forum')
-        totalActivities++
+      // PASO 2: APIs directas como respaldo (mod_assign_get_assignments)
+      try {
+        const assignUrl = `${config.apiUrl}?wstoken=${config.token}&wsfunction=mod_assign_get_assignments&moodlewsrestformat=json&courseids%5B0%5D=${course.id}`
+        const assignResponse = await fetch(assignUrl)
+
+        if (assignResponse.ok) {
+          const assignData = await assignResponse.json()
+          if (assignData.courses && assignData.courses.length > 0) {
+            const courseAssignments = assignData.courses[0].assignments || []
+            console.log(`📝 Encontradas ${courseAssignments.length} tareas adicionales via API directa`)
+
+            for (const assignment of courseAssignments) {
+              // Evitar duplicados
+              const exists = activities.find(a => a.id === assignment.id && a.modname === 'assign')
+              if (!exists) {
+                activities.push({
+                  id: assignment.id,
+                  name: assignment.name,
+                  modname: 'assign',
+                  url: `${config.baseUrl}/mod/assign/view.php?id=${assignment.id}`,
+                  description: assignment.intro,
+                  duedate: assignment.duedate,
+                  cutoffdate: assignment.cutoffdate,
+                  sectionName: 'Assignments API',
+                  detectionMethod: 'mod_assign_get_assignments',
+                  assignmentData: assignment
+                })
+              }
+            }
+          }
+        }
+      } catch (assignError) {
+        console.warn(`⚠️ Error obteniendo tareas adicionales:`, assignError)
+      }
+
+      // PASO 3: APIs directas para foros (mod_forum_get_forums_by_courses)
+      try {
+        const forumUrl = `${config.apiUrl}?wstoken=${config.token}&wsfunction=mod_forum_get_forums_by_courses&moodlewsrestformat=json&courseids%5B0%5D=${course.id}`
+        const forumResponse = await fetch(forumUrl)
+
+        if (forumResponse.ok) {
+          const forumData = await forumResponse.json()
+          if (Array.isArray(forumData) && forumData.length > 0) {
+            console.log(`🗣️ Encontrados ${forumData.length} foros adicionales via API directa`)
+
+            for (const forum of forumData) {
+              // Evitar duplicados
+              const exists = activities.find(a => a.id === forum.id && a.modname === 'forum')
+              if (!exists) {
+                // Obtener discusiones del foro
+                let discussions = []
+                try {
+                  const discUrl = `${config.apiUrl}?wstoken=${config.token}&wsfunction=mod_forum_get_forum_discussions&moodlewsrestformat=json&forumid=${forum.id}`
+                  const discResponse = await fetch(discUrl)
+                  if (discResponse.ok) {
+                    const discData = await discResponse.json()
+                    discussions = discData.discussions || []
+                  }
+                } catch (discError) {
+                  console.warn(`⚠️ Error obteniendo discusiones del foro ${forum.id}:`, discError)
+                }
+
+                activities.push({
+                  id: forum.id,
+                  name: forum.name,
+                  modname: 'forum',
+                  url: `${config.baseUrl}/mod/forum/view.php?id=${forum.id}`,
+                  description: forum.intro,
+                  sectionName: 'Forums API',
+                  detectionMethod: 'mod_forum_get_forums_by_courses',
+                  forumData: {
+                    ...forum,
+                    discussions: discussions
+                  }
+                })
+              }
+            }
+          }
+        }
+      } catch (forumError) {
+        console.warn(`⚠️ Error obteniendo foros adicionales:`, forumError)
+      }
+
+      console.log(`✅ Total de actividades detectadas: ${activities.length}`)
+
+      // PASO 4: Sincronizar cada actividad detectada
+      for (const activity of activities) {
+        try {
+          await this.syncAdvancedActivity(config, course, activity)
+          totalActivities++
+        } catch (activityError) {
+          console.error(`❌ Error sincronizando actividad ${activity.id} (${activity.name}):`, activityError)
+        }
       }
 
     } catch (error) {
@@ -431,31 +548,29 @@ export class MoodleSyncService {
   }
 
   /**
-   * Sincronizar una actividad específica
+   * Sincronizar una actividad específica - MÉTODO AVANZADO
+   * Incluye análisis de entregas para assignments y discusiones para foros
    */
-  private async syncActivity(
-    config: AulaConfig, 
-    course: MoodleCourse, 
-    activity: MoodleAssignment | MoodleForum, 
-    type: string
+  private async syncAdvancedActivity(
+    config: AulaConfig,
+    course: MoodleCourse,
+    activity: any
   ): Promise<void> {
+    console.log(`   🔍 [ACTIVITY] Procesando ${activity.modname}: ${activity.name}`)
+
     // Determinar si la actividad está activa
     const now = new Date()
     const dueDate = activity.duedate ? new Date(activity.duedate * 1000) : null
     const cutoffDate = activity.cutoffdate ? new Date(activity.cutoffdate * 1000) : null
-    
-    // Una actividad está activa si:
-    // 1. No tiene fecha de vencimiento (siempre activa)
-    // 2. Su fecha de vencimiento aún no ha llegado
-    // 3. Si tiene cutoffDate, que tampoco haya llegado
+
     let isActive = true
     let statusReason = 'Sin fecha límite'
-    
+
     if (dueDate) {
       isActive = dueDate > now
       statusReason = isActive ? 'Vigente hasta ' + dueDate.toLocaleDateString('es-ES') : 'Vencida el ' + dueDate.toLocaleDateString('es-ES')
     }
-    
+
     if (cutoffDate && isActive) {
       isActive = cutoffDate > now
       if (!isActive) {
@@ -463,52 +578,187 @@ export class MoodleSyncService {
       }
     }
 
+    // NUEVO: Actividades con contenido sustancial se analizan independientemente de fechas
+    const hasSubstantialContent = (assignmentData && (
+      assignmentData.submissions?.length > 0 ||
+      assignmentData.submissionCount > 0
+    )) || (forumData && (
+      forumData.discussions?.length > 0 ||
+      forumData.discussionCount > 0 ||
+      forumData.totalPosts > 0
+    ))
+
+    // NUEVO: Para aulas principales (101-110), analizar TODAS las actividades
+    // Para av141, mantener la lógica anterior (solo activas o con contenido)
+    const isMainAula = /^10[1-9]$|^110$/.test(config.id) // Aulas 101-110
+    const needsAnalysis = isMainAula ? true : (isActive || hasSubstantialContent)
+
+    console.log(`   📅 ${activity.name}: ${isActive ? '🟢 ACTIVA' : '🔴 INACTIVA'} (${statusReason})`)
+    if (hasSubstantialContent && !isActive) {
+      console.log(`   📊 Contenido sustancial detectado - marcando para análisis aunque esté vencida`)
+    }
+    if (isMainAula && !isActive && !hasSubstantialContent) {
+      console.log(`   🎯 AULA PRINCIPAL: Analizando actividad sin contenido para detectar falta de actividad`)
+    }
+
+    // NUEVO: Análisis específico por tipo de actividad
+    let assignmentData = null
+    let forumData = null
+
+    if (activity.modname === 'assign') {
+      console.log(`     📝 [ASSIGNMENT] Obteniendo entregas...`)
+      // Obtener entregas de estudiantes para analysis
+      const submissions = await this.getAssignmentSubmissions(config, activity.id)
+
+      assignmentData = {
+        submissions: submissions,
+        grade: activity.assignmentData?.grade || activity.grade || 0,
+        submissionCount: submissions.length,
+        gradedCount: submissions.filter(s => s.grade !== undefined && s.grade >= 0).length
+      }
+
+      console.log(`     📊 ${submissions.length} entregas, ${assignmentData.gradedCount} calificadas`)
+
+    } else if (activity.modname === 'forum') {
+      console.log(`     🗣️ [FORUM] Obteniendo discusiones...`)
+
+      const discussions = activity.forumData?.discussions || []
+      let totalPosts = 0
+
+      // Contar posts en todas las discusiones
+      for (const discussion of discussions) {
+        if (discussion.posts) {
+          totalPosts += discussion.posts.length
+        }
+      }
+
+      forumData = {
+        discussions: discussions,
+        discussionCount: discussions.length,
+        totalPosts: totalPosts,
+        firstDiscussionId: discussions.length > 0 ? discussions[0].id : null
+      }
+
+      console.log(`     📊 ${discussions.length} discusiones, ${totalPosts} posts totales`)
+    }
+
+    // Datos base de la actividad con campos específicos
     const activityData = {
       aulaId: config.id,
       courseId: course.id,
       activityId: activity.id,
-      type: type,
+      type: activity.modname,
       name: activity.name,
-      description: activity.intro,
+      description: activity.description || activity.intro || '',
       dueDate: dueDate,
       cutoffDate: cutoffDate,
-      url: aulaConfigService.generateActivityUrl(config.id, type, activity.cmid),
+      url: activity.url || `${config.baseUrl}/mod/${activity.modname}/view.php?id=${activity.id}`,
       rawData: activity as any,
-      needsAnalysis: isActive, // Solo analizar si está activa
-      visible: isActive, // Marcar como visible solo si está activa
-      lastDataSync: new Date()
+      needsAnalysis: needsAnalysis,
+      visible: isActive,
+      lastDataSync: new Date(),
+      assignmentData,
+      forumData
     }
 
-    console.log(`   📅 ${activity.name}: ${isActive ? '🟢 ACTIVA' : '🔴 INACTIVA'} (${statusReason})`)
+    // Guardar en base de datos
+    try {
+      console.log(`   💾 [DB] Guardando actividad: ${activity.name} (${activity.modname})`)
 
-    // Agregar datos específicos por tipo
-    if (type === 'assign' && 'submissions' in activity) {
-      activityData['assignmentData'] = {
-        submissions: activity.submissions || [],
-        grade: (activity as MoodleAssignment).grade
-      }
-    } else if (type === 'forum') {
-      activityData['forumData'] = {
-        discussions: activity.discussions || [],
-        firstDiscussionId: activity.firstDiscussionId || null,
-        numdiscussions: activity.discussions?.length || 0
-      }
+      await prisma.courseActivity.upsert({
+        where: {
+          aulaId_courseId_activityId_type: {
+            aulaId: config.id,
+            courseId: course.id,
+            activityId: activity.id,
+            type: activity.modname
+          }
+        },
+        update: {
+          ...activityData,
+          analysisCount: { increment: 0 } // No incrementar en update
+        },
+        create: activityData
+      })
+
+      console.log(`   ✅ [DB] Actividad guardada exitosamente`)
+    } catch (dbError) {
+      console.error(`   ❌ [DB] Error detallado al guardar actividad:`)
+      console.error(`   🔍 [DB] Activity Data:`, JSON.stringify({
+        aulaId: config.id,
+        courseId: course.id,
+        activityId: activity.id,
+        type: activity.modname,
+        name: activity.name,
+        hasAssignmentData: !!assignmentData,
+        hasForumData: !!forumData,
+        dataKeys: Object.keys(activityData)
+      }, null, 2))
+      console.error(`   🔥 [DB] Prisma Error:`, dbError)
+      throw dbError // Re-throw para mantener el comportamiento existente
     }
+  }
 
-    await prisma.courseActivity.upsert({
-      where: {
-        aulaId_courseId_activityId_type: {
-          aulaId: config.id,
-          courseId: course.id,
-          activityId: activity.id,
-          type: type
+  /**
+   * Obtener entregas de estudiantes para una tarea específica
+   */
+  private async getAssignmentSubmissions(config: AulaConfig, assignmentId: number): Promise<any[]> {
+    try {
+      const url = `${config.apiUrl}?wstoken=${config.token}&wsfunction=mod_assign_get_submissions&moodlewsrestformat=json&assignmentids%5B0%5D=${assignmentId}`
+      const response = await fetch(url)
+
+      if (response.ok) {
+        const data = await response.json()
+
+        if (data.assignments && data.assignments.length > 0) {
+          const submissions = data.assignments[0].submissions || []
+
+          // Para cada entrega, intentar obtener comentarios de retroalimentación
+          for (const submission of submissions) {
+            try {
+              // Obtener comentarios del profesor
+              const commentsUrl = `${config.apiUrl}?wstoken=${config.token}&wsfunction=assignsubmission_comments_get_comments&moodlewsrestformat=json&submissionid=${submission.id}`
+              const commentsResponse = await fetch(commentsUrl)
+
+              if (commentsResponse.ok) {
+                const commentsData = await commentsResponse.json()
+                submission.comments = commentsData.comments || []
+              }
+            } catch (commentsError) {
+              // Opcional: comentarios no críticos
+              submission.comments = []
+            }
+          }
+
+          return submissions
         }
-      },
-      update: {
-        ...activityData,
-        analysisCount: { increment: 0 } // No incrementar en update
-      },
-      create: activityData
+      }
+
+      return []
+    } catch (error) {
+      console.warn(`⚠️ Error obteniendo entregas de assignment ${assignmentId}:`, error)
+      return []
+    }
+  }
+
+  /**
+   * Sincronizar una actividad específica - MÉTODO LEGACY (mantener compatibilidad)
+   */
+  private async syncActivity(
+    config: AulaConfig,
+    course: MoodleCourse,
+    activity: MoodleAssignment | MoodleForum,
+    type: string
+  ): Promise<void> {
+    // Redirigir al método avanzado
+    await this.syncAdvancedActivity(config, course, {
+      ...activity,
+      modname: type,
+      id: activity.id,
+      name: activity.name,
+      intro: activity.intro,
+      duedate: activity.duedate,
+      cutoffdate: activity.cutoffdate
     })
   }
 

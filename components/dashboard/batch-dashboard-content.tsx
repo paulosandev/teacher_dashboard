@@ -21,7 +21,12 @@ import {
   faComments,
   faClipboardCheck,
   faUsers,
-  faChevronRight
+  faChevronRight,
+  faBookOpen,
+  faFileAlt,
+  faLink,
+  faCalendarAlt,
+  faQuestionCircle
 } from '@fortawesome/free-solid-svg-icons'
 import SimpleCourseSelector from '@/components/dashboard/simple-course-selector'
 import { AnalysisModal } from '@/components/dashboard/analysis-modal'
@@ -44,6 +49,13 @@ interface Course {
   shortname?: string
   fullname?: string
   visible?: boolean
+  courseId?: string
+  groupId?: string
+  courseName?: string
+  groupName?: string
+  aulaId?: string
+  aulaUrl?: string
+  domain?: string
 }
 
 interface BatchDashboardContentProps {
@@ -61,10 +73,10 @@ export function BatchDashboardContent({
 }: BatchDashboardContentProps) {
   const [mounted, setMounted] = useState(false)
   const [selectedCourse, setSelectedCourse] = useState<string | null>(null)
-  const [batchAnalyses, setBatchAnalyses] = useState<any[]>([])
-  const [loadingBatchData, setLoadingBatchData] = useState(false)
   const [detailView, setDetailView] = useState<{isActive: boolean, analysis: any} | null>(null)
   const [syncStatus, setSyncStatus] = useState<any>(null)
+  const [groupActivities, setGroupActivities] = useState<any[]>([])
+  const [loadingActivities, setLoadingActivities] = useState(false)
 
   // Función para procesar markdown y limpiar texto
   const processMarkdown = (text: string): string => {
@@ -139,48 +151,59 @@ export function BatchDashboardContent({
     }
   }
 
-  // Cargar datos batch cuando cambie el curso
-  const loadBatchAnalyses = useCallback(async (courseId: string) => {
+  // Cargar actividades del grupo cuando cambie el curso/grupo seleccionado
+  const loadGroupActivities = useCallback(async (courseId: string) => {
     if (!courseId) return
-    
-    console.log('🔄 [BATCH] Cargando análisis batch para curso:', courseId)
-    setLoadingBatchData(true)
+
+    console.log('🎯 [ACTIVIDADES] Cargando actividades para curso-grupo:', courseId)
+    setLoadingActivities(true)
 
     try {
-      // Extraer aula ID del curso seleccionado
+      // Extraer courseId y groupId del formato "courseId|groupId"
       const [courseNumber, groupId] = courseId.split('|')
-      
-      // Determinar aula ID basado en el curso
-      let aulaId = 'av141' // por defecto
-      if (courseNumber && !isNaN(parseInt(courseNumber))) {
-        // Si es un número, intentar encontrar el aula correspondiente
-        // Para simplificar, usar av141 por ahora
-        aulaId = 'av141'
+
+      if (!courseNumber) {
+        console.error('❌ [ACTIVIDADES] Formato de curso inválido:', courseId)
+        setGroupActivities([])
+        return
       }
 
-      console.log('🏫 [BATCH] Consultando aula:', aulaId)
-      console.log('📚 [BATCH] Consultando curso:', courseId)
+      // Encontrar el curso seleccionado para obtener aulaUrl
+      const selectedCourse = courses.find(c => c.id === courseId)
+      const aulaUrl = selectedCourse?.aulaUrl
 
-      const response = await fetch(`/api/batch/analyses?aulaId=${aulaId}&courseId=${courseId}`)
-      
+      console.log('📚 [ACTIVIDADES] Consultando curso:', courseNumber, 'grupo:', groupId || '0')
+      console.log('🏫 [ACTIVIDADES] Aula URL:', aulaUrl || 'No especificada')
+      console.log('🔍 [ACTIVIDADES] Curso encontrado:', selectedCourse ? 'SÍ' : 'NO')
+
+      // Construir query params
+      const params = new URLSearchParams({
+        courseId: courseNumber,
+        groupId: groupId || '0'
+      })
+
+      if (aulaUrl) {
+        params.append('aulaUrl', aulaUrl)
+      }
+
+      const response = await fetch(`/api/group/activities?${params.toString()}`)
+
       if (response.ok) {
         const data = await response.json()
-        console.log('📊 [BATCH] Análisis recibidos:', data.results?.analyses?.length || 0)
-        
-        // Procesar cada análisis para extraer contenido estructurado
-        const processedAnalyses = (data.results?.analyses || []).map(parseAnalysisContent)
-        setBatchAnalyses(processedAnalyses)
+        console.log('✅ [ACTIVIDADES] Actividades recibidas:', data.activities?.length || 0)
+        setGroupActivities(data.activities || [])
       } else {
-        console.error('❌ [BATCH] Error cargando análisis:', response.status)
-        setBatchAnalyses([])
+        console.error('❌ [ACTIVIDADES] Error cargando actividades:', response.status)
+        setGroupActivities([])
       }
     } catch (error) {
-      console.error('❌ [BATCH] Error en loadBatchAnalyses:', error)
-      setBatchAnalyses([])
+      console.error('❌ [ACTIVIDADES] Error en loadGroupActivities:', error)
+      setGroupActivities([])
     } finally {
-      setLoadingBatchData(false)
+      setLoadingActivities(false)
     }
-  }, [])
+  }, [courses])
+
 
   // Cargar estado de sincronización
   const loadSyncStatus = useCallback(async () => {
@@ -196,11 +219,13 @@ export function BatchDashboardContent({
   }, [])
 
   const handleCourseChange = useCallback(async (courseId: string) => {
-    console.log('🎯 [BATCH] Cambiando a curso:', courseId)
+    console.log('🎯 [BATCH] Cambiando a curso-grupo:', courseId)
     setSelectedCourse(courseId)
-    setBatchAnalyses([])
-    await loadBatchAnalyses(courseId)
-  }, [loadBatchAnalyses])
+    setGroupActivities([])
+
+    // Cargar actividades del grupo
+    await loadGroupActivities(courseId)
+  }, [loadGroupActivities])
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -210,9 +235,9 @@ export function BatchDashboardContent({
   // Cargar datos cuando cambie el curso
   useEffect(() => {
     if (selectedCourse) {
-      loadBatchAnalyses(selectedCourse)
+      loadGroupActivities(selectedCourse)
     }
-  }, [selectedCourse, loadBatchAnalyses])
+  }, [selectedCourse, loadGroupActivities])
 
   // Función para navegar a la vista de detalle
   const navigateToDetail = useCallback((analysis: any) => {
@@ -234,6 +259,27 @@ export function BatchDashboardContent({
       hour: '2-digit',
       minute: '2-digit'
     })
+  }
+
+  // Función para obtener icono y color de actividad
+  const getActivityIcon = (modname: string) => {
+    switch (modname) {
+      case 'forum':
+      case 'forum_discussion':
+        return { icon: faComments, color: 'text-blue-600', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' }
+      case 'assign':
+        return { icon: faClipboardCheck, color: 'text-green-600', bgColor: 'bg-green-50', borderColor: 'border-green-200' }
+      case 'quiz':
+        return { icon: faQuestionCircle, color: 'text-purple-600', bgColor: 'bg-purple-50', borderColor: 'border-purple-200' }
+      case 'resource':
+        return { icon: faFileAlt, color: 'text-gray-600', bgColor: 'bg-gray-50', borderColor: 'border-gray-200' }
+      case 'page':
+        return { icon: faBookOpen, color: 'text-indigo-600', bgColor: 'bg-indigo-50', borderColor: 'border-indigo-200' }
+      case 'url':
+        return { icon: faLink, color: 'text-orange-600', bgColor: 'bg-orange-50', borderColor: 'border-orange-200' }
+      default:
+        return { icon: faFileAlt, color: 'text-gray-600', bgColor: 'bg-gray-50', borderColor: 'border-gray-200' }
+    }
   }
 
   // Prevent SSR/hydration issues
@@ -499,7 +545,7 @@ export function BatchDashboardContent({
               </div>
             ) : (
               <>
-                {loadingBatchData ? (
+                {loadingActivities ? (
                   <div className="flex flex-col items-center justify-center py-16">
                     <div className="text-center">
                       <FontAwesomeIcon 
@@ -517,37 +563,58 @@ export function BatchDashboardContent({
                   </div>
                 ) : (
                   <>
-                    {batchAnalyses.length > 0 ? (
+                    {/* Loading de actividades */}
+                    {loadingActivities && (
                       <div className="mb-8">
-                        <div className={`grid gap-6 ${batchAnalyses.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-2'}`}>
-                          {batchAnalyses.map((analysis, index) => (
-                            <div key={analysis.id} className="bg-white border border-gray-300 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-center justify-center py-8">
+                          <FontAwesomeIcon icon={faSpinner} className="text-blue-600 animate-spin mr-3" />
+                          <span className="text-gray-600">Cargando actividades...</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Sección de Actividades del Grupo */}
+                    {groupActivities.length > 0 && (
+                      <div className="mb-8">
+                        <div className={`grid gap-6 ${groupActivities.length === 1 ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2 xl:grid-cols-2'}`}>
+                          {groupActivities.map((activity) => (
+                            <div key={activity.id} className="bg-white border border-gray-300 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
                               {/* Header con título y badge de tipo */}
                               <div className="flex items-center justify-between mb-8">
-                                <h3 className="text-lg font-semibold text-gray-900">
-                                  {analysis.activityName}
-                                </h3>
+                                <h4 className="text-lg font-semibold text-gray-900">
+                                  {activity.name}
+                                </h4>
                                 <span className={`px-3 py-1 rounded-full text-sm font-medium flex items-center ${
-                                  analysis.activityType === 'forum' 
-                                    ? 'bg-green-50 border border-green-300 text-green-700' 
-                                    : 'bg-orange-50 border border-orange-300 text-orange-700'
+                                  activity.modname === 'forum' || activity.modname === 'forum_discussion'
+                                    ? 'bg-blue-50 border border-blue-300 text-blue-700'
+                                    : activity.modname === 'assign'
+                                    ? 'bg-green-50 border border-green-300 text-green-700'
+                                    : activity.modname === 'quiz'
+                                    ? 'bg-purple-50 border border-purple-300 text-purple-700'
+                                    : 'bg-gray-50 border border-gray-300 text-gray-700'
                                 }`}>
-                                  <FontAwesomeIcon 
-                                    icon={analysis.activityType === 'forum' ? faComments : faClipboardCheck} 
+                                  <FontAwesomeIcon
+                                    icon={activity.modname === 'forum' || activity.modname === 'forum_discussion' ? faComments : activity.modname === 'assign' ? faClipboardCheck : activity.modname === 'quiz' ? faQuestionCircle : faFileAlt}
                                     className="w-3 h-3 mr-1"
                                   />
-                                  {analysis.activityType === 'forum' ? 'Foro' : 'Tarea'}
+                                  {activity.type}
                                 </span>
                               </div>
+
+
+                              {/* Fecha de vencimiento si existe */}
+                              {activity.dueDate && (
+                                <div className="flex items-center text-sm text-orange-600 mb-4">
+                                  <FontAwesomeIcon icon={faCalendarAlt} className="w-4 h-4 mr-2" />
+                                  <span>Vence: {formatDate(new Date(activity.dueDate * 1000).toISOString())}</span>
+                                </div>
+                              )}
 
                               {/* Footer con botones - centrado en el card */}
                               <div className="flex justify-between items-center">
                                 <div className="flex gap-2">
-                                  
                                   <a
-                                    href={analysis.activityUrl || 
-                                      `https://${selectedAulaId}.utel.edu.mx/course/view.php?id=${analysis.moodleCourseId}`
-                                    }
+                                    href={activity.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
@@ -557,12 +624,22 @@ export function BatchDashboardContent({
                                   </a>
                                 </div>
                                 <button
-                                  onClick={() => navigateToDetail(analysis)}
-                                  className="px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium flex items-center transition-colors text-sm rounded-lg"
+                                  onClick={() => {
+                                    if (activity.hasAnalysis && activity.analysis) {
+                                      navigateToDetail(activity.analysis)
+                                    }
+                                  }}
+                                  disabled={!activity.hasAnalysis}
+                                  className={`px-4 py-2 font-medium flex items-center transition-colors text-sm rounded-lg ${
+                                    activity.hasAnalysis
+                                      ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 cursor-pointer'
+                                      : 'bg-gray-50 text-gray-400 cursor-not-allowed opacity-60'
+                                  }`}
+                                  title={activity.hasAnalysis ? 'Ver detalles del análisis' : 'Análisis no disponible'}
                                 >
-                                  Ver más
-                                  <FontAwesomeIcon 
-                                    icon={faChevronRight} 
+                                  {activity.hasAnalysis ? 'Ver detalles' : 'Sin análisis'}
+                                  <FontAwesomeIcon
+                                    icon={activity.hasAnalysis ? faChevronRight : faExclamationTriangle}
                                     className="w-3 h-3 ml-1"
                                   />
                                 </button>
@@ -571,16 +648,20 @@ export function BatchDashboardContent({
                           ))}
                         </div>
                       </div>
-                    ) : (
+                    )}
+
+
+                    {/* Estado cuando no hay actividades */}
+                    {!loadingActivities && groupActivities.length === 0 && (
                       <div className="text-center py-12">
                         <div className="text-gray-400 mb-4">
                           <FontAwesomeIcon icon={faMagicWandSparkles} size="3x" />
                         </div>
                         <h3 className="text-lg font-medium text-gray-900 mb-2">
-                          No hay análisis disponibles
+                          No hay datos disponibles
                         </h3>
                         <p className="text-gray-600">
-                          Este curso no tiene análisis generados en el sistema batch
+                          Este grupo no tiene actividades abiertas ni análisis disponibles
                         </p>
                       </div>
                     )}

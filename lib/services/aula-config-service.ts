@@ -78,7 +78,7 @@ export class AulaConfigService {
       })
     }
 
-    console.log(`🏫 [PRUEBAS] Solo AV141 activa: ${this.aulaConfigs.size} aula(s) configurada(s)`)
+    console.log(`🏫 Configuradas ${this.aulaConfigs.size} aula(s): ${Array.from(this.aulaConfigs.keys()).join(', ')}`)
   }
 
   /**

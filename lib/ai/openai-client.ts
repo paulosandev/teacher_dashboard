@@ -13,6 +13,7 @@ export interface AnalysisResult {
     numbered?: string[];
     bullets?: string[];
   };
+  markdownAnalysis?: string; // Nueva propiedad para análisis en markdown
 }
 
 export interface ForumAnalysisInput {
@@ -36,7 +37,7 @@ class OpenAIClient {
   private getClient(): OpenAI {
     if (!this.client) {
       const apiKey = process.env.OPENAI_API_KEY;
-      
+
       if (!apiKey) {
         throw new Error('OPENAI_API_KEY no está configurado en las variables de entorno');
       }
@@ -45,7 +46,7 @@ class OpenAIClient {
         apiKey: apiKey,
       });
     }
-    
+
     return this.client;
   }
 
@@ -62,25 +63,20 @@ class OpenAIClient {
         model: "gpt-5-mini",
         messages: [
           {
-            role: "system",
-            content: "Eres un experto analista educativo especializado en análisis de participación estudiantil en foros académicos. Tu tarea es analizar las discusiones de foros educativos y proporcionar insights valiosos para profesores."
-          },
-          {
             role: "user",
-            content: prompt
+            content: this.buildEducationalAnalysisPrompt(input)
           }
         ],
-        temperature: 0.3, // Respuestas más consistentes
-        max_tokens: 2000,
+        max_completion_tokens: 4000,
       });
 
       const response = completion.choices[0].message.content;
-      
+
       if (!response) {
         throw new Error('No se recibió respuesta de OpenAI');
       }
 
-      return this.parseAnalysisResponse(response);
+      return this.parseEducationalAnalysisResponse(response);
 
     } catch (error) {
       console.error('❌ Error en análisis de OpenAI:', error);
@@ -93,7 +89,7 @@ class OpenAIClient {
    */
   private buildAnalysisPrompt(input: ForumAnalysisInput): string {
     const discussionsText = input.discussions.map(disc => {
-      const repliesText = disc.replies.map(reply => 
+      const repliesText = disc.replies.map(reply =>
         `    RESPUESTA de ${reply.author} (${reply.timestamp}):\n    ${reply.content}`
       ).join('\n\n');
 
@@ -144,6 +140,40 @@ Responde ÚNICAMENTE con el JSON, sin texto adicional.`;
   }
 
   /**
+   * Construye el prompt educacional mejorado para análisis de foros
+   */
+  private buildEducationalAnalysisPrompt(input: ForumAnalysisInput): string {
+    const discussionsData = input.discussions.map(disc => ({
+      title: disc.title,
+      author: disc.author,
+      content: disc.content,
+      timestamp: disc.timestamp,
+      replies: disc.replies.map(reply => ({
+        author: reply.author,
+        content: reply.content,
+        timestamp: reply.timestamp
+      }))
+    }));
+
+    return `
+Eres un asistente del profesor en la Universidad UTEL. Tu tarea consiste en ayudarle a identificar insights accionables que contribuyan al cumplimiento de los objetivos del curso acerca del comportamiento de sus estudiantes dentro de las actividades en el foro de discusión. El propósito es que, aunque el profesor no participa directamente en la dinámica del foro, pueda mantener una visión clara de lo que ocurre en él y, en caso necesario, intervenga de manera pertinente durante su próxima videoconferencia con los estudiantes (openclass).
+
+- Redacta con un estilo conversacional dirigido al profesor de quien eres asistente, utilizando el principio de minto pyramid (no menciones que estás redactando utilizando este principio) donde la conclusión son los insights accionales.
+- El análisis debe estructurarse en al menos 5 dimensiones. Cada dimensión debe presentarse con el formato siguiente:
+  #### [Nombre de la dimensión]
+  * Incluye hallazgos clave en viñetas, redactados de forma breve y clara.
+  * Cada hallazgo debe resaltar con negritas los elementos relevantes.
+  **Acción sugerida:** redactar una recomendación específica, breve y accionable para el profesor.
+- Ordena las dimensiones de mayor a menor impacto.
+- El formato de entrega solo es markdown.
+- El análisis debe limitarse únicamente al reporte solicitado, sin incluir preguntas, sugerencias adicionales, invitaciones a continuar ni ofertas de recursos complementarios.
+- El análisis debe iniciar directamente con los insights accionables, sin incluir introducciones, frases de encuadre, ni explicaciones preliminares.
+- Simpre incluye insights accionables acerca de nivel de participación y si surgen dudas o temas de conversación fuera de la consigna de la discusión.
+
+${JSON.stringify(discussionsData, null, 2)}`;
+  }
+
+  /**
    * Parsea la respuesta de OpenAI y la convierte en un objeto estructurado
    */
   private parseAnalysisResponse(response: string): AnalysisResult {
@@ -159,10 +189,10 @@ Responde ÚNICAMENTE con el JSON, sin texto adicional.`;
         summary: parsed.summary || 'No se pudo generar resumen',
         insights: Array.isArray(parsed.insights) ? parsed.insights.slice(0, 5) : [],
         recommendations: Array.isArray(parsed.recommendations) ? parsed.recommendations.slice(0, 4) : [],
-        participationLevel: ['Alto', 'Medio', 'Bajo'].includes(parsed.participationLevel) 
-          ? parsed.participationLevel 
+        participationLevel: ['Alto', 'Medio', 'Bajo'].includes(parsed.participationLevel)
+          ? parsed.participationLevel
           : 'Medio',
-        engagementScore: typeof parsed.engagementScore === 'number' 
+        engagementScore: typeof parsed.engagementScore === 'number'
           ? Math.min(100, Math.max(0, parsed.engagementScore))
           : 50,
         keyTopics: Array.isArray(parsed.keyTopics) ? parsed.keyTopics.slice(0, 5) : [],
@@ -173,7 +203,7 @@ Responde ÚNICAMENTE con el JSON, sin texto adicional.`;
     } catch (error) {
       console.error('❌ Error parseando respuesta de OpenAI:', error);
       console.log('Respuesta recibida:', response);
-      
+
       // Fallback: devolver estructura básica
       return {
         summary: 'Error al procesar el análisis. Por favor, intente nuevamente.',
@@ -187,12 +217,104 @@ Responde ÚNICAMENTE con el JSON, sin texto adicional.`;
   }
 
   /**
+   * Parsea la respuesta de análisis educacional en markdown
+   */
+  private parseEducationalAnalysisResponse(response: string): AnalysisResult {
+    try {
+      // Extraer información básica del markdown para mantener compatibilidad
+      const dimensions = response.split('####').filter(section => section.trim().length > 0);
+
+      // Extraer insights de las viñetas
+      const insights: string[] = [];
+      const recommendations: string[] = [];
+
+      dimensions.forEach(dimension => {
+        const bulletPoints = dimension.match(/\* ([^*]+?)(?=\*|$)/g);
+        const actionSuggestion = dimension.match(/\*\*Acción sugerida:\*\* (.+?)(?=\n|$)/);
+
+        if (bulletPoints) {
+          bulletPoints.forEach(bullet => {
+            const cleanBullet = bullet.replace(/^\* /, '').trim();
+            if (cleanBullet) insights.push(cleanBullet);
+          });
+        }
+
+        if (actionSuggestion) {
+          recommendations.push(actionSuggestion[1].trim());
+        }
+      });
+
+      return {
+        summary: 'Análisis educacional completado - ver markdownAnalysis para detalles completos',
+        insights: insights.slice(0, 5), // Limitar a 5 insights
+        recommendations: recommendations.slice(0, 4), // Limitar a 4 recomendaciones
+        participationLevel: this.extractParticipationLevel(response),
+        engagementScore: this.extractEngagementScore(response),
+        keyTopics: this.extractKeyTopics(response),
+        markdownAnalysis: response // Guardamos la respuesta completa en markdown
+      };
+    } catch (error) {
+      console.error('❌ Error parseando respuesta educacional:', error);
+      console.log('Respuesta recibida:', response);
+
+      // Fallback: devolver estructura básica con markdown
+      return {
+        summary: 'Error al procesar el análisis educacional. Ver markdownAnalysis para contenido bruto.',
+        insights: ['Error en el procesamiento del análisis'],
+        recommendations: ['Revisar manualmente el contenido del foro'],
+        participationLevel: 'Medio',
+        engagementScore: 0,
+        keyTopics: [],
+        markdownAnalysis: response // Guardar respuesta original aunque haya error
+      };
+    }
+  }
+
+  /**
+   * Extrae el nivel de participación del análisis markdown
+   */
+  private extractParticipationLevel(response: string): 'Alto' | 'Medio' | 'Bajo' {
+    const lowerResponse = response.toLowerCase();
+    if (lowerResponse.includes('participación alta') || lowerResponse.includes('alto nivel')) return 'Alto';
+    if (lowerResponse.includes('participación baja') || lowerResponse.includes('bajo nivel')) return 'Bajo';
+    return 'Medio';
+  }
+
+  /**
+   * Extrae el score de engagement del análisis markdown
+   */
+  private extractEngagementScore(response: string): number {
+    const percentageMatch = response.match(/(\d+)%/);
+    if (percentageMatch) {
+      return parseInt(percentageMatch[1]);
+    }
+    return 50; // Score por defecto
+  }
+
+  /**
+   * Extrae temas clave del análisis markdown
+   */
+  private extractKeyTopics(response: string): string[] {
+    const topics: string[] = [];
+    const dimensionHeaders = response.match(/#### ([^\n]+)/g);
+
+    if (dimensionHeaders) {
+      dimensionHeaders.forEach(header => {
+        const topic = header.replace('#### ', '').trim();
+        if (topic) topics.push(topic);
+      });
+    }
+
+    return topics.slice(0, 5); // Limitar a 5 temas
+  }
+
+  /**
    * Verifica la conexión con OpenAI
    */
   async testConnection(): Promise<boolean> {
     try {
       console.log('🔍 Verificando conexión con OpenAI...');
-      
+
       const completion = await this.getClient().chat.completions.create({
         model: "gpt-5-mini",
         messages: [
@@ -201,11 +323,11 @@ Responde ÚNICAMENTE con el JSON, sin texto adicional.`;
             content: "Responde únicamente 'OK' para confirmar que la conexión funciona."
           }
         ],
-        max_tokens: 10,
+        max_completion_tokens: 10,
       });
 
       const response = completion.choices[0].message.content?.trim();
-      
+
       if (response === 'OK') {
         console.log('✅ Conexión con OpenAI exitosa');
         return true;

@@ -44,6 +44,11 @@ export const authOptions: NextAuthOptions = {
             ? authResult.aulaResults.find(a => a.isValidCredentials)?.aulaUrl || process.env.MOODLE_API_URL?.replace('/webservice/rest/server.php', '') || 'https://av141.utel.edu.mx'
             : process.env.MOODLE_API_URL?.replace('/webservice/rest/server.php', '') || 'https://av141.utel.edu.mx'
           
+          // Obtener ID del aula principal
+          const primaryAulaId = authResult.aulaResults && authResult.aulaResults.length > 0
+            ? authResult.aulaResults.find(a => a.isValidCredentials)?.aulaId || 'unknown'
+            : 'unknown'
+
           // Retornar datos del usuario para la sesión
           return {
             id: authResult.user.id.toString(),
@@ -54,6 +59,10 @@ export const authOptions: NextAuthOptions = {
             moodleToken: authResult.primaryToken,
             moodleUrl: primaryAulaUrl, // Agregar URL del aula principal
             tokenExpiry: new Date(Date.now() + 60 * 60 * 1000), // 1 hora
+            aulaInfo: {
+              primaryAula: primaryAulaId,
+              primaryUrl: primaryAulaUrl
+            },
             multiAulaData: {
               totalAulas: authResult.totalAulas,
               validAulas: authResult.validAulas,
@@ -80,6 +89,7 @@ export const authOptions: NextAuthOptions = {
         token.username = user.username
         token.moodleToken = user.moodleToken
         token.tokenExpiry = user.tokenExpiry
+        token.aulaInfo = user.aulaInfo
         token.multiAulaData = user.multiAulaData
       }
 
@@ -107,6 +117,7 @@ export const authOptions: NextAuthOptions = {
         session.user.moodleToken = token.moodleToken as string
         session.user.moodleUrl = token.moodleUrl as string
         session.user.tokenExpiry = token.tokenExpiry as Date
+        session.user.aulaInfo = token.aulaInfo as any
         session.user.multiAulaData = token.multiAulaData as any
       }
       return session

@@ -295,11 +295,45 @@ class MoodleAPIClient {
       const groups = await this.callMoodleAPI('core_group_get_course_groups', {
         courseid: courseId,
       })
-      
+
       return groups || []
     } catch (error) {
       console.error('Error obteniendo grupos del curso:', error)
       return []
+    }
+  }
+
+  /**
+   * Obtiene todos los grupos de un curso usando token de servicio
+   * Necesario para core_group_get_course_groups que requiere permisos administrativos
+   */
+  async getCourseGroupsWithServiceToken(courseId: number, aulaId: string): Promise<MoodleGroup[]> {
+    try {
+      // Importar serviceTokenManager aquí para evitar dependencias circulares
+      const { serviceTokenManager } = await import('@/lib/services/service-token-manager')
+
+      const serviceToken = serviceTokenManager.getServiceToken(aulaId)
+      if (!serviceToken) {
+        console.warn(`No hay token de servicio disponible para aula ${aulaId}`)
+        // Fallback al método normal
+        return this.getCourseGroups(courseId)
+      }
+
+      console.log(`🔑 Usando token de servicio para obtener grupos del curso ${courseId} en aula ${aulaId}`)
+
+      // Crear un cliente temporal con el token de servicio
+      const serviceClient = new MoodleAPIClient(serviceToken.aulaUrl, serviceToken.token)
+      const groups = await serviceClient.callMoodleAPI('core_group_get_course_groups', {
+        courseid: courseId,
+      })
+
+      console.log(`✅ Grupos obtenidos con token de servicio: ${groups?.length || 0} grupos`)
+      return groups || []
+    } catch (error) {
+      console.error('Error obteniendo grupos del curso con token de servicio:', error)
+      // Fallback al método normal
+      console.log('🔄 Intentando con token del usuario como fallback...')
+      return this.getCourseGroups(courseId)
     }
   }
 
@@ -937,60 +971,74 @@ class MoodleAPIClient {
           error: 'Cliente Moodle no configurado con URL base'
         }
       }
-      
+
       const baseUrl = this.config.baseUrl.replace('/webservice/rest/server.php', '')
-      const loginUrl = `${baseUrl}/login/token.php`
-      const params = new URLSearchParams({
-        username: username,
-        password: password,
-        service: 'moodle_mobile_app'
-      })
+      const tokenUrl = `${baseUrl}/login/token.php`
 
-      const response = await fetch(`${loginUrl}?${params.toString()}`, {
-        method: 'GET',
-        headers: {
-          'User-Agent': 'MoodleMobile',
-          'Accept': 'application/json'
-        },
-        timeout: 15000
-      })
+      // Intentar conexión directa
+      try {
+        const directResponse = await fetch(tokenUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          },
+          body: new URLSearchParams({
+            username: username,
+            password: password,
+            service: 'moodle_mobile_app'
+          })
+        })
 
-      if (!response.ok) {
-        console.error(`❌ Error HTTP ${response.status}: ${response.statusText}`)
+        if (directResponse.ok) {
+          const responseText = await directResponse.text()
+
+          // Verificar si es una respuesta JSON válida o HTML de Cloudflare
+          if (responseText.includes('<!DOCTYPE html>') || responseText.includes('Cloudflare')) {
+            return {
+              success: false,
+              error: 'Cloudflare está bloqueando la petición (respuesta HTML en lugar de JSON)'
+            }
+          }
+
+          try {
+            const moodleResponse = JSON.parse(responseText)
+
+            if (moodleResponse.token && !moodleResponse.error) {
+              const expiry = new Date()
+              expiry.setHours(expiry.getHours() + 1)
+
+              return {
+                success: true,
+                token: moodleResponse.token,
+                expiry: expiry
+              }
+            }
+
+            if (moodleResponse.error) {
+              return {
+                success: false,
+                error: moodleResponse.error
+              }
+            }
+          } catch (parseError) {
+            return {
+              success: false,
+              error: 'Respuesta inválida del servidor (no es JSON válido)'
+            }
+          }
+        }
+
         return {
           success: false,
-          error: `Error HTTP ${response.status}: ${response.statusText}`
+          error: `Error HTTP ${directResponse.status}: ${directResponse.statusText}`
         }
-      }
 
-      const data = await response.json()
-
-      if (data.error) {
-        console.error(`❌ Error de Moodle: ${data.error}`)
+      } catch (directError) {
         return {
           success: false,
-          error: data.error
+          error: `Error de conexión: ${directError instanceof Error ? directError.message : 'Error desconocido'}`
         }
-      }
-
-      if (!data.token) {
-        console.error('❌ Respuesta de Moodle sin token')
-        return {
-          success: false,
-          error: 'Respuesta de Moodle sin token'
-        }
-      }
-
-      // Calcular expiración (típicamente 1 hora desde ahora)
-      const expiry = new Date()
-      expiry.setHours(expiry.getHours() + 1)
-
-      console.log(`✅ Token obtenido exitosamente para: ${username}`)
-      
-      return {
-        success: true,
-        token: data.token,
-        expiry: expiry
       }
 
     } catch (error) {

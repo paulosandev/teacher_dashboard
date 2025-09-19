@@ -25,6 +25,21 @@ export interface AulaAuthResult {
   hasServiceAccess?: boolean       // Si hay acceso vía token de servicio
 }
 
+export interface ProfessorCourse {
+  aulaId: string
+  aulaUrl: string
+  courseId: number
+  courseName: string
+  courseShortName: string
+  groups: ProfessorGroup[]
+}
+
+export interface ProfessorGroup {
+  groupId: number
+  groupName: string
+  courseId: number
+}
+
 export interface MultiAulaAuthResult {
   success: boolean
   user: {
@@ -38,6 +53,7 @@ export interface MultiAulaAuthResult {
   invalidAulas: number
   aulaResults: AulaAuthResult[]
   primaryToken?: string  // Token del aula principal (primera válida)
+  professorCourses?: ProfessorCourse[]  // Cursos donde es profesor con sus grupos
   error?: string
 }
 
@@ -49,16 +65,24 @@ class MultiAulaAuthService {
     console.log(`🔐 Iniciando autenticación multi-aula para: ${username}`)
 
     try {
-      // PASO 1: TEMPORAL - Solo usar AV141 sin consultar base de datos de enrolments
-      console.log(`🔧 MODO TEMPORAL: Solo validando en AV141`)
-      const userEnrolments = [
-        {
-          aulaId: 'av141',
-          aulaUrl: 'https://av141.utel.edu.mx'
-        }
-      ]
+      // PASO 1: Consultar enrolments del usuario en la base de datos
+      console.log(`📚 Consultando enrolments para: ${username}`)
+      const userEnrolments = await this.findUserEnrolments(username)
 
-      console.log(`📚 Usuario validándose en ${userEnrolments.length} aula: ${userEnrolments.map(e => e.aulaId).join(', ')}`)
+      if (userEnrolments.length === 0) {
+        console.log(`❌ No se encontraron enrolments para la matrícula: ${username}`)
+        return {
+          success: false,
+          user: {} as any,
+          totalAulas: 0,
+          validAulas: 0,
+          invalidAulas: 0,
+          aulaResults: [],
+          error: 'Usuario no encontrado como profesor en ninguna aula'
+        }
+      }
+
+      console.log(`📚 Usuario encontrado en ${userEnrolments.length} aula(s): ${userEnrolments.map(e => e.aulaId).join(', ')}`)
 
       // PASO 2: Validar credenciales en cada aula donde está enrolado
       const aulaResults: AulaAuthResult[] = []
@@ -102,9 +126,14 @@ class MultiAulaAuthService {
         }
       }
 
-      // PASO 4: Preparar resultado exitoso
-      console.log(`✅ Autenticación exitosa: ${validAulas}/${userEnrolments.length} aulas válidas`)
-      
+      // PASO 4: Obtener cursos y grupos donde es profesor
+      console.log(`Obteniendo cursos y grupos donde es profesor...`)
+      const professorCourses = await this.getProfessorCoursesAndGroups(aulaResults.filter(r => r.isValidCredentials))
+
+      // PASO 5: Preparar resultado exitoso
+      console.log(`Autenticación exitosa: ${validAulas}/${userEnrolments.length} aulas válidas`)
+      console.log(`Encontrados ${professorCourses.length} cursos donde es profesor`)
+
       if (invalidAulas > 0) {
         console.log(`⚠️ ${invalidAulas} aula(s) con credenciales diferentes`)
       }
@@ -121,7 +150,8 @@ class MultiAulaAuthService {
         validAulas: validAulas,
         invalidAulas: invalidAulas,
         aulaResults: aulaResults,
-        primaryToken: primaryToken
+        primaryToken: primaryToken,
+        professorCourses: professorCourses
       }
 
     } catch (error) {
@@ -172,32 +202,60 @@ class MultiAulaAuthService {
   }
 
   /**
-   * Validar credenciales en una aula específica
+   * Validar credenciales en una aula específica usando el endpoint de Next.js
    */
   private async validateCredentialsInAula(
-    username: string, 
-    password: string, 
-    aulaId: string, 
+    username: string,
+    password: string,
+    aulaId: string,
     aulaUrl: string
   ): Promise<AulaAuthResult> {
     try {
       // Extraer dominio del aula (ej: av141, aula101)
       const domain = this.extractDomainFromUrl(aulaUrl)
-      
-      console.log(`🔍 Probando credenciales en ${domain} (${aulaUrl})`)
 
-      // Crear cliente Moodle para esta aula específica
-      const moodleClient = new MoodleAPIClient(aulaUrl, '')
-      
-      // Intentar obtener token con las credenciales
-      const tokenResult = await moodleClient.getTokenWithCredentials(username, password)
-      
-      if (!tokenResult.success || !tokenResult.token) {
-        console.log(`❌ Credenciales inválidas en ${domain}: ${tokenResult.error}`)
-        
+      console.log(`🔍 Probando credenciales en ${domain} (${aulaUrl}) via API endpoint`)
+
+      // Llamar al endpoint interno de Next.js en lugar de hacer la petición directamente
+      const response = await fetch('http://localhost:3000/api/moodle/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          username,
+          password,
+          aulaUrl
+        }),
+        cache: 'no-store'
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Error de red' }))
+        console.log(`❌ Error en endpoint para ${domain}: ${errorData.error}`)
+
         // Verificar si hay token de servicio disponible como fallback
         const serviceToken = serviceTokenManager.getServiceToken(aulaId)
-        
+
+        return {
+          aulaId,
+          aulaUrl,
+          domain,
+          isValidCredentials: false,
+          error: errorData.error || 'Error de conexión',
+          serviceToken,
+          hasServiceAccess: !!serviceToken
+        }
+      }
+
+      const tokenResult = await response.json()
+
+      if (!tokenResult.success || !tokenResult.token) {
+        console.log(`❌ Credenciales inválidas en ${domain}: ${tokenResult.error}`)
+
+        // Verificar si hay token de servicio disponible como fallback
+        const serviceToken = serviceTokenManager.getServiceToken(aulaId)
+
         return {
           aulaId,
           aulaUrl,
@@ -209,53 +267,42 @@ class MultiAulaAuthService {
         }
       }
 
-      // Crear cliente con el token obtenido
-      const authenticatedClient = new MoodleAPIClient(aulaUrl, tokenResult.token)
-      
-      // Obtener información del usuario
-      const userInfo = await authenticatedClient.callMoodleAPI('core_webservice_get_site_info', {})
-      
-      if (!userInfo || !userInfo.userid) {
-        console.log(`❌ No se pudo obtener información del usuario en ${domain}`)
-        return {
-          aulaId,
-          aulaUrl,
-          domain,
-          isValidCredentials: false,
-          error: 'No se pudo obtener información del usuario'
-        }
-      }
+      console.log(`✅ Credenciales válidas en ${domain}${tokenResult.userInfo ? ` para: ${tokenResult.userInfo.fullname}` : ''}`)
 
-      console.log(`✅ Credenciales válidas en ${domain} para: ${userInfo.fullname}`)
-      
       // Verificar si también hay token de servicio disponible
       const serviceToken = serviceTokenManager.getServiceToken(aulaId)
-      
+
       return {
         aulaId,
         aulaUrl,
         domain,
         isValidCredentials: true,
         token: tokenResult.token,
-        tokenExpiry: tokenResult.expiry,
-        userInfo: {
-          id: userInfo.userid,
-          username: userInfo.username,
-          fullname: userInfo.fullname,
-          email: userInfo.useremail || ''
-        },
+        tokenExpiry: tokenResult.expiry ? new Date(tokenResult.expiry) : new Date(Date.now() + 60 * 60 * 1000),
+        userInfo: tokenResult.userInfo ? {
+          id: tokenResult.userInfo.id,
+          username: tokenResult.userInfo.username,
+          fullname: tokenResult.userInfo.fullname,
+          email: tokenResult.userInfo.email || ''
+        } : undefined,
         serviceToken,
         hasServiceAccess: !!serviceToken
       }
 
     } catch (error) {
       console.error(`❌ Error validando credenciales en ${aulaId}:`, error)
+
+      // Verificar si hay token de servicio disponible como fallback
+      const serviceToken = serviceTokenManager.getServiceToken(aulaId)
+
       return {
         aulaId,
         aulaUrl,
         domain: this.extractDomainFromUrl(aulaUrl),
         isValidCredentials: false,
-        error: error instanceof Error ? error.message : 'Error de conexión'
+        error: error instanceof Error ? error.message : 'Error de conexión',
+        serviceToken,
+        hasServiceAccess: !!serviceToken
       }
     }
   }
@@ -309,6 +356,64 @@ class MultiAulaAuthService {
     }
 
     return `⚠️ Acceso parcial: ${result.validAulas} de ${result.totalAulas} aulas (credenciales diferentes en ${result.invalidAulas} aula(s))`
+  }
+
+  /**
+   * Obtener cursos y grupos donde el profesor está enrolado
+   */
+  private async getProfessorCoursesAndGroups(validAulas: AulaAuthResult[]): Promise<ProfessorCourse[]> {
+    const professorCourses: ProfessorCourse[] = []
+
+    for (const aula of validAulas) {
+      if (!aula.token || !aula.userInfo) continue
+
+      try {
+        console.log(`🔍 Buscando cursos de profesor en ${aula.aulaId}...`)
+
+        // Crear cliente Moodle para esta aula
+        const moodleClient = new MoodleAPIClient(aula.aulaUrl, aula.token)
+
+        // Obtener cursos donde es profesor (usando la función existente del cliente)
+        const teacherCourses = await moodleClient.getTeacherCoursesFiltered(aula.userInfo.id)
+
+        console.log(`📚 Encontrados ${teacherCourses.length} cursos como profesor en ${aula.aulaId}`)
+
+        // Para cada curso, obtener los grupos
+        for (const course of teacherCourses) {
+          try {
+            console.log(`👥 Obteniendo grupos del curso: ${course.shortname}`)
+
+            // Usar token de servicio para core_group_get_course_groups ya que requiere permisos administrativos
+            const courseGroups = await moodleClient.getCourseGroupsWithServiceToken(course.id, aula.aulaId)
+
+            const groups: ProfessorGroup[] = courseGroups.map(group => ({
+              groupId: group.id,
+              groupName: group.name,
+              courseId: course.id
+            }))
+
+            professorCourses.push({
+              aulaId: aula.aulaId,
+              aulaUrl: aula.aulaUrl,
+              courseId: course.id,
+              courseName: course.fullname,
+              courseShortName: course.shortname,
+              groups: groups
+            })
+
+            console.log(`✅ Curso ${course.shortname}: ${groups.length} grupo(s)`)
+
+          } catch (courseError) {
+            console.error(`Error obteniendo grupos para curso ${course.shortname}:`, courseError)
+          }
+        }
+
+      } catch (aulaError) {
+        console.error(`Error obteniendo cursos de ${aula.aulaId}:`, aulaError)
+      }
+    }
+
+    return professorCourses
   }
 }
 

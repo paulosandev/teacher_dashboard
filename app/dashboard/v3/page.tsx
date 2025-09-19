@@ -77,7 +77,10 @@ export default async function BatchDashboardPage() {
               startdate: item.course.startdate,
               enddate: item.course.enddate,
               course: item.course,
-              group: item.group
+              group: item.group,
+              aulaId: item.aulaId,
+              aulaUrl: item.aulaUrl,
+              domain: item.domain
             }))
           
           console.log(`📊 Filtrado: ${teacherCourseGroups.length} totales → ${courses.length} visibles/activos`)

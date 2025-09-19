@@ -116,7 +116,7 @@ export class MoodleAuthService {
       const params = new URLSearchParams({
         username,
         password,
-        service: 'moodle_mobile_app' // O el servicio configurado en tu Moodle
+        service: 'moodle_mobile_app'
       })
 
       const response = await fetch(tokenUrl, {
@@ -258,18 +258,19 @@ export class MoodleAuthService {
 
           const userInCourse = enrolledUsers.find((u: any) => u.id === userId)
           
-          if (userInCourse?.roles?.some((role: any) => 
+          if (userInCourse?.roles?.some((role: any) =>
             role.roleid === 3 || role.roleid === 4 ||
             role.shortname?.includes('teacher')
           )) {
-            // Obtener grupos del curso
-            const groups = await client.callMoodleAPI('core_group_get_course_groups', {
-              courseid: course.id
-            })
-            
+            // Obtener grupos donde el profesor está enrolado (en lugar del método administrativo)
+            console.log(`👥 [MÉTODO PROFESOR] Extrayendo grupos donde el profesor está enrolado en curso ${course.id}`)
+
+            const professorGroups = userInCourse.groups || []
+            console.log(`✅ Profesor encontrado en ${professorGroups.length} grupo(s) del curso ${course.fullname || course.name}`)
+
             teacherCourses.push({
               ...course,
-              groups: groups || []
+              groups: professorGroups
             })
           }
         } catch (error) {
@@ -307,8 +308,10 @@ export class MoodleAuthService {
       console.log(`   2. Recopilar IDs de todos los grupos en lote`)
       console.log(`   3. Consultar membresía de todos los grupos de una vez`)
       console.log(`   4. Filtrar grupos donde el profesor está enrolado`)
-      
-      const client = new MoodleAPIClient(this.baseUrl, token)
+
+      // Usar la URL del aula específica si se proporciona, sino usar la URL base
+      const aulaUrl = userAulaUrl || this.baseUrl
+      const client = new MoodleAPIClient(aulaUrl, token)
       
       // Paso 1: Obtener sus cursos
 //       console.log(`🚀 PASO 1: Obteniendo cursos del usuario ${userId}`)
@@ -353,20 +356,26 @@ export class MoodleAuthService {
 //           console.log(`👨‍🏫 Profesor CONFIRMADO en curso: ${curso.fullname || curso.name}`)
           teacherCourses.push(curso)
 
-          // Obtener grupos del curso
+          // Obtener grupos del curso usando método alternativo para profesores
           try {
-            const grupos_del_curso = await client.callMoodleAPI('core_group_get_course_groups', {
+            console.log(`👥 [MÉTODO PROFESOR] Obteniendo grupos donde el profesor está enrolado en curso ${curso.id}`)
+
+            // MÉTODO ALTERNATIVO: Obtener todos los usuarios enrolados (incluyendo profesores) con información de grupos
+            const enrolledUsers = await client.callMoodleAPI('core_enrol_get_enrolled_users', {
               courseid: curso.id
             })
 
-            if (grupos_del_curso && grupos_del_curso.length > 0) {
-//               console.log(`👥 Encontrados ${grupos_del_curso.length} grupos en curso ${curso.fullname || curso.name}`)
-              
-              // Para cada grupo en grupos_del_curso, agregar grupo.id a todos_los_ids_de_grupos
-              for (const grupo of grupos_del_curso) {
+            // Buscar al profesor en la lista de usuarios enrolados
+            const professorUser = enrolledUsers.find((user: any) => user.id === userId)
+
+            if (professorUser && professorUser.groups && professorUser.groups.length > 0) {
+              console.log(`✅ Profesor encontrado en ${professorUser.groups.length} grupo(s) del curso ${curso.fullname || curso.name}`)
+
+              // Para cada grupo donde está el profesor, agregarlo a la lista
+              for (const grupo of professorUser.groups) {
                 todos_los_ids_de_grupos.push(grupo.id)
                 courseGroupMapping[grupo.id] = { course: curso, group: grupo }
-//                 console.log(`   📌 Agregado grupo ID ${grupo.id}: ${grupo.name}`)
+                console.log(`   📌 Profesor enrolado en grupo ID ${grupo.id}: ${grupo.name}`)
               }
             } else {
 //               console.log(`📋 Curso sin grupos: ${curso.fullname || curso.name}`)

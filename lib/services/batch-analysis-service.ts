@@ -122,19 +122,7 @@ export class BatchAnalysisService {
     try {
       console.log(`🧠 Analizando ${activity.type} "${activity.name}" del curso ${activity.course.courseName} (Aula ${activity.aulaId})`)
 
-      // Para foros, usar análisis estándar por ahora
-      // TODO: Implementar análisis por grupos cuando se resuelva la importación de MoodleAPIClient
-      if (activity.type === 'forum') {
-        console.log(`📋 Analizando foro con enfoque en discusiones grupales: "${activity.name}"`)
-        // Por ahora usar el flujo estándar hasta resolver la importación dinámica
-      }
-      
-      // Para tareas, analizar con enfoque en retroalimentaciones
-      if (activity.type === 'assign') {
-        return await this.analyzeAssignmentFeedback(activity)
-      }
-
-      // Para otros tipos de actividad, usar el flujo original
+      // Para todos los tipos de actividad, usar el flujo estándar
       const analysisData = await this.prepareAnalysisData(activity)
       const analysisResult = await this.generateAnalysisWithAI(activity, analysisData)
       

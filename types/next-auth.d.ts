@@ -10,6 +10,10 @@ declare module 'next-auth' {
     moodleToken?: string
     moodleUrl?: string
     tokenExpiry?: Date
+    aulaInfo?: {
+      primaryAula: string
+      primaryUrl: string
+    }
     multiAulaData?: any
   }
 
@@ -23,6 +27,10 @@ declare module 'next-auth' {
       moodleToken?: string
       moodleUrl?: string
       tokenExpiry?: Date
+      aulaInfo?: {
+        primaryAula: string
+        primaryUrl: string
+      }
       multiAulaData?: any
     }
   }
@@ -37,6 +45,10 @@ declare module 'next-auth/jwt' {
     moodleToken?: string
     moodleUrl?: string
     tokenExpiry?: Date
+    aulaInfo?: {
+      primaryAula: string
+      primaryUrl: string
+    }
     multiAulaData?: any
   }
 }

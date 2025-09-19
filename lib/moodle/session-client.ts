@@ -37,8 +37,14 @@ export class SessionMoodleClient {
       throw new Error('Token de Moodle expirado. Por favor, inicie sesión nuevamente')
     }
 
+    // Usar la URL del aula principal de la sesión y construir URL completa de API
+    const baseUrl = session.user.moodleUrl || process.env.MOODLE_URL!
+    const moodleApiUrl = baseUrl.includes('/webservice/rest/server.php')
+      ? baseUrl
+      : `${baseUrl}/webservice/rest/server.php`
+
     return new MoodleAPIClient(
-      process.env.MOODLE_URL!,
+      moodleApiUrl,
       session.user.moodleToken
     )
   }
@@ -84,9 +90,10 @@ export class SessionMoodleClient {
 
   /**
    * Obtiene combinaciones curso-grupo donde el usuario actual es profesor y está enrolado
+   * NUEVO: Método multi-aula que obtiene cursos de TODAS las aulas autenticadas
    */
   async getTeacherCourseGroups() {
-    const session = this.serverSide 
+    const session = this.serverSide
       ? await getServerSession(authOptions)
       : await getSession()
 
@@ -94,14 +101,68 @@ export class SessionMoodleClient {
       throw new Error('No hay sesión activa')
     }
 
-    // Obtener la URL del aula desde la sesión (si existe)
-    const aulaUrl = session.user.moodleUrl || process.env.MOODLE_API_URL || 'https://av141.utel.edu.mx/webservice/rest/server.php'
-    
-    return await moodleAuthService.getTeacherCourseGroups(
-      session.user.moodleToken,
-      parseInt(session.user.id),
-      aulaUrl
-    )
+    // Verificar si tenemos datos multi-aula
+    const multiAulaData = session.user.multiAulaData
+    if (!multiAulaData?.aulaResults || multiAulaData.aulaResults.length === 0) {
+      console.log('⚠️ No hay datos multi-aula, usando método legacy de aula única')
+      // Fallback al método original para aula única
+      const baseUrl = session.user.moodleUrl || process.env.MOODLE_URL || 'https://av141.utel.edu.mx'
+      const aulaUrl = baseUrl.includes('/webservice/rest/server.php')
+        ? baseUrl
+        : `${baseUrl}/webservice/rest/server.php`
+
+      return await moodleAuthService.getTeacherCourseGroups(
+        session.user.moodleToken,
+        parseInt(session.user.id),
+        aulaUrl
+      )
+    }
+
+    console.log(`🏫 [MULTI-AULA] Obteniendo cursos de ${multiAulaData.aulaResults.length} aula(s)`)
+
+    // Obtener cursos de TODAS las aulas autenticadas
+    const allCourseGroups: any[] = []
+
+    for (const aulaResult of multiAulaData.aulaResults) {
+      if (!aulaResult.isValidCredentials || !aulaResult.token || !aulaResult.userInfo) {
+        console.log(`⚠️ Saltando aula ${aulaResult.aulaId} - credenciales inválidas o datos faltantes`)
+        continue
+      }
+
+      try {
+        console.log(`📚 Obteniendo cursos de aula ${aulaResult.aulaId} (${aulaResult.aulaUrl})`)
+
+        // Construir URL completa de API
+        const aulaUrl = aulaResult.aulaUrl.includes('/webservice/rest/server.php')
+          ? aulaResult.aulaUrl
+          : `${aulaResult.aulaUrl}/webservice/rest/server.php`
+
+        // Obtener cursos de esta aula específica
+        const aulaCourseGroups = await moodleAuthService.getTeacherCourseGroups(
+          aulaResult.token,
+          aulaResult.userInfo.id,
+          aulaUrl
+        )
+
+        console.log(`✅ Aula ${aulaResult.aulaId}: ${aulaCourseGroups.length} combinaciones curso-grupo`)
+
+        // Agregar información del aula a cada curso-grupo
+        const coursesWithAulaInfo = aulaCourseGroups.map(courseGroup => ({
+          ...courseGroup,
+          aulaId: aulaResult.aulaId,
+          aulaUrl: aulaResult.aulaUrl,
+          domain: aulaResult.domain
+        }))
+
+        allCourseGroups.push(...coursesWithAulaInfo)
+
+      } catch (error) {
+        console.error(`❌ Error obteniendo cursos de aula ${aulaResult.aulaId}:`, error)
+      }
+    }
+
+    console.log(`🎯 [MULTI-AULA] Total de combinaciones curso-grupo: ${allCourseGroups.length}`)
+    return allCourseGroups
   }
 
   /**

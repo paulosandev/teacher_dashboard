@@ -51,8 +51,8 @@ export interface AulaInfo {
 
 class IntegratedEnrolmentClient {
   private readonly TEACHER_ROLE_ID = 17
-  private readonly DB_HOST = process.env.ENROLMENT_DB_HOST || 'localhost'
-  private readonly DB_PORT = parseInt(process.env.ENROLMENT_DB_PORT || '3307')
+  private readonly DB_HOST = process.env.ENROLMENT_DB_HOST || 'wsdata.ce9oduyxts26.us-west-1.rds.amazonaws.com'  // Conexión directa
+  private readonly DB_PORT = parseInt(process.env.ENROLMENT_DB_PORT || '3306')  // Puerto MySQL estándar
   private readonly DB_USER = process.env.ENROLMENT_DB_USER || 'datos'
   private readonly DB_PASSWORD = process.env.ENROLMENT_DB_PASSWORD || 'PP7Su9e433aNZP956'
   private readonly DB_NAME = process.env.ENROLMENT_DB_NAME || 'heroku_e6e033d354ff64c'
@@ -111,16 +111,16 @@ class IntegratedEnrolmentClient {
       user: this.DB_USER,
       password: this.DB_PASSWORD,
       database: this.DB_NAME,
-      connectTimeout: 60000, // 60 segundos para túnel SSH
+      connectTimeout: 30000, // 30 segundos
       idleTimeout: 300000, // 5 minutos de inactividad
-      ssl: false // Deshabilitado para túnel SSH local
+      ssl: { rejectUnauthorized: false } // SSL con certificado no verificado
     })
     
-    console.log('✅ Conexión MySQL establecida')
+    console.log('✅ Conexión MySQL directa establecida')
   }
 
   /**
-   * Conectar directamente a MySQL
+   * Conectar a MySQL directamente
    */
   async connect(): Promise<void> {
     if (this.isConnected) {
@@ -133,7 +133,7 @@ class IntegratedEnrolmentClient {
       await this.establishDatabaseConnection()
       
       this.isConnected = true
-      console.log('🎉 Conexión directa establecida')
+      console.log('🎉 Conexión directa a MySQL establecida')
       
     } catch (error) {
       console.error('❌ Error estableciendo conexión:', error)

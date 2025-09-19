@@ -7,7 +7,7 @@ generator client {
 // Configuración para desarrollo (PostgreSQL) y producción (MySQL)
 // Para cambiar a MySQL en producción, configurar DATABASE_PROVIDER=mysql en .env
 datasource db {
-  provider = "mysql"  // Variable de entorno: "postgresql" o "mysql"
+  provider = "postgresql"  // Variable de entorno: "postgresql" o "mysql"
   url      = env("DATABASE_URL")
 }
 
