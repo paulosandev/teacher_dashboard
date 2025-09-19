@@ -216,8 +216,11 @@ class MultiAulaAuthService {
 
       console.log(`🔍 Probando credenciales en ${domain} (${aulaUrl}) via API endpoint`)
 
-      // Llamar al endpoint interno de Next.js en lugar de hacer la petición directamente
-      const response = await fetch('http://localhost:3000/api/moodle/token', {
+      // Llamar al endpoint interno de Next.js - usar la URL base dinámica para producción
+      const baseUrl = process.env.NODE_ENV === 'production'
+        ? (process.env.NEXTAUTH_URL || process.env.VERCEL_URL || 'http://localhost:3000')
+        : 'http://localhost:3000'
+      const response = await fetch(`${baseUrl}/api/moodle/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
