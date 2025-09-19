@@ -4,6 +4,9 @@ import { authOptions } from '@/lib/auth/auth-options'
 import { MoodleAPIClient } from '@/lib/moodle/api-client'
 import { PrismaClient } from '@prisma/client'
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic'
+
 // Use global prisma instance to avoid connection issues
 declare global {
   var prisma: PrismaClient | undefined
