@@ -350,7 +350,8 @@ async function getOpenActivitiesForGroup(
                         (!assignment.cutoffdate || assignment.cutoffdate === 0 || assignment.cutoffdate > now)
 
           // NUEVO: Verificar si tiene análisis pre-calculado (coherente con el backend)
-          const activityKey = `${aulaId}-${courseId}`
+          const aulaIdFromUrl = moodleApiUrl.replace('/webservice/rest/server.php', '').replace('https://', '').split('.')[0]
+          const activityKey = `${aulaIdFromUrl}-${courseId}`
           const hasAnalysis = await prisma.activityAnalysis.findFirst({
             where: {
               courseId: activityKey,
@@ -363,7 +364,7 @@ async function getOpenActivitiesForGroup(
                                        (assignment.submissions && assignment.submissions.length > 0)
 
           // NUEVO: Para aulas principales (101-110), mostrar TODAS las actividades
-          const isMainAula = /^aula10[1-9]$|^aula110$/.test(aulaId)
+          const isMainAula = /^aula10[1-9]$|^aula110$/.test(aulaIdFromUrl)
           const shouldShow = isMainAula ? true : (isOpen || hasSubstantialContent || hasAnalysis)
 
           if (!shouldShow) {
