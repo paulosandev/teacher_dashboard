@@ -136,8 +136,74 @@ export async function POST(request: NextRequest) {
 
     console.log(`🧠 Verificando análisis existente para ${activityType}: ${activityData.name}`)
 
-    console.log(`🆕 FORZANDO NUEVO ANÁLISIS (caché deshabilitado temporalmente)`)
+    // PRIORIDAD 1: Buscar análisis del sistema batch (mejor calidad)
+    console.log(`🔍 Buscando análisis del sistema batch primero...`)
 
+    // Intentar determinar aulaId para búsqueda en formato batch
+    let aulaId = 'av141' // valor por defecto
+    if (session.user.moodleUrl) {
+      const aulaMatch = session.user.moodleUrl.match(/aula(\d+)/)
+      if (aulaMatch) {
+        aulaId = aulaMatch[1]
+      }
+    }
+
+    const batchCourseId = `${aulaId}-${courseId}`
+    console.log(`🔍 Buscando análisis batch con courseId: ${batchCourseId}`)
+
+    const batchAnalysis = await prisma.activityAnalysis.findFirst({
+      where: {
+        courseId: batchCourseId,
+        activityId: activityId.toString(),
+        activityType: activityType,
+        isValid: true
+      },
+      orderBy: {
+        lastUpdated: 'desc'
+      }
+    })
+
+    if (batchAnalysis && batchAnalysis.fullAnalysis) {
+      console.log(`✅ Encontrado análisis batch de alta calidad, usándolo en lugar de generar uno nuevo`)
+
+      // Retornar el análisis batch existente con el formato esperado por el frontend
+      const response = {
+        success: true,
+        analysis: {
+          summary: batchAnalysis.summary,
+          positives: batchAnalysis.positives || [],
+          alerts: batchAnalysis.alerts || [],
+          insights: batchAnalysis.insights || [],
+          recommendation: batchAnalysis.recommendation || 'Continuar monitoreando',
+          fullAnalysis: batchAnalysis.fullAnalysis, // El campo clave con el análisis detallado
+          activityId: activityData.id,
+          activityType: activityType,
+          activityName: activityData.name,
+          generatedAt: batchAnalysis.lastUpdated.toISOString(),
+          fromBatchSystem: true // Indicar que viene del sistema batch
+        },
+        metadata: {
+          generatedAt: batchAnalysis.lastUpdated.toISOString(),
+          source: 'batch-system',
+          batchAnalysisId: batchAnalysis.id
+        }
+      }
+
+      if (includeDetailedInfo) {
+        response.prompt = 'Análisis generado por sistema batch con prompts optimizados'
+        response.collectedData = {
+          activityType,
+          activityName: activityData.name,
+          rawActivityData: activityData,
+          source: 'batch-system',
+          processingTimestamp: batchAnalysis.lastUpdated.toISOString()
+        }
+      }
+
+      return NextResponse.json(response)
+    }
+
+    console.log(`⚠️ No se encontró análisis batch, generando nuevo análisis individual...`)
     console.log(`🧠 Generando nuevo análisis para ${activityType}: ${activityData.name}`)
 
     // Verificar si OpenAI está disponible
@@ -200,63 +266,84 @@ export async function POST(request: NextRequest) {
     console.log('  - Alerts:', transformedResult.alerts?.length || 0)
     console.log('  - Insights:', transformedResult.insights?.length || 0)
 
-    // Guardar el análisis en la base de datos
+    // Guardar el análisis en la base de datos (solo si no es del sistema batch)
     try {
-      // Primero buscar si existe
-      const existing = await prisma.activityAnalysis.findFirst({
+      // IMPORTANTE: No sobrescribir análisis del sistema batch
+      // Primero verificar si ya existe un análisis del sistema batch
+      const batchAnalysisExists = await prisma.activityAnalysis.findFirst({
         where: {
-          moodleCourseId: courseId,
+          courseId: batchCourseId, // Formato batch: "101-818"
           activityId: activityId.toString(),
-          activityType: activityType
+          activityType: activityType,
+          isValid: true
         }
       })
 
-      if (existing) {
-        // Actualizar el registro existente
-        await prisma.activityAnalysis.update({
-          where: { id: existing.id },
-          data: {
-            activityName: activityData.name,
-            summary: typeof transformedResult.summary === 'string' ? transformedResult.summary : JSON.stringify(transformedResult.summary || {}),
-            positives: Array.isArray(transformedResult.positives) ? transformedResult.positives : [],
-            alerts: Array.isArray(transformedResult.alerts) ? transformedResult.alerts : [],
-            insights: Array.isArray(transformedResult.insights) ? transformedResult.insights : [],
-            recommendation: typeof transformedResult.recommendation === 'string' ? transformedResult.recommendation : 'Análisis completado',
-            llmResponse: {
-              markdownContent: transformedResult.markdownContent,
-              dimensions: transformedResult.dimensions,
-              originalResponse: analysisResult
-            },
-            lastUpdated: new Date(),
-            isValid: true
-          }
-        })
+      if (batchAnalysisExists) {
+        console.log(`⚠️ Ya existe análisis del sistema batch para ${activityData.name}, NO sobrescribiendo`)
+        console.log(`💡 El análisis batch es de mejor calidad y debe tener prioridad`)
       } else {
-        // Crear nuevo registro
-        await prisma.activityAnalysis.create({
-          data: {
-            courseId: courseId,
+        // Buscar análisis individual existente
+        const existing = await prisma.activityAnalysis.findFirst({
+          where: {
             moodleCourseId: courseId,
             activityId: activityId.toString(),
             activityType: activityType,
-            activityName: activityData.name,
-            summary: typeof transformedResult.summary === 'string' ? transformedResult.summary : JSON.stringify(transformedResult.summary || {}),
-            positives: Array.isArray(transformedResult.positives) ? transformedResult.positives : [],
-            alerts: Array.isArray(transformedResult.alerts) ? transformedResult.alerts : [],
-            insights: Array.isArray(transformedResult.insights) ? transformedResult.insights : [],
-            recommendation: typeof transformedResult.recommendation === 'string' ? transformedResult.recommendation : 'Análisis completado',
-            llmResponse: {
-              markdownContent: transformedResult.markdownContent,
-              dimensions: transformedResult.dimensions,
-              originalResponse: analysisResult
-            },
-            lastUpdated: new Date(),
-            isValid: true
+            // Asegurar que NO es un análisis batch
+            courseId: {
+              not: batchCourseId
+            }
           }
         })
+
+        if (existing) {
+          // Actualizar solo análisis individual (no batch)
+          await prisma.activityAnalysis.update({
+            where: { id: existing.id },
+            data: {
+              activityName: activityData.name,
+              summary: typeof transformedResult.summary === 'string' ? transformedResult.summary : JSON.stringify(transformedResult.summary || {}),
+              positives: Array.isArray(transformedResult.positives) ? transformedResult.positives : [],
+              alerts: Array.isArray(transformedResult.alerts) ? transformedResult.alerts : [],
+              insights: Array.isArray(transformedResult.insights) ? transformedResult.insights : [],
+              recommendation: typeof transformedResult.recommendation === 'string' ? transformedResult.recommendation : 'Análisis completado',
+              llmResponse: {
+                markdownContent: transformedResult.markdownContent,
+                dimensions: transformedResult.dimensions,
+                originalResponse: analysisResult
+              },
+              lastUpdated: new Date(),
+              isValid: true
+            }
+          })
+          console.log(`💾 Análisis individual actualizado para ${activityData.name}`)
+        } else {
+          // Crear nuevo registro individual
+          await prisma.activityAnalysis.create({
+            data: {
+              courseId: `individual-${courseId}`, // Marcar claramente como individual
+              moodleCourseId: courseId,
+              activityId: activityId.toString(),
+              activityType: activityType,
+              activityName: activityData.name,
+              summary: typeof transformedResult.summary === 'string' ? transformedResult.summary : JSON.stringify(transformedResult.summary || {}),
+              positives: Array.isArray(transformedResult.positives) ? transformedResult.positives : [],
+              alerts: Array.isArray(transformedResult.alerts) ? transformedResult.alerts : [],
+              insights: Array.isArray(transformedResult.insights) ? transformedResult.insights : [],
+              recommendation: typeof transformedResult.recommendation === 'string' ? transformedResult.recommendation : 'Análisis completado',
+              llmResponse: {
+                markdownContent: transformedResult.markdownContent,
+                dimensions: transformedResult.dimensions,
+                originalResponse: analysisResult
+              },
+              lastUpdated: new Date(),
+              isValid: true
+            }
+          })
+          console.log(`💾 Nuevo análisis individual creado para ${activityData.name}`)
+        }
       }
 
-      console.log(`💾 Análisis guardado en cache para ${activityData.name}`)
     } catch (dbError) {
       console.error('⚠️ Error guardando en cache (continuando):', dbError)
       // No fallar si hay error en la base de datos, solo continuar

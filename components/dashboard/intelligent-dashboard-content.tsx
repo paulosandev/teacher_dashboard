@@ -917,10 +917,18 @@ export function IntelligentDashboardContent({
     const points = []
     let summaryPoints = []
     
-    // Dividir por headers ## (secciones principales)
-    const sections = content.split(/(?=^##\s)/gm)
+    // Dividir por headers #### o ## (secciones principales)
+    // Primero intentar con #### (nuevo formato), luego con ## (formato anterior)
+    let sections = content.split(/(?=^####\s)/gm)
       .map((section: string) => section.trim())
       .filter((section: string) => section.length > 20)
+
+    // Si no encuentra secciones con ####, intentar con ##
+    if (sections.length <= 1) {
+      sections = content.split(/(?=^##\s)/gm)
+        .map((section: string) => section.trim())
+        .filter((section: string) => section.length > 20)
+    }
 
     if (sections.length > 1) {
       // Si hay secciones con headers, usar esas
@@ -928,7 +936,7 @@ export function IntelligentDashboardContent({
         // Extraer título y contenido
         const lines = section.split('\n')
         const headerLine = lines[0]
-        const title = headerLine.replace(/^##\s*/, '').trim()
+        const title = headerLine.replace(/^#{2,4}\s*/, '').trim()
         const sectionContent = lines.slice(1).join('\n').trim()
         
         // Buscar si es el resumen ejecutivo (más flexible)

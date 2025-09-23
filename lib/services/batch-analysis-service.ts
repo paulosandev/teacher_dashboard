@@ -6,6 +6,7 @@
 import { PrismaClient } from '@prisma/client'
 import OpenAI from 'openai'
 import { aulaConfigService } from './aula-config-service'
+import { MoodleAPIClient } from '../moodle/api-client'
 
 // Use global prisma instance to avoid connection issues
 declare global {
@@ -61,11 +62,28 @@ export class BatchAnalysisService {
       while (hasMoreActivities) {
         console.log(`📄 Procesando página ${currentPage + 1} (hasta ${PAGE_SIZE} actividades)`)
 
-        // Obtener página actual de actividades pendientes
+        // Obtener página actual de actividades pendientes Y ACTIVAS
+        const now = new Date()
+        console.log(`📅 Filtrando actividades activas (fecha actual: ${now.toISOString()})`)
         const pendingActivities = await prisma.courseActivity.findMany({
           where: {
             needsAnalysis: true,
-            visible: true
+            visible: true,
+            // Filtros de actividades activas:
+            // 1. Actividad debe haber comenzado (openDate <= now OR openDate is null)
+            OR: [
+              { openDate: null },
+              { openDate: { lte: now } }
+            ],
+            // 2. Actividad no debe haber terminado (closeDate > now OR closeDate is null)
+            AND: [
+              {
+                OR: [
+                  { closeDate: null },
+                  { closeDate: { gt: now } }
+                ]
+              }
+            ]
           },
           include: {
             course: true,
@@ -306,8 +324,25 @@ export class BatchAnalysisService {
       
       // Si ya tenemos discussions, enriquecerlas con hilos completos
       if (forumData.discussions && Array.isArray(forumData.discussions)) {
-        const enrichedDiscussions = forumData.discussions.map((discussion: any) => {
-          return {
+        const enrichedDiscussions = []
+
+        // Necesitamos un cliente Moodle para obtener los posts
+        const aulaConfig = aulaConfigService.getAulaConfig(activity.aulaId)
+        if (!aulaConfig) {
+          console.log(`❌ No se encontró configuración para aula ${activity.aulaId}`)
+          return forumData
+        }
+
+        const client = new MoodleAPIClient(aulaConfig.apiUrl, aulaConfig.token)
+
+        for (const discussion of forumData.discussions) {
+          console.log(`🔍 Obteniendo posts completos para discusión ${discussion.discussion || discussion.id}`)
+
+          // CRÍTICO: Obtener TODOS los posts de esta discusión
+          const discussionPosts = await client.getDiscussionPosts(discussion.discussion || discussion.id)
+          console.log(`💬 Encontrados ${discussionPosts.length} posts en discusión ${discussion.name}`)
+
+          const enrichedDiscussion = {
             // Datos básicos de la discusión
             id: discussion.discussion || discussion.id,
             name: discussion.name || discussion.subject,
@@ -316,9 +351,9 @@ export class BatchAnalysisService {
             userId: discussion.userid || discussion.userId,
             created: discussion.created || discussion.timemodified,
             groupId: discussion.groupid || 0,
-            
+
             // PROFUNDIZACIÓN: Posts completos con hilos anidados
-            posts: (discussion.posts || []).map((post: any) => ({
+            posts: discussionPosts.map((post: any) => ({
               id: post.id,
               discussion: post.discussion,
               parent: post.parent, // Para hilos anidados
@@ -347,16 +382,18 @@ export class BatchAnalysisService {
               isReply: post.parent && post.parent !== '0'
             })),
             
-            // NUEVO: Estadísticas de la discusión
+            // NUEVO: Estadísticas de la discusión basadas en posts reales
             discussionStats: {
-              totalPosts: (discussion.posts || []).length,
-              uniqueParticipants: new Set((discussion.posts || []).map(p => p.userid)).size,
-              averagePostLength: (discussion.posts || []).reduce((sum, p) => sum + (p.message || '').length, 0) / Math.max((discussion.posts || []).length, 1),
-              postsWithAttachments: (discussion.posts || []).filter(p => p.attachments && p.attachments.length > 0).length,
-              threadDepth: this.calculateThreadDepth(discussion.posts || [])
+              totalPosts: discussionPosts.length,
+              uniqueParticipants: new Set(discussionPosts.map(p => p.userid)).size,
+              averagePostLength: discussionPosts.reduce((sum, p) => sum + (p.message || '').length, 0) / Math.max(discussionPosts.length, 1),
+              postsWithAttachments: discussionPosts.filter(p => p.attachments && p.attachments.length > 0).length,
+              threadDepth: this.calculateThreadDepth(discussionPosts)
             }
           }
-        })
+
+          enrichedDiscussions.push(enrichedDiscussion)
+        }
 
         return {
           ...forumData,
@@ -431,7 +468,7 @@ export class BatchAnalysisService {
             content: sanitizedPrompt
           }
         ],
-        max_completion_tokens: 30000  // Aumentado a 10,000 tokens para análisis completos
+        max_completion_tokens: 32768  // Ajustado para gpt-5-mini
       })
 
       return completion.choices[0]?.message?.content || null
@@ -477,37 +514,54 @@ ${JSON.stringify(optimizedAnalysisData, null, 2)}
 
     // Verificar tamaño total
     const totalSize = JSON.stringify(optimized).length
-    const MAX_SIZE = 500000 // Límite aumentado para análisis completo (500KB)
+    const MAX_SIZE = 500000 // Límite para gpt-5-mini contexto total (500KB)
 
-    // Solo aplicar optimización mínima si es absolutamente necesario
+    // Aplicar optimización agresiva para o1-mini
     if (totalSize > MAX_SIZE) {
-      console.warn(`⚠️ Datos muy grandes (${totalSize} bytes). Aplicando optimización mínima.`)
+      console.warn(`⚠️ Datos muy grandes (${totalSize} bytes). Aplicando optimización agresiva para gpt-5-mini.`)
 
-      // Solo remover rawData si es extremadamente grande
-      if (optimized.rawData && typeof optimized.rawData === 'object') {
-        const rawDataStr = JSON.stringify(optimized.rawData)
-        if (rawDataStr.length > 100000) { // Solo si rawData es > 100KB
-          optimized.rawData = {
-            note: 'Datos raw omitidos por tamaño extremo',
-            originalSize: rawDataStr.length,
-            keys: Object.keys(optimized.rawData)
-          }
+      // Remover rawData inmediatamente
+      if (optimized.rawData) {
+        optimized.rawData = {
+          note: 'Datos raw omitidos para gpt-5-mini',
+          originalSize: JSON.stringify(optimized.rawData).length
         }
       }
 
-      // Para actividades con más de 10,000 elementos, aplicar paginación suave
-      if (activityType === 'forum' && optimized.forumDetails?.discussions?.length > 1000) {
-        console.log(`📊 Forum con ${optimized.forumDetails.discussions.length} discusiones - manteniendo todas`)
+      // Para foros: truncar posts largos y limitar número de posts
+      if (activityType === 'forum' && optimized.forumDetails?.discussions) {
+        optimized.forumDetails.discussions = optimized.forumDetails.discussions.map((discussion: any) => {
+          if (discussion.posts && discussion.posts.length > 20) {
+            // Solo mantener los primeros 20 posts más relevantes
+            discussion.posts = discussion.posts.slice(0, 20)
+          }
+          // Truncar contenido de posts largos
+          if (discussion.posts) {
+            discussion.posts = discussion.posts.map((post: any) => ({
+              ...post,
+              message: post.message ? post.message.substring(0, 1000) + (post.message.length > 1000 ? '...[truncado]' : '') : post.message
+            }))
+          }
+          return discussion
+        })
       }
 
-      if (activityType === 'assign' && optimized.assignmentDetails?.submissions?.length > 1000) {
-        console.log(`📊 Assignment con ${optimized.assignmentDetails.submissions.length} entregas - manteniendo todas`)
+      // Para assignments: limitar submissions
+      if (activityType === 'assign' && optimized.assignmentDetails?.submissions?.length > 10) {
+        optimized.assignmentDetails.submissions = optimized.assignmentDetails.submissions.slice(0, 10)
       }
     }
 
-    // POLÍTICA NUEVA: NO TRUNCAR NADA - Enviar contenido completo
-    console.log(`📊 Enviando datos completos para análisis detallado: ${JSON.stringify(analysisData).length} chars (${activityType})`)
-    return analysisData // Devolver datos originales completos SIN optimización
+    // POLÍTICA INTELIGENTE: Optimizar solo si excede límites de GPT-4o
+    const dataSize = JSON.stringify(analysisData).length
+    console.log(`📊 Enviando datos para análisis detallado: ${dataSize} chars (${activityType})`)
+
+    if (dataSize > MAX_SIZE) {
+      console.log(`⚙️ Aplicando optimización inteligente (${dataSize} > ${MAX_SIZE})`)
+      return optimized
+    }
+
+    return analysisData // Datos originales si están dentro del límite
   }
 
   /**
@@ -516,90 +570,62 @@ ${JSON.stringify(optimizedAnalysisData, null, 2)}
   private getInstructionsByActivityType(activityType: string): string {
     switch (activityType.toLowerCase()) {
       case 'forum':
-        return `Eres un asistente del docente en la Universidad UTEL. Tu tarea consiste en ayudarle a identificar insights accionables que contribuyan al cumplimiento de los objetivos del curso acerca del comportamiento de sus estudiantes dentro de las actividades en el foro de discusión. El propósito es que pueda mantener una visión clara de lo que ocurre en él y, en caso necesario, intervenga de manera pertinente durante su próxima videoconferencia con los estudiantes (openclass).
+        return `Eres el asistente pedagógico del profesor en la Universidad UTEL. Tu misión es generar un análisis orientado a la próxima openclass que sea práctico y accionable.
 
-IMPORTANTE: Tienes acceso completo a TODAS las conversaciones, hilos de discusión, respuestas anidadas, y el contenido textual completo de cada mensaje. Analiza en profundidad:
+ESTILO CONVERSACIONAL:
+- Redacta con un tono cercano y orientado al profesor, como si fueras su asistente pedagógico
+- No uses jerga técnica ni frases impersonales
+- Evita mencionar detalles técnicos de la plataforma (HTML, campos de API, IDs de sistema, "uniqueParticipants", "por API", "artefactos")
+- Concéntrate únicamente en el contenido de las participaciones y lo que revelan del aprendizaje
+- Usa datos cuantitativos solo cuando sean necesarios para resaltar patrones (ej: "la mitad de los posts están en la primera discusión"), no para dar cifras técnicas o promedios exactos
 
-📋 **CONVERSACIONES COMPLETAS**: Examina todo el contenido de los mensajes, no solo estadísticas
-📋 **HILOS Y RESPUESTAS**: Analiza la estructura de las conversaciones, quién responde a quién
-📋 **CALIDAD DEL CONTENIDO**: Evalúa la profundidad, relevancia y calidad académica de cada participación
-📋 **DINÁMICAS SOCIALES**: Identifica líderes, participantes pasivos, y patrones de interacción
-📋 **TEMAS EMERGENTES**: Detecta dudas recurrentes, malentendidos, o temas fuera del alcance
-📋 **EVOLUCIÓN TEMPORAL**: Observa cómo se desarrollan las discusiones en el tiempo
+ESTRUCTURA FIJA (exactamente en este orden):
 
-Considera que varias retroalimentaciones pueden ser generadas por un asistente virtual, así que también evalúa esa dinámica.
+#### Nivel de participación
+Analiza patrones de participación que afecten el aprendizaje: distribución de estudiantes activos, equilibrio temporal, estudiantes ausentes. Enfócate en PATRONES pedagógicos, no números exactos.
 
-Redacta con un estilo conversacional dirigido al docente de quien eres asistente, utilizando el principio de minto pyramid (no menciones que estás redactando utilizando este principio) donde la conclusión son los insights accionales.
+#### Calidad académica de las aportaciones
+Evalúa profundidad intelectual: comprensión conceptual demostrada, vocabulario especializado apropiado, desarrollo argumentativo, claridad de escritura. Enfócate en CAPACIDADES cognitivas observadas.
 
-FORMATO OBLIGATORIO - El análisis debe estructurarse EXACTAMENTE en estas 5 dimensiones. Cada dimensión debe presentarse con el formato siguiente:
+#### Cumplimiento de la consigna
+Verifica adherencia a instrucciones: respuesta a preguntas específicas, formato solicitado, límites de extensión, puntualidad. Enfócate en HÁBITOS de trabajo académico.
 
-**[Nombre de la dimensión]**
+#### Uso de referencias y fundamentación teórica
+Examina rigor académico: presencia de citas reales, calidad del formato APA, conexión teoría-práctica, tipo de fuentes. Enfócate en COMPETENCIAS de investigación.
 
-- **Hallazgo 1**: Descripción DETALLADA con **nombres específicos**, **fechas**, **cantidades** en negritas
-- **Hallazgo 2**: Descripción DETALLADA con **datos cuantitativos** específicos y ejemplos concretos
-- **Hallazgo 3**: Descripción DETALLADA con **citas textuales** y **patrones identificados**
-- **Hallazgo 4**: Descripción DETALLADA con **comparaciones** y **contexto educativo**
-**Acción sugerida:** Redactar recomendación ESPECÍFICA con pasos concretos y medibles.
+#### Dinámica de interacción entre compañeros
+Analiza colaboración: calidad del feedback entre pares, construcción colaborativa de conocimiento, tono y respeto, densidad de intercambios. Enfócate en HABILIDADES sociales de aprendizaje.
 
-DIMENSIONES OBLIGATORIAS para foros (DEBEN aparecer todas en este orden):
+FORMATO OBLIGATORIO POR DIMENSIÓN:
+#### [Nombre exacto]
+* 3-4 viñetas máximo con hallazgos breves y claros
+* Resalta con **negritas** solo elementos pedagógicamente clave
+* Cada dimensión debe cerrar con una línea que comience con '**Acción sugerida:**' y una recomendación breve, concreta y accionable
 
-1. **Calidad de las conversaciones** (analiza el contenido textual real de los mensajes)
-2. **Patrones de participación** (quién participa, cuándo, y con qué frecuencia)  
-3. **Dinámicas de grupo** (interacciones, respuestas, construcción colectiva)
-4. **Temas y dudas emergentes** (análisis semántico del contenido)
-5. **Oportunidades de intervención** (momentos específicos para actuar)
+REQUISITOS CRÍTICOS:
+- NO repitas información entre dimensiones
+- NO sobrecargues con cifras innecesarias
+- SÍ analiza contenido real de participaciones
+- SÍ identifica conceptos educativos específicos mencionados
+- SÍ detecta patrones de aprendizaje observables
 
-REGLAS ESTRICTAS AMPLIADAS:
-- EXACTAMENTE 5 dimensiones, con análisis EXTENSO en cada una
-- Cada dimensión DEBE tener MÍNIMO 4 hallazgos específicos y detallados
-- INCLUIR nombres específicos de estudiantes cuando sea relevante
-- INCLUIR datos cuantitativos: números de posts, fechas, horarios de participación
-- MENCIONAR contenido textual específico y citas cuando sea relevante para ilustrar puntos
-- ANALIZAR patrones temporales de participación
-- Cada dimensión DEBE terminar con "Acción sugerida:" con pasos específicos y medibles
-- El análisis completo debe tener MÍNIMO 1000 palabras
-- Usar TODO el contenido de conversaciones disponible, no resumir
-- Si hay pocas conversaciones, analizar en mayor profundidad las existentes
-
-IMPORTANTE: NO menciones nombres de variables, parámetros técnicos, campos de base de datos ni referencias a código. Usa lenguaje natural y enfocado en el contexto educativo. Por ejemplo, no digas "el campo 'posts' muestra" sino "las conversaciones de los estudiantes revelan". Analiza el CONTENIDO REAL de los mensajes, no solo metadatos.`
+Inicia directamente con la primera dimensión, sin introducciones.`
 
       case 'assign':
       case 'assignment':
-        return `Eres un asistente del docente en la Universidad UTEL. Tu tarea consiste en ayudarle a identificar insights accionables que contribuyan al cumplimiento de los objetivos del curso acerca del comportamiento de sus estudiantes dentro de las actividades de tareas y entregas. El propósito es que pueda mantener una visión clara del desempeño y cumplimiento de los estudiantes y, en caso necesario, intervenga de manera pertinente durante su próxima videoconferencia con los estudiantes (openclass).
+        return `Eres un asistente del profesor en la Universidad UTEL. Tu tarea consiste en ayudarle a identificar insights accionables que contribuyan al cumplimiento de los objetivos del curso acerca del comportamiento de sus estudiantes dentro de las actividades de tareas y entregas. El propósito es que, aunque el profesor no participa directamente en cada entrega, pueda mantener una visión clara del desempeño y cumplimiento de los estudiantes y, en caso necesario, intervenga de manera pertinente durante su próxima videoconferencia con los estudiantes (openclass).
 
-IMPORTANTE: Tienes acceso completo a TODAS las entregas de los estudiantes, incluyendo el contenido textual completo, archivos adjuntos, retroalimentaciones detalladas, historial de intentos, y conversaciones completas entre estudiante-profesor. Analiza en profundidad:
-
-📚 **CONTENIDO DE ENTREGAS**: Examina el texto completo enviado por cada estudiante
-📚 **RETROALIMENTACIONES COMPLETAS**: Analiza todos los comentarios y feedback proporcionado
-📚 **HISTORIAL DE INTENTOS**: Revisa múltiples entregas y correcciones del mismo estudiante
-📚 **CONVERSACIONES**: Evalúa la comunicación bidireccional estudiante-profesor
-📚 **ARCHIVOS Y ATTACHMENTS**: Considera la variedad y calidad de materiales adjuntos
-📚 **PATRONES TEMPORALES**: Identifica tendencias de entrega y respuesta a feedback
-
-Considera que varias calificaciones y retroalimentaciones pueden ser generadas por un asistente virtual, así que también evalúa esa dinámica y su efectividad.
-
-Redacta con un estilo conversacional dirigido al docente de quien eres asistente, utilizando el principio de minto pyramid (no menciones que estás redactando utilizando este principio) donde la conclusión son los insights accionables.
-
-El análisis debe estructurarse en al menos 5 dimensiones. Cada dimensión debe presentarse con el formato siguiente:
-**[Nombre de la dimensión]**
-
-Incluye hallazgos clave en viñetas, redactados de forma breve y clara.
-Cada hallazgo debe resaltar con negritas los elementos relevantes.
-**Acción sugerida:** redactar una recomendación específica, breve y accionable para el docente.
-
-Ordena las dimensiones de mayor a menor impacto.
-El formato de entrega solo es markdown.
-El análisis debe limitarse únicamente al reporte solicitado, sin incluir preguntas, sugerencias adicionales, invitaciones a continuar ni ofertas de recursos complementarios.
-El análisis debe iniciar directamente con los insights accionables, sin incluir introducciones, frases de encuadre, ni explicaciones preliminares.
-
-DIMENSIONES OBLIGATORIAS para tareas (usa el contenido completo disponible):
-- **Calidad del trabajo entregado** (analiza el contenido textual real de las entregas)
-- **Efectividad de la retroalimentación** (evalúa la calidad y profundidad del feedback)
-- **Patrones de entrega y reenvío** (timing, multiple attempts, mejoras)
-- **Comunicación estudiante-profesor** (conversaciones, preguntas, clarificaciones)
-- **Estudiantes en riesgo** (identificación basada en patrones múltiples)
-
-IMPORTANTE: NO menciones nombres de variables, parámetros técnicos, campos de base de datos ni referencias a código. Usa lenguaje natural y enfocado en el contexto educativo. Por ejemplo, no digas "el objeto 'submissions' indica" sino "las entregas de los estudiantes revelan". Analiza el CONTENIDO REAL de las entregas y retroalimentaciones, no solo metadatos.`
+- Redacta con un estilo conversacional dirigido al profesor de quien eres asistente, utilizando el principio de minto pyramid (no menciones que estás redactando utilizando este principio) donde la conclusión son los insights accionales.
+- El análisis debe estructurarse en al menos 5 dimensiones. Cada dimensión debe presentarse con el formato siguiente:
+  #### [Nombre de la dimensión]
+  * Incluye hallazgos clave en viñetas, redactados de forma breve y clara.
+  * Cada hallazgo debe resaltar con negritas los elementos relevantes.
+  **Acción sugerida:** redactar una recomendación específica, breve y accionable para el profesor.
+- Ordena las dimensiones de mayor a menor impacto.
+- El formato de entrega solo es markdown.
+- El análisis debe limitarse únicamente al reporte solicitado, sin incluir preguntas, sugerencias adicionales, invitaciones a continuar ni ofertas de recursos complementarios.
+- El análisis debe iniciar directamente con los insights accionables, sin incluir introducciones, frases de encuadre, ni explicaciones preliminares.
+- Siempre incluye insights accionables acerca de nivel de entrega y cumplimiento, y si surgen dudas o patrones de incumplimiento.`
 
       default:
         return `Eres un asistente del docente en la Universidad UTEL. Tu tarea consiste en ayudarle a identificar insights accionables que contribuyan al cumplimiento de los objetivos del curso acerca del comportamiento de sus estudiantes en las actividades educativas. El propósito es que pueda mantener una visión clara del desempeño y, en caso necesario, intervenga de manera pertinente durante su próxima videoconferencia con los estudiantes (openclass).
@@ -639,34 +665,94 @@ IMPORTANTE: NO menciones nombres de variables, parámetros técnicos, campos de 
 
     const insights: string[] = []
 
-    // Buscar patrones de insights positivos
-    const positivePatterns = [
-      /\*\*Hallazgo positivo[^:]*:\*\* (.+?)(?=\.|;|❌|⚠️|$)/gi,
-      /- \*\*Hallazgo \d+\*\*: Hay \*\*(.+?)\*\*/gi,
-      /- \*\*Hallazgo \d+\*\*: (.+?) \*\*funciona[^\*]*\*\*/gi,
-      /✅ (.+?)(?=\n|$)/gi,
-      /\*\*Fortaleza:\*\* (.+?)(?=\.|;|\n|$)/gi,
-      /\*\*Aspecto positivo:\*\* (.+?)(?=\.|;|\n|$)/gi,
-      /son \*\*(.+?)\*\*/gi,
-      /está \*\*(.+?)\*\*/gi,
-      /\*\*múltiples (.+?)\*\* con contenido académico/gi,
-      /\*\*(.+?)\*\* están documentando/gi
-    ]
+    // NUEVO: Buscar patrones en el formato de 5 dimensiones con #### headers
+    const sections = analysisText.split(/(?=^####\s)/gm)
 
-    positivePatterns.forEach(pattern => {
-      const matches = analysisText.match(pattern)
-      if (matches) {
-        matches.forEach(match => {
-          let cleaned = match.replace(/^[- ✅]*\*\*[^:]*:\*\*/, '').trim()
-          if (cleaned.includes('son **') || cleaned.includes('está **')) {
-            cleaned = cleaned.replace(/son \*\*/, '').replace(/está \*\*/, '').replace(/\*\*/g, '')
+    sections.forEach(section => {
+      if (!section.trim()) return
+
+      // Extraer puntos positivos de cada sección
+      const bulletPoints = section.match(/^\* (.+?)$/gm)
+      if (bulletPoints) {
+        bulletPoints.forEach(bullet => {
+          const content = bullet.replace(/^\* /, '').trim()
+
+          // Buscar contenido positivo (palabras que indican aspectos positivos)
+          // Excluir explícitamente contenido negativo
+          if (content.toLowerCase().includes('no hay') ||
+              content.toLowerCase().includes('no existe') ||
+              content.toLowerCase().includes('carece') ||
+              content.toLowerCase().includes('falta') ||
+              content.toLowerCase().includes('sin ') ||
+              content.toLowerCase().includes('baja ') ||
+              content.toLowerCase().includes('menor ') ||
+              content.toLowerCase().includes('problema')) {
+            return // Skip contenido negativo
           }
-          if (cleaned && cleaned.length > 10 && !cleaned.includes('❌') && !cleaned.includes('⚠️')) {
-            insights.push(cleaned.substring(0, 200)) // Limitar longitud
+
+          const positiveIndicators = [
+            /\*\*(.+?)\*\*.*(?:exitoso|efectivo|bueno|positivo|adecuado|apropiado|bien|correcto|satisfactorio|alta|alto|múltiple|varios|diversos)/gi,
+            /(?:existe|se observa|se identifica|hay).*\*\*(.+?)\*\*.*(?:positivo|bueno|efectivo|adecuado|activo|participativo)/gi,
+            /\*\*(.+?)\*\*.*(?:participan activamente|contribuyen positivamente|aportan valor|colaboran efectivamente|funcionan bien|trabajan correctamente)/gi,
+            /(?:múltiples|varios|diversos|abundantes).*\*\*(.+?)\*\*(?!.*(?:no|sin|carece|falta))/gi,
+            /\*\*(.+?)\*\*.*(?:cumplen satisfactoriamente|logran exitosamente|alcanzan adecuadamente|superan expectativas)/gi
+          ]
+
+          let isPositive = false
+          let extractedText = content
+
+          positiveIndicators.forEach(pattern => {
+            if (pattern.test(content)) {
+              isPositive = true
+              const matches = content.match(pattern)
+              if (matches && matches[1]) {
+                extractedText = matches[1].replace(/\*\*/g, '')
+              }
+            }
+          })
+
+          // Solo incluir si es realmente positivo y no contiene palabras negativas
+          if (isPositive && extractedText.length > 10 &&
+              !extractedText.toLowerCase().includes('no ') &&
+              !extractedText.toLowerCase().includes('sin ') &&
+              !extractedText.toLowerCase().includes('baja') &&
+              !extractedText.toLowerCase().includes('problema')) {
+            insights.push(extractedText.substring(0, 200))
           }
         })
       }
     })
+
+    // FALLBACK: Buscar patrones en formato antiguo si no encontró nada
+    if (insights.length === 0) {
+      const positivePatterns = [
+        /\*\*Hallazgo positivo[^:]*:\*\* (.+?)(?=\.|;|❌|⚠️|$)/gi,
+        /- \*\*Hallazgo \d+\*\*: Hay \*\*(.+?)\*\*/gi,
+        /- \*\*Hallazgo \d+\*\*: (.+?) \*\*funciona[^\*]*\*\*/gi,
+        /✅ (.+?)(?=\n|$)/gi,
+        /\*\*Fortaleza:\*\* (.+?)(?=\.|;|\n|$)/gi,
+        /\*\*Aspecto positivo:\*\* (.+?)(?=\.|;|\n|$)/gi,
+        /son \*\*(.+?)\*\*/gi,
+        /está \*\*(.+?)\*\*/gi,
+        /\*\*múltiples (.+?)\*\* con contenido académico/gi,
+        /\*\*(.+?)\*\* están documentando/gi
+      ]
+
+      positivePatterns.forEach(pattern => {
+        const matches = analysisText.match(pattern)
+        if (matches) {
+          matches.forEach(match => {
+            let cleaned = match.replace(/^[- ✅]*\*\*[^:]*:\*\*/, '').trim()
+            if (cleaned.includes('son **') || cleaned.includes('está **')) {
+              cleaned = cleaned.replace(/son \*\*/, '').replace(/está \*\*/, '').replace(/\*\*/g, '')
+            }
+            if (cleaned && cleaned.length > 10 && !cleaned.includes('❌') && !cleaned.includes('⚠️')) {
+              insights.push(cleaned.substring(0, 200))
+            }
+          })
+        }
+      })
+    }
 
     return insights.slice(0, 5) // Máximo 5 insights
   }
@@ -679,37 +765,95 @@ IMPORTANTE: NO menciones nombres de variables, parámetros técnicos, campos de 
 
     const alerts: string[] = []
 
-    // Buscar patrones de alertas/problemas
-    const alertPatterns = [
-      /❌ (.+?)(?=\.|⚠️|✅|$)/gi,
-      /⚠️ (.+?)(?=\.|❌|✅|$)/gi,
-      /\*\*Problema[^:]*:\*\* (.+?)(?=\.|;|\n|$)/gi,
-      /\*\*Riesgo[^:]*:\*\* (.+?)(?=\.|;|\n|$)/gi,
-      /\*\*no hay (.+?)\*\*/gi,
-      /\*\*0 (.+?)\*\* indica que/gi,
-      /No hay (.+?) registrado/gi,
-      /\*\*ausencia de (.+?)\*\*/gi,
-      /- \*\*Hallazgo \d+\*\*: (.+?) \*\*no hay (.+?)\*\*/gi,
-      /\*\*(.+?)\*\* no han cumplido/gi
-    ]
+    // NUEVO: Buscar patrones en el formato de 5 dimensiones con #### headers
+    const sections = analysisText.split(/(?=^####\s)/gm)
 
-    alertPatterns.forEach(pattern => {
-      const matches = analysisText.match(pattern)
-      if (matches) {
-        matches.forEach(match => {
-          let cleaned = match.replace(/^[- ❌⚠️]*(\*\*[^:]*:\*\*)?/, '').trim()
+    sections.forEach(section => {
+      if (!section.trim()) return
 
-          // Limpiar patrones específicos
-          if (cleaned.includes('**no hay ') || cleaned.includes('**0 ') || cleaned.includes('**ausencia de ')) {
-            cleaned = cleaned.replace(/\*\*/g, '')
-          }
+      // Extraer puntos de alerta de cada sección
+      const bulletPoints = section.match(/^\* (.+?)$/gm)
+      if (bulletPoints) {
+        bulletPoints.forEach(bullet => {
+          const content = bullet.replace(/^\* /, '').trim()
 
-          if (cleaned && cleaned.length > 10 && !cleaned.includes('✅')) {
-            alerts.push(cleaned.substring(0, 200)) // Limitar longitud
+          // Buscar contenido que indica problemas o alertas
+          // Solo incluir contenido realmente negativo/problemático
+          const alertIndicators = [
+            /\*\*(.+?)\*\*.*(?:no hay|no existe|carece|falta|ausencia|problema|deficiente|insuficiente|inadecuado|bajo|baja|menor|sin)/gi,
+            /(?:no hay|no existe|carece de|falta).*\*\*(.+?)\*\*/gi,
+            /\*\*(.+?)\*\*.*(?:riesgo|alerta|preocupante|problemático|crítico)/gi,
+            /(?:solo|únicamente|apenas).*\*\*(.+?)\*\*/gi,
+            /\*\*(.+?)\*\*.*(?:limitado|mínimo|escaso|reducido|insuficiente)/gi,
+            /\*\*0\s*(.+?)\*\*/gi,
+            /\*\*(.+?)\*\*.*(?:→ menor|implica riesgo)/gi
+          ]
+
+          let isAlert = false
+          let extractedText = content
+
+          alertIndicators.forEach(pattern => {
+            if (pattern.test(content)) {
+              isAlert = true
+              const matches = content.match(pattern)
+              if (matches && matches[1]) {
+                extractedText = matches[1].replace(/\*\*/g, '')
+              } else {
+                // Si no hay grupo capturado, usar el contenido completo limpio
+                extractedText = content.replace(/\*\*/g, '').replace(/^\* /, '').trim()
+              }
+            }
+          })
+
+          // Solo incluir si es realmente problemático
+          if (isAlert && extractedText.length > 10 &&
+              (content.toLowerCase().includes('no ') ||
+               content.toLowerCase().includes('sin ') ||
+               content.toLowerCase().includes('baja') ||
+               content.toLowerCase().includes('menor') ||
+               content.toLowerCase().includes('problema') ||
+               content.toLowerCase().includes('riesgo') ||
+               content.toLowerCase().includes('solo ') ||
+               content.toLowerCase().includes('únicamente'))) {
+            alerts.push(extractedText.substring(0, 200))
           }
         })
       }
     })
+
+    // FALLBACK: Buscar patrones en formato antiguo si no encontró nada
+    if (alerts.length === 0) {
+      const alertPatterns = [
+        /❌ (.+?)(?=\.|⚠️|✅|$)/gi,
+        /⚠️ (.+?)(?=\.|❌|✅|$)/gi,
+        /\*\*Problema[^:]*:\*\* (.+?)(?=\.|;|\n|$)/gi,
+        /\*\*Riesgo[^:]*:\*\* (.+?)(?=\.|;|\n|$)/gi,
+        /\*\*no hay (.+?)\*\*/gi,
+        /\*\*0 (.+?)\*\* indica que/gi,
+        /No hay (.+?) registrado/gi,
+        /\*\*ausencia de (.+?)\*\*/gi,
+        /- \*\*Hallazgo \d+\*\*: (.+?) \*\*no hay (.+?)\*\*/gi,
+        /\*\*(.+?)\*\* no han cumplido/gi
+      ]
+
+      alertPatterns.forEach(pattern => {
+        const matches = analysisText.match(pattern)
+        if (matches) {
+          matches.forEach(match => {
+            let cleaned = match.replace(/^[- ❌⚠️]*(\*\*[^:]*:\*\*)?/, '').trim()
+
+            // Limpiar patrones específicos
+            if (cleaned.includes('**no hay ') || cleaned.includes('**0 ') || cleaned.includes('**ausencia de ')) {
+              cleaned = cleaned.replace(/\*\*/g, '')
+            }
+
+            if (cleaned && cleaned.length > 10 && !cleaned.includes('✅')) {
+              alerts.push(cleaned.substring(0, 200))
+            }
+          })
+        }
+      })
+    }
 
     return alerts.slice(0, 5) // Máximo 5 alertas
   }
@@ -1711,6 +1855,113 @@ El análisis debe iniciar directamente con los insights accionables, sin incluir
 Siempre incluye insights accionables acerca de puntualidad en las entregas, calidad del feedback proporcionado, patrones de reenvío, y estudiantes en riesgo de no completar satisfactoriamente.`
 
     return baseInfo + feedbackInstructions
+  }
+
+  /**
+   * Procesar análisis SOLO para aula 101 (modo prueba)
+   */
+  async processAula101Only(specificCourseId?: string): Promise<BatchAnalysisResult> {
+    const startTime = Date.now()
+    const courseFilter = specificCourseId ? ` y curso ${specificCourseId}` : ''
+    console.log(`🧠 Iniciando análisis SOLO para Aula 101${courseFilter} (modo prueba)`)
+
+    const result: BatchAnalysisResult = {
+      success: true,
+      processedActivities: 0,
+      generatedAnalyses: 0,
+      errors: [],
+      duration: 0
+    }
+
+    try {
+      // Construir filtros con fechas de actividades activas
+      const now = new Date()
+      console.log(`📅 Filtrando actividades activas del aula 101 (fecha actual: ${now.toISOString()})`)
+      const whereCondition: any = {
+        aulaId: '101',
+        needsAnalysis: true,
+        visible: true,
+        // Filtros de actividades activas:
+        OR: [
+          { openDate: null },
+          { openDate: { lte: now } }
+        ],
+        AND: [
+          {
+            OR: [
+              { closeDate: null },
+              { closeDate: { gt: now } }
+            ]
+          }
+        ]
+      }
+
+      // Agregar filtro de curso si se especifica
+      if (specificCourseId) {
+        whereCondition.courseId = parseInt(specificCourseId)
+      }
+
+      // Obtener SOLO actividades del aula 101 (y curso específico si se indicó)
+      const aula101Activities = await prisma.courseActivity.findMany({
+        where: whereCondition,
+        include: {
+          course: true,
+          aula: true
+        },
+        orderBy: [
+          { dueDate: 'asc' },
+          { lastDataSync: 'desc' }
+        ]
+      })
+
+      console.log(`📋 Encontradas ${aula101Activities.length} actividades pendientes en Aula 101${courseFilter}`)
+
+      if (aula101Activities.length === 0) {
+        console.log('⚠️ No hay actividades pendientes en Aula 101')
+        result.duration = Date.now() - startTime
+        return result
+      }
+
+      // Procesar en lotes pequeños
+      const BATCH_SIZE = 3 // Lotes más pequeños para pruebas
+      for (let i = 0; i < aula101Activities.length; i += BATCH_SIZE) {
+        const batch = aula101Activities.slice(i, i + BATCH_SIZE)
+
+        console.log(`🔄 Procesando lote ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(aula101Activities.length / BATCH_SIZE)} (${batch.length} actividades del Aula 101)`)
+
+        // Procesar actividades en paralelo dentro del lote
+        const batchPromises = batch.map(activity =>
+          this.analyzeActivity(activity).catch(error => {
+            const errorMsg = `Error analizando ${activity.type} ${activity.activityId} del curso ${activity.courseId}: ${error}`
+            console.error(`❌ ${errorMsg}`)
+            result.errors.push(errorMsg)
+            return false
+          })
+        )
+
+        const batchResults = await Promise.all(batchPromises)
+
+        // Contar resultados
+        result.processedActivities += batch.length
+        result.generatedAnalyses += batchResults.filter(success => success === true).length
+
+        // Pausa entre lotes para evitar sobrecarga
+        if (i + BATCH_SIZE < aula101Activities.length) {
+          console.log('⏳ Pausa de 2 segundos antes del siguiente lote...')
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+      }
+
+    } catch (error) {
+      console.error('❌ Error en procesamiento de Aula 101:', error)
+      result.errors.push(`Error general: ${error}`)
+      result.success = false
+    }
+
+    result.duration = Date.now() - startTime
+    console.log(`✅ Análisis de Aula 101 completado en ${result.duration}ms: ${result.generatedAnalyses}/${result.processedActivities} análisis generados`)
+
+    return result
   }
 }
 

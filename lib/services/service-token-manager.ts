@@ -38,13 +38,44 @@ export class ServiceTokenManager {
       { aulaId: '108', token: process.env.MOODLE_SERVICE_TOKEN_AULA108 },
       { aulaId: '109', token: process.env.MOODLE_SERVICE_TOKEN_AULA109 },
       { aulaId: '110', token: process.env.MOODLE_SERVICE_TOKEN_AULA110 },
+      // Additional aulas for extended coverage
+      { aulaId: '111', token: process.env.MOODLE_SERVICE_TOKEN_AULA111 },
+      { aulaId: '112', token: process.env.MOODLE_SERVICE_TOKEN_AULA112 },
+      { aulaId: '113', token: process.env.MOODLE_SERVICE_TOKEN_AULA113 },
+      { aulaId: '114', token: process.env.MOODLE_SERVICE_TOKEN_AULA114 },
+      { aulaId: '115', token: process.env.MOODLE_SERVICE_TOKEN_AULA115 },
+      { aulaId: '122', token: process.env.MOODLE_SERVICE_TOKEN_AULA122 },
+      // Special aulas
+      { aulaId: 'av141', token: process.env.MOODLE_SERVICE_TOKEN_AV141 },
+      // Extended aulas (1100 series)
+      { aulaId: '1101', token: process.env.MOODLE_SERVICE_TOKEN_AULA1101 },
+      { aulaId: '1102', token: process.env.MOODLE_SERVICE_TOKEN_AULA1102 },
+      { aulaId: '1103', token: process.env.MOODLE_SERVICE_TOKEN_AULA1103 },
+      { aulaId: '1104', token: process.env.MOODLE_SERVICE_TOKEN_AULA1104 },
+      { aulaId: '1105', token: process.env.MOODLE_SERVICE_TOKEN_AULA1105 },
+      { aulaId: '1106', token: process.env.MOODLE_SERVICE_TOKEN_AULA1106 },
+      { aulaId: '1107', token: process.env.MOODLE_SERVICE_TOKEN_AULA1107 },
+      { aulaId: '1108', token: process.env.MOODLE_SERVICE_TOKEN_AULA1108 },
+      { aulaId: '1109', token: process.env.MOODLE_SERVICE_TOKEN_AULA1109 },
+      { aulaId: '1110', token: process.env.MOODLE_SERVICE_TOKEN_AULA1110 },
+      { aulaId: '1111', token: process.env.MOODLE_SERVICE_TOKEN_AULA1111 },
+      { aulaId: '1112', token: process.env.MOODLE_SERVICE_TOKEN_AULA1112 },
+      { aulaId: '1113', token: process.env.MOODLE_SERVICE_TOKEN_AULA1113 },
     ]
 
     for (const { aulaId, token } of serviceTokens) {
       if (token) {
+        // Generate appropriate URL based on aulaId
+        let aulaUrl: string
+        if (aulaId.startsWith('av')) {
+          aulaUrl = `https://${aulaId.toLowerCase()}.utel.edu.mx`
+        } else {
+          aulaUrl = `https://aula${aulaId}.utel.edu.mx`
+        }
+
         this.serviceTokens.set(aulaId, {
           aulaId,
-          aulaUrl: `https://aula${aulaId}.utel.edu.mx`,
+          aulaUrl,
           token,
           user: 't_assistant',
           service: 'WS t_dash'
@@ -120,12 +151,20 @@ export class ServiceTokenManager {
    */
   getStats() {
     const totalTokens = this.serviceTokens.size
-    const aulaIds = Array.from(this.serviceTokens.keys()).sort((a, b) => parseInt(a) - parseInt(b))
-    
+    const aulaIds = Array.from(this.serviceTokens.keys()).sort((a, b) => {
+      // Handle mixed numeric and alphanumeric sorting
+      const aNum = parseInt(a)
+      const bNum = parseInt(b)
+      if (!isNaN(aNum) && !isNaN(bNum)) {
+        return aNum - bNum
+      }
+      return a.localeCompare(b)
+    })
+
     return {
       totalServiceTokens: totalTokens,
       availableAulas: aulaIds,
-      coverage: `${totalTokens}/10 aulas con tokens de servicio`
+      coverage: `${totalTokens} aulas con tokens de servicio configurados`
     }
   }
 }

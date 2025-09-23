@@ -11,7 +11,8 @@
       "Bash(curl:*)",
       "Bash(rm:*)",
       "Bash(git pull:*)",
-      "Bash(psql:*)"
+      "Bash(psql:*)",
+      "Bash(mysql:*)"
     ],
     "defaultMode": "acceptEdits"
   }

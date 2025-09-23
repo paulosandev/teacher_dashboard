@@ -97,17 +97,32 @@ export function BatchDashboardContent({
       .trim()
   }
 
-  // Función para parsear contenido del summary y extraer secciones
+  // Función para parsear contenido del fullAnalysis y extraer secciones
   const parseAnalysisContent = (analysis: any) => {
-    if (!analysis.summary || typeof analysis.summary !== 'string') return analysis
+    console.log('🔍 DEBUG: parseAnalysisContent called with:', {
+      hasAnalysis: !!analysis.analysis,
+      hasDirectFullAnalysis: !!analysis.fullAnalysis,
+      hasDirectSummary: !!analysis.summary,
+      analysisFullAnalysis: !!analysis.analysis?.fullAnalysis,
+      analysisFullAnalysisLength: analysis.analysis?.fullAnalysis?.length || 0,
+      analysisFullAnalysisStart: analysis.analysis?.fullAnalysis?.substring(0, 100) || 'none'
+    })
+
+    // Priorizar análisis de la estructura correcta de la API
+    const fullAnalysisText = analysis.analysis?.fullAnalysis || analysis.fullAnalysis
+
+    if (!fullAnalysisText || typeof fullAnalysisText !== 'string') {
+      console.log('❌ No fullAnalysis found, using fallback')
+      return analysis
+    }
 
     // Si ya tiene datos estructurados, usarlos
     if (analysis.positives?.length > 0 || analysis.alerts?.length > 0) {
       return analysis
     }
 
-    // Parsear el summary para extraer secciones
-    const summary = analysis.summary
+    // Parsear el fullAnalysis para extraer secciones
+    const summary = fullAnalysisText
     const sections = []
     const alerts = []
     const positives = []
@@ -119,8 +134,8 @@ export function BatchDashboardContent({
     for (const line of lines) {
       const cleanLine = line.trim()
       
-      // Detectar títulos de sección
-      if (cleanLine.match(/^\[.*\]$/) || cleanLine.match(/^#{1,6}\s/)) {
+      // Detectar títulos de sección (incluyendo #### específicamente)
+      if (cleanLine.match(/^\[.*\]$/) || cleanLine.match(/^#{1,6}\s/) || cleanLine.startsWith('####')) {
         if (currentSection) sections.push(currentSection)
         currentSection = {
           title: cleanLine.replace(/[\[\]#]/g, '').trim(),
@@ -336,7 +351,17 @@ export function BatchDashboardContent({
 
   // Mostrar vista de detalle si está activa
   if (detailView?.isActive && detailView.analysis) {
-    const analysis = detailView.analysis
+    const rawAnalysis = detailView.analysis
+    const analysis = parseAnalysisContent(rawAnalysis)
+
+    // Debug de fecha
+    console.log('🔍 DEBUG FECHA:', {
+      hasAnalysis: !!rawAnalysis.analysis,
+      lastUpdated: rawAnalysis.analysis?.lastUpdated,
+      lastUpdatedType: typeof rawAnalysis.analysis?.lastUpdated,
+      generatedAt: rawAnalysis.generatedAt,
+      generatedAtType: typeof rawAnalysis.generatedAt
+    })
 
     return (
       <div className="max-w-[1132px] mx-auto mb-4 px-4 sm:px-6 lg:px-3">
@@ -344,7 +369,7 @@ export function BatchDashboardContent({
         <section className="mb-6">
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-2xl font-bold text-gray-900">
-              Reporte de {analysis.activityName}
+              Reporte de {rawAnalysis.name || rawAnalysis.activityName || 'Actividad'}
             </h1>
             
             {/* Chip con fecha y hora de análisis */}
@@ -352,7 +377,22 @@ export function BatchDashboardContent({
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
               </svg>
-              <span>Fecha de corte del análisis: {new Date(analysis.generatedAt).toLocaleDateString('es-ES')} - {new Date(analysis.generatedAt).toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}</span>
+              <span>Fecha de corte del análisis: {(() => {
+                const dateValue = rawAnalysis.analysis?.lastUpdated || rawAnalysis.generatedAt
+                if (!dateValue) return 'Fecha no disponible'
+
+                try {
+                  const date = new Date(dateValue)
+                  if (isNaN(date.getTime())) return 'Fecha inválida'
+
+                  const dateStr = date.toLocaleDateString('es-ES')
+                  const timeStr = date.toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})
+                  return `${dateStr} - ${timeStr}`
+                } catch (error) {
+                  console.error('Error convirtiendo fecha:', dateValue, error)
+                  return 'Error en fecha'
+                }
+              })()}</span>
             </div>
           </div>
           
@@ -365,104 +405,54 @@ export function BatchDashboardContent({
           </button>
         </section>
 
-        {/* Grid de 2 columnas con cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Card: Participación (nivel y cobertura) */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Participación (nivel y cobertura)</h3>
-            <ul className="space-y-3 list-disc list-inside">
-              {analysis.parsedSections && analysis.parsedSections[0]?.content && analysis.parsedSections[0].content.length > 0 ? (
-                analysis.parsedSections[0].content.slice(0, 3).map((item: string, index: number) => (
-                  <li key={index} className="text-sm text-gray-700 leading-relaxed">
-                    <span dangerouslySetInnerHTML={{ __html: item }} />
-                  </li>
-                ))
-              ) : analysis.alerts && analysis.alerts.length > 0 ? (
-                analysis.alerts.slice(0, 3).map((alert: string, index: number) => (
-                  <li key={index} className="text-sm text-gray-700 leading-relaxed">
-                    <span dangerouslySetInnerHTML={{ __html: alert }} />
-                  </li>
-                ))
-              ) : (
-                <li className="text-sm text-gray-700 leading-relaxed">
-                  <span dangerouslySetInnerHTML={{ __html: '<strong>Baja participación efectiva</strong>: se identificaron patrones de participación limitada que requieren atención docente.' }} />
-                </li>
-              )}
-            </ul>
-          </div>
+        {/* Renderizar análisis en formato de 2 columnas */}
+        {analysis.parsedSections && analysis.parsedSections.length > 0 ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {analysis.parsedSections.map((section: any, index: number) => {
+              // Para 5 dimensiones: las primeras 4 en grid 2x2, la última sola con ancho completo
+              const isLastOddSection = analysis.parsedSections.length % 2 === 1 && index === analysis.parsedSections.length - 1
 
-          {/* Card: Dudas operativas y publicaciones fuera de la consigna */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Dudas operativas y publicaciones fuera de la consigna</h3>
-            <ul className="space-y-3 list-disc list-inside">
-              {analysis.parsedSections && analysis.parsedSections[1]?.content && analysis.parsedSections[1].content.length > 0 ? (
-                analysis.parsedSections[1].content.slice(0, 2).map((item: string, index: number) => (
-                  <li key={index} className="text-sm text-gray-700 leading-relaxed">
-                    <span dangerouslySetInnerHTML={{ __html: item }} />
-                  </li>
-                ))
-              ) : analysis.alerts && analysis.alerts.length > 0 ? (
-                analysis.alerts.slice(0, 2).map((alert: string, index: number) => (
-                  <li key={index} className="text-sm text-gray-700 leading-relaxed">
-                    <span dangerouslySetInnerHTML={{ __html: alert }} />
-                  </li>
-                ))
-              ) : (
-                <li className="text-sm text-gray-700 leading-relaxed">
-                  Aparecen dudas explícitas sobre dónde subir la actividad y se identificaron consultas operativas fuera del tema principal.
-                </li>
-              )}
-            </ul>
+              return (
+                <div
+                  key={index}
+                  className={`bg-white border border-gray-200 rounded-lg p-6 shadow-sm ${
+                    isLastOddSection ? 'lg:col-span-2' : ''
+                  }`}
+                >
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">{section.title}</h3>
+                  <div className="space-y-3">
+                    {section.content && section.content.length > 0 ? (
+                      section.content.map((item: string, itemIndex: number) => (
+                        <div key={itemIndex} className="text-sm text-gray-700 leading-relaxed">
+                          <span dangerouslySetInnerHTML={{ __html: item }} />
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-gray-500 italic">
+                        Contenido de análisis disponible próximamente.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
-
-          {/* Card: Interacción y retroalimentación entre pares */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Interacción y retroalimentación entre pares</h3>
-            <ul className="space-y-3 list-disc list-inside">
-              {analysis.parsedSections && analysis.parsedSections[2]?.content && analysis.parsedSections[2].content.length > 0 ? (
-                analysis.parsedSections[2].content.slice(0, 2).map((item: string, index: number) => (
-                  <li key={index} className="text-sm text-gray-700 leading-relaxed">
-                    <span dangerouslySetInnerHTML={{ __html: item }} />
-                  </li>
-                ))
-              ) : analysis.positives && analysis.positives.length > 0 ? (
-                analysis.positives.slice(0, 2).map((positive: string, index: number) => (
-                  <li key={index} className="text-sm text-gray-700 leading-relaxed">
-                    <span dangerouslySetInnerHTML={{ __html: positive }} />
-                  </li>
-                ))
-              ) : (
-                <li className="text-sm text-gray-700 leading-relaxed">
-                  Existe <strong>retroalimentación frecuente y positiva</strong> por parte de algunos estudiantes hacia sus compañeros, generando conversación y reforzando ideas.
-                </li>
-              )}
-            </ul>
+        ) : (
+          /* Fallback: Mostrar análisis directo del fullAnalysis en grid de 2 columnas */
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Análisis Completo</h3>
+              <div className="prose prose-sm max-w-none">
+                <div dangerouslySetInnerHTML={{
+                  __html: (rawAnalysis.analysis?.fullAnalysis || rawAnalysis.fullAnalysis || 'Análisis no disponible')
+                    .replace(/####\s*/g, '<h4 class="text-lg font-semibold text-gray-900 mt-6 mb-3">')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\n/g, '<br/>')
+                }} />
+              </div>
+            </div>
           </div>
-
-          {/* Card: Calidad y alineación del contenido con la consigna */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Calidad y alineación del contenido con la consigna</h3>
-            <ul className="space-y-3 list-disc list-inside">
-              {analysis.parsedSections && analysis.parsedSections[3]?.content && analysis.parsedSections[3].content.length > 0 ? (
-                analysis.parsedSections[3].content.slice(0, 2).map((item: string, index: number) => (
-                  <li key={index} className="text-sm text-gray-700 leading-relaxed">
-                    <span dangerouslySetInnerHTML={{ __html: item }} />
-                  </li>
-                ))
-              ) : analysis.positives && analysis.positives.length > 0 ? (
-                analysis.positives.slice(0, 2).map((positive: string, index: number) => (
-                  <li key={index} className="text-sm text-gray-700 leading-relaxed">
-                    <span dangerouslySetInnerHTML={{ __html: positive }} />
-                  </li>
-                ))
-              ) : (
-                <li className="text-sm text-gray-700 leading-relaxed">
-                  Varios posts son <strong>largos y bien argumentados</strong>, respondiendo adecuadamente a las tres preguntas planteadas con ejemplos concretos.
-                </li>
-              )}
-            </ul>
-          </div>
-        </div>
+        )}
       </div>
     )
   }

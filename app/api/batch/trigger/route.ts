@@ -46,36 +46,24 @@ export async function POST(request: NextRequest) {
     })
 
     // Verificar si ya hay un proceso en ejecución
-    if (autoUpdateService.isUpdating) {
+    const status = autoUpdateService.getStatus()
+    if (status.isUpdating) {
       return NextResponse.json({
         success: false,
         error: 'Ya hay un proceso batch en ejecución',
-        currentStatus: autoUpdateService.getStatus()
+        currentStatus: status
       }, { status: 409 })
     }
 
     // Ejecutar el proceso batch
     const startTime = Date.now()
 
-    if (onlyAnalysis) {
-      // Solo ejecutar análisis sin sincronización
-      console.log('🧠 Ejecutando solo análisis (sin sincronización)...')
-      await autoUpdateService.runAnalysisOnly({
-        aulaIds,
-        forceReAnalysis: forceAnalysis
-      })
-    } else {
-      // Ejecutar proceso completo
-      console.log('🔄 Ejecutando proceso batch completo...')
-      await autoUpdateService.executeBatchProcess({
-        source: 'MANUAL_API',
-        aulaIds,
-        forceAnalysis
-      })
-    }
+    // Ejecutar proceso completo (el servicio maneja internamente la lógica de análisis)
+    console.log('🔄 Ejecutando proceso batch completo...')
+    const result = await autoUpdateService.executeUpdate('manual')
 
     const duration = Date.now() - startTime
-    const status = autoUpdateService.getStatus()
+    const finalStatus = autoUpdateService.getStatus()
 
     console.log('✅ Proceso batch manual completado')
     console.log(`⏱️ Duración: ${(duration / 1000).toFixed(2)} segundos`)
@@ -84,7 +72,13 @@ export async function POST(request: NextRequest) {
       success: true,
       message: 'Proceso batch ejecutado exitosamente',
       duration: `${(duration / 1000).toFixed(2)}s`,
-      status: status,
+      result: {
+        coursesUpdated: result.coursesUpdated,
+        analysisGenerated: result.analysisGenerated,
+        activitiesUpdated: result.activitiesUpdated,
+        errors: result.errors
+      },
+      status: finalStatus,
       timestamp: new Date().toISOString()
     })
 
@@ -118,7 +112,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       status: status,
-      isUpdating: autoUpdateService.isUpdating,
+      isUpdating: status.isUpdating,
       timestamp: new Date().toISOString()
     })
 

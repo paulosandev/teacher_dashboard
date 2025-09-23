@@ -5,8 +5,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cronScheduler } from '@/lib/cron/scheduler'
 import { autoUpdateService } from '@/lib/services/auto-update-service'
+import { batchAnalysisService } from '@/lib/services/batch-analysis-service'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth/auth-options'
+import { PrismaClient } from '@prisma/client'
+import Redis from 'ioredis'
+
+const prisma = new PrismaClient()
 
 // GET - Obtener estado del sistema
 export async function GET(request: NextRequest) {
@@ -127,12 +132,59 @@ export async function POST(request: NextRequest) {
       case 'validate':
         // Validar que los jobs están funcionando
         const isValid = cronScheduler.validateJobs()
-        
+
         return NextResponse.json({
           success: true,
           valid: isValid,
           status: cronScheduler.getStatus()
         })
+
+      case 'test-aula-101':
+        // Ejecutar análisis SOLO para aula 101 (modo prueba)
+        const { courseId } = body
+        const aula101Result = await batchAnalysisService.processAula101Only(courseId)
+
+        return NextResponse.json({
+          success: true,
+          message: courseId ? `Análisis de Aula 101 curso ${courseId} completado` : 'Análisis de Aula 101 completado',
+          result: aula101Result
+        })
+
+      case 'clear-cache':
+        // Limpiar caché completo para mostrar nuevos análisis
+        console.log('🧹 Iniciando limpieza de caché desde cron...')
+
+        try {
+          // 1. Limpiar análisis viejos (mantener solo los últimos 500)
+          await prisma.$executeRaw`
+            DELETE FROM ActivityAnalysis
+            WHERE id NOT IN (
+              SELECT id FROM ActivityAnalysis
+              ORDER BY generatedAt DESC
+              LIMIT 500
+            )
+          `
+          console.log('✅ Análisis antiguos limpiados')
+
+          // 2. Limpiar caché Redis
+          if (process.env.REDIS_URL) {
+            const redis = new Redis(process.env.REDIS_URL)
+            await redis.flushdb()
+            await redis.quit()
+            console.log('✅ Caché Redis limpiado')
+          }
+
+          return NextResponse.json({
+            success: true,
+            message: 'Caché limpiado exitosamente'
+          })
+        } catch (error) {
+          console.error('❌ Error limpiando caché:', error)
+          return NextResponse.json({
+            success: false,
+            error: 'Error limpiando caché'
+          }, { status: 500 })
+        }
 
       default:
         return NextResponse.json({

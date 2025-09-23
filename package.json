@@ -24,7 +24,15 @@
     "test:moodle": "tsx scripts/test-moodle.ts",
     "test:enrolments": "node scripts/test-enrolment-connection.js",
     "worker": "tsx workers/analysis-worker.ts",
-    "worker:dev": "tsx --watch workers/analysis-worker.ts"
+    "worker:dev": "tsx --watch workers/analysis-worker.ts",
+    "cron:start": "tsx scripts/manual-cron.ts trigger",
+    "cron:test-101": "tsx scripts/manual-cron.ts test-101",
+    "cron:test-818": "tsx scripts/manual-cron.ts test-101 818",
+    "cron:clear": "tsx scripts/manual-cron.ts clear-cache",
+    "cron:status": "tsx scripts/manual-cron.ts status",
+    "cron:logs": "tsx scripts/manual-cron.ts logs",
+    "cron:next": "tsx scripts/manual-cron.ts next",
+    "cron:monitor": "tsx scripts/manual-cron.ts monitor"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",
