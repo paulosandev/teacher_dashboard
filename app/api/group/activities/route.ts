@@ -655,11 +655,21 @@ async function getPreCalculatedAnalysis(
     console.log(`🔧 [LLAMADA] getPreCalculatedAnalysis EJECUTÁNDOSE...`)
 
     // Normalizar aulaId (extraer solo el ID del aula)
-    const normalizedAulaId = aulaId.replace(/^https?:\/\//, '').split('.')[0]
+    let normalizedAulaId = aulaId.replace(/^https?:\/\//, '').split('.')[0]
+
+    // Extraer solo el número del aula (ej: "aula101" → "101")
+    const aulaMatch = normalizedAulaId.match(/aula(\d+)/i)
+    if (aulaMatch) {
+      normalizedAulaId = aulaMatch[1]  // Solo el número: "aula101" → "101"
+    } else if (normalizedAulaId.startsWith('av') && normalizedAulaId.match(/av\d+/)) {
+      // Mantener formato "av141" completo para aulas virtuales
+      normalizedAulaId = normalizedAulaId  // Mantener "av141"
+    }
+
     console.log(`🔧 [DEBUG] aulaId original: "${aulaId}" → normalizado: "${normalizedAulaId}"`)
 
     // Usar exactamente el formato que está en la base de datos
-    const expectedCourseId = `${normalizedAulaId}-${courseId}`  // Formato batch: "av141-237"
+    const expectedCourseId = `${normalizedAulaId}-${courseId}`  // Formato batch: "101-818" o "av141-237"
     console.log(`🎯 [DEBUG] Formato courseId esperado: "${expectedCourseId}"`)
 
     // Buscar análisis con el formato exacto

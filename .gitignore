@@ -110,3 +110,10 @@ vercel.json
 
 # OpenAI logs
 openai-logs/
+.cache/
+mysql-resources/
+scripts/test-*.ts
+scripts/check-analysis-data.ts
+scripts/clean-database.ts
+scripts/regenerate-aula101-analysis.ts
+*.sql.bak

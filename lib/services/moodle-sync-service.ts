@@ -239,6 +239,27 @@ export class MoodleSyncService {
     const teacherIds = course.teachers?.map(t => t.id) || []
     const teacherNames = course.teachers?.map(t => `${t.firstname} ${t.lastname}`) || []
 
+    // Primero crear/actualizar el curso en la tabla Course
+    await prisma.course.upsert({
+      where: {
+        moodleCourseId: course.id.toString()
+      },
+      update: {
+        name: course.fullname,
+        shortName: course.shortname,
+        lastSync: new Date()
+      },
+      create: {
+        moodleCourseId: course.id.toString(),
+        name: course.fullname,
+        shortName: course.shortname,
+        lastSync: new Date()
+      }
+    })
+
+    console.log(`💾 [COURSE] Curso guardado: ${course.shortname} (${course.id})`)
+
+    // Luego crear/actualizar la relación aula-curso
     await prisma.aulaCourse.upsert({
       where: {
         aulaId_courseId: {
@@ -556,57 +577,59 @@ export class MoodleSyncService {
     course: MoodleCourse,
     activity: any
   ): Promise<void> {
-    console.log(`   🔍 [ACTIVITY] Procesando ${activity.modname}: ${activity.name}`)
 
-    // Determinar si la actividad está activa
+    // Inicializar variables de datos específicos por tipo
+    let assignmentData = null
+    let forumData = null
+
+    // VALIDACIÓN MEJORADA DE FECHAS ACTIVAS (según requerimientos del usuario)
     const now = new Date()
+
+    // Fechas de inicio
+    const startDate = activity.allowsubmissionsfromdate ? new Date(activity.allowsubmissionsfromdate * 1000) : null
+    const timeOpen = activity.timeopen ? new Date(activity.timeopen * 1000) : null
+    const availableFrom = startDate || timeOpen
+
+    // Fechas de fin
     const dueDate = activity.duedate ? new Date(activity.duedate * 1000) : null
     const cutoffDate = activity.cutoffdate ? new Date(activity.cutoffdate * 1000) : null
+    const timeClose = activity.timeclose ? new Date(activity.timeclose * 1000) : null
+    const availableUntil = cutoffDate || dueDate || timeClose
 
     let isActive = true
-    let statusReason = 'Sin fecha límite'
+    let statusReason = 'Actividad abierta'
 
-    if (dueDate) {
-      isActive = dueDate > now
-      statusReason = isActive ? 'Vigente hasta ' + dueDate.toLocaleDateString('es-ES') : 'Vencida el ' + dueDate.toLocaleDateString('es-ES')
+    // 1. Validar fecha de inicio (si existe)
+    if (availableFrom && availableFrom > now) {
+      isActive = false
+      statusReason = `Inicia el ${availableFrom.toLocaleDateString('es-ES')} a las ${availableFrom.toLocaleTimeString('es-ES')}`
     }
 
-    if (cutoffDate && isActive) {
-      isActive = cutoffDate > now
-      if (!isActive) {
-        statusReason = 'Corte final el ' + cutoffDate.toLocaleDateString('es-ES')
-      }
+    // 2. Validar fecha de fin (si existe y ya pasó el inicio)
+    else if (availableUntil && availableUntil <= now) {
+      isActive = false
+      statusReason = `Cerró el ${availableUntil.toLocaleDateString('es-ES')} a las ${availableUntil.toLocaleTimeString('es-ES')}`
     }
 
-    // NUEVO: Actividades con contenido sustancial se analizan independientemente de fechas
-    const hasSubstantialContent = (assignmentData && (
-      assignmentData.submissions?.length > 0 ||
-      assignmentData.submissionCount > 0
-    )) || (forumData && (
-      forumData.discussions?.length > 0 ||
-      forumData.discussionCount > 0 ||
-      forumData.totalPosts > 0
-    ))
+    // 3. Si está en periodo activo
+    else if (availableFrom && availableUntil) {
+      statusReason = `Activa desde ${availableFrom.toLocaleDateString('es-ES')} hasta ${availableUntil.toLocaleDateString('es-ES')}`
+    } else if (availableFrom) {
+      statusReason = `Activa desde ${availableFrom.toLocaleDateString('es-ES')} (sin fecha de cierre)`
+    } else if (availableUntil) {
+      statusReason = `Activa hasta ${availableUntil.toLocaleDateString('es-ES')}`
+    }
+
+    console.log(`📅 [VALIDACIÓN] Actividad "${activity.name}": ${statusReason} (Activa: ${isActive})`)
 
     // NUEVO: Para aulas principales (101-110), analizar TODAS las actividades
     // Para av141, mantener la lógica anterior (solo activas o con contenido)
     const isMainAula = /^10[1-9]$|^110$/.test(config.id) // Aulas 101-110
-    const needsAnalysis = isMainAula ? true : (isActive || hasSubstantialContent)
 
     console.log(`   📅 ${activity.name}: ${isActive ? '🟢 ACTIVA' : '🔴 INACTIVA'} (${statusReason})`)
-    if (hasSubstantialContent && !isActive) {
-      console.log(`   📊 Contenido sustancial detectado - marcando para análisis aunque esté vencida`)
-    }
-    if (isMainAula && !isActive && !hasSubstantialContent) {
-      console.log(`   🎯 AULA PRINCIPAL: Analizando actividad sin contenido para detectar falta de actividad`)
-    }
 
     // NUEVO: Análisis específico por tipo de actividad
-    let assignmentData = null
-    let forumData = null
-
     if (activity.modname === 'assign') {
-      console.log(`     📝 [ASSIGNMENT] Obteniendo entregas...`)
       // Obtener entregas de estudiantes para analysis
       const submissions = await this.getAssignmentSubmissions(config, activity.id)
 
@@ -617,10 +640,8 @@ export class MoodleSyncService {
         gradedCount: submissions.filter(s => s.grade !== undefined && s.grade >= 0).length
       }
 
-      console.log(`     📊 ${submissions.length} entregas, ${assignmentData.gradedCount} calificadas`)
 
     } else if (activity.modname === 'forum') {
-      console.log(`     🗣️ [FORUM] Obteniendo discusiones...`)
 
       const discussions = activity.forumData?.discussions || []
       let totalPosts = 0
@@ -639,7 +660,27 @@ export class MoodleSyncService {
         firstDiscussionId: discussions.length > 0 ? discussions[0].id : null
       }
 
-      console.log(`     📊 ${discussions.length} discusiones, ${totalPosts} posts totales`)
+    }
+
+    // NUEVO: Determinar si actividad tiene contenido sustancial (después de poblar datos)
+    const hasSubstantialContent = (assignmentData && (
+      assignmentData.submissions?.length > 0 ||
+      assignmentData.submissionCount > 0
+    )) || (forumData && (
+      forumData.discussions?.length > 0 ||
+      forumData.discussionCount > 0 ||
+      forumData.totalPosts > 0
+    ))
+
+    // NUEVO: Determinar si necesita análisis
+    const needsAnalysis = isMainAula ? true : (isActive || hasSubstantialContent)
+
+    // Logs informativos
+    if (hasSubstantialContent && !isActive) {
+      console.log(`   📊 Contenido sustancial detectado - marcando para análisis aunque esté vencida`)
+    }
+    if (isMainAula && !isActive && !hasSubstantialContent) {
+      console.log(`   🎯 AULA PRINCIPAL: Analizando actividad sin contenido para detectar falta de actividad`)
     }
 
     // Datos base de la actividad con campos específicos
@@ -663,7 +704,6 @@ export class MoodleSyncService {
 
     // Guardar en base de datos
     try {
-      console.log(`   💾 [DB] Guardando actividad: ${activity.name} (${activity.modname})`)
 
       await prisma.courseActivity.upsert({
         where: {

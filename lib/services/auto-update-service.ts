@@ -73,7 +73,7 @@ export class AutoUpdateService {
       for (let i = 0; i < aulas.length; i++) {
         const aula = aulas[i]
         try {
-          console.log(`\n🏫 Procesando aula: ${aula.aulaId} (${aula.teacherCount} profesores)`)
+          console.log(`🏫 Procesando aula: ${aula.aulaId}`)
           
           // Actualizar estado compartido
           await processStateService.updateProgress({
@@ -183,15 +183,23 @@ export class AutoUpdateService {
     
     try {
       // Obtener aulas únicas con conteo de profesores
+      // Procesar todas las aulas disponibles con prioridad para aula 101
       const results = await enrolmentClient.executeQuery(`
-        SELECT 
+        SELECT
           idAula,
           COUNT(DISTINCT username) as teacherCount
-        FROM enrolment 
+        FROM enrolment
         WHERE roles_id = 17
         AND suspendido = 0
         GROUP BY idAula
-        ORDER BY idAula
+        ORDER BY
+          CASE
+            WHEN idAula = '101' THEN 1
+            WHEN idAula = '104' THEN 2
+            WHEN idAula = '108' THEN 3
+            WHEN idAula = 'av141' THEN 4
+            ELSE 5
+          END
       `)
 
       const aulas = results.map(row => ({
@@ -201,8 +209,7 @@ export class AutoUpdateService {
         teacherCount: parseInt(row.teacherCount) || 0
       }))
 
-      console.log(`🏫 Encontradas ${aulas.length} aulas únicas con profesores activos`)
-      console.log(`👥 Total de profesores únicos en todas las aulas: ${aulas.reduce((sum, aula) => sum + aula.teacherCount, 0)}`)
+      console.log(`🏫 Encontradas ${aulas.length} aulas para procesar`)
       
       return aulas
       
@@ -257,7 +264,7 @@ export class AutoUpdateService {
       
       const totalActivities = forums.length + assignments.length
       
-      console.log(`    📝 Actividades encontradas: ${totalActivities} (${forums.length} foros, ${assignments.length} tareas)`)
+      console.log(`    📝 ${totalActivities} actividades`)
       
       return totalActivities
       

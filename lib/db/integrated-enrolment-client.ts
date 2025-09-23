@@ -51,10 +51,16 @@ export interface AulaInfo {
 
 class IntegratedEnrolmentClient {
   private readonly TEACHER_ROLE_ID = 17
-  private readonly DB_HOST = process.env.ENROLMENT_DB_HOST || 'wsdata.ce9oduyxts26.us-west-1.rds.amazonaws.com'  // Conexión directa
-  private readonly DB_PORT = parseInt(process.env.ENROLMENT_DB_PORT || '3306')  // Puerto MySQL estándar
+  // Usar túnel SSH si está activo
+  private readonly USE_SSH_TUNNEL = process.env.SSH_TUNNEL_ACTIVE === 'true'
+  private readonly DB_HOST = this.USE_SSH_TUNNEL
+    ? (process.env.ENROLMENT_DB_HOST_TUNNEL || 'localhost')
+    : (process.env.ENROLMENT_DB_HOST || 'wsdata.ce9oduyxts26.us-west-1.rds.amazonaws.com')
+  private readonly DB_PORT = this.USE_SSH_TUNNEL
+    ? parseInt(process.env.ENROLMENT_DB_PORT_TUNNEL || '3307')
+    : parseInt(process.env.ENROLMENT_DB_PORT || '3306')
   private readonly DB_USER = process.env.ENROLMENT_DB_USER || 'datos'
-  private readonly DB_PASSWORD = process.env.ENROLMENT_DB_PASSWORD || 'PP7Su9e433aNZP956'
+  private readonly DB_PASSWORD = process.env.ENROLMENT_DB_PASSWORD || ''
   private readonly DB_NAME = process.env.ENROLMENT_DB_NAME || 'heroku_e6e033d354ff64c'
 
   private connection: Connection | null = null
@@ -103,20 +109,31 @@ class IntegratedEnrolmentClient {
    * Establecer conexión MySQL directa
    */
   private async establishDatabaseConnection(): Promise<void> {
-    console.log('💾 Conectando a MySQL directamente...')
-    
-    this.connection = await createConnection({
+    console.log(`💾 Conectando a MySQL ${this.USE_SSH_TUNNEL ? 'via SSH tunnel' : 'directamente'}...`)
+    console.log(`📍 Host: ${this.DB_HOST}:${this.DB_PORT}`)
+
+    const connectionConfig: any = {
       host: this.DB_HOST,
       port: this.DB_PORT,
       user: this.DB_USER,
-      password: this.DB_PASSWORD,
       database: this.DB_NAME,
       connectTimeout: 30000, // 30 segundos
       idleTimeout: 300000, // 5 minutos de inactividad
-      ssl: { rejectUnauthorized: false } // SSL con certificado no verificado
-    })
-    
-    console.log('✅ Conexión MySQL directa establecida')
+    }
+
+    // Solo agregar password si no está vacío
+    if (this.DB_PASSWORD) {
+      connectionConfig.password = this.DB_PASSWORD
+    }
+
+    // Solo usar SSL si no estamos usando el túnel
+    if (!this.USE_SSH_TUNNEL) {
+      connectionConfig.ssl = { rejectUnauthorized: false }
+    }
+
+    this.connection = await createConnection(connectionConfig)
+
+    console.log(`✅ Conexión MySQL ${this.USE_SSH_TUNNEL ? 'via túnel' : 'directa'} establecida`)
   }
 
   /**

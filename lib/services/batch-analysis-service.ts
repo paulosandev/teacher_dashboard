@@ -38,11 +38,11 @@ export class BatchAnalysisService {
   }
 
   /**
-   * Procesar análisis de todas las actividades que necesitan análisis
+   * Procesar análisis de todas las actividades que necesitan análisis CON PAGINACIÓN
    */
   async processAllPendingAnalyses(): Promise<BatchAnalysisResult> {
     const startTime = Date.now()
-    console.log('🧠 Iniciando análisis batch de todas las actividades pendientes')
+    console.log('🧠 Iniciando análisis batch paginado de actividades pendientes')
 
     const result: BatchAnalysisResult = {
       success: true,
@@ -53,64 +53,90 @@ export class BatchAnalysisService {
     }
 
     try {
-      // Obtener todas las actividades que necesitan análisis
-      const pendingActivities = await prisma.courseActivity.findMany({
-        where: {
-          needsAnalysis: true,
-          visible: true
-        },
-        include: {
-          course: true,
-          aula: true
-        },
-        orderBy: [
-          { dueDate: 'asc' },
-          { lastDataSync: 'desc' }
-        ]
-      })
+      // PAGINACIÓN: Procesar en chunks para evitar "Out of sort memory"
+      const PAGE_SIZE = 50 // Procesar máximo 50 actividades por página
+      let currentPage = 0
+      let hasMoreActivities = true
 
-      console.log(`📋 Encontradas ${pendingActivities.length} actividades pendientes de análisis`)
+      while (hasMoreActivities) {
+        console.log(`📄 Procesando página ${currentPage + 1} (hasta ${PAGE_SIZE} actividades)`)
 
-      // Procesar en lotes para no sobrecargar el sistema
-      const BATCH_SIZE = 5
-      for (let i = 0; i < pendingActivities.length; i += BATCH_SIZE) {
-        const batch = pendingActivities.slice(i, i + BATCH_SIZE)
-        
-        console.log(`🔄 Procesando lote ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(pendingActivities.length / BATCH_SIZE)} (${batch.length} actividades)`)
-        
-        // Procesar actividades en paralelo dentro del lote
-        const batchPromises = batch.map(activity => 
-          this.analyzeActivity(activity).catch(error => {
-            const errorMsg = `Error analizando ${activity.type} ${activity.activityId} del curso ${activity.courseId}: ${error}`
-            console.error('❌', errorMsg)
-            result.errors.push(errorMsg)
-            return null
-          })
-        )
-
-        const batchResults = await Promise.allSettled(batchPromises)
-        
-        batchResults.forEach((promiseResult, index) => {
-          result.processedActivities++
-          if (promiseResult.status === 'fulfilled' && promiseResult.value) {
-            result.generatedAnalyses++
-          }
+        // Obtener página actual de actividades pendientes
+        const pendingActivities = await prisma.courseActivity.findMany({
+          where: {
+            needsAnalysis: true,
+            visible: true
+          },
+          include: {
+            course: true,
+            aula: true
+          },
+          orderBy: [
+            { dueDate: 'asc' },
+            { lastDataSync: 'desc' }
+          ],
+          take: PAGE_SIZE,
+          skip: currentPage * PAGE_SIZE
         })
 
-        // Pequeña pausa entre lotes para no saturar la API de OpenAI
-        if (i + BATCH_SIZE < pendingActivities.length) {
-          await new Promise(resolve => setTimeout(resolve, 2000))
+        if (pendingActivities.length === 0) {
+          hasMoreActivities = false
+          break
+        }
+
+        console.log(`📋 Página ${currentPage + 1}: Encontradas ${pendingActivities.length} actividades pendientes`)
+
+        // Procesar en lotes pequeños dentro de la página
+        const BATCH_SIZE = 5
+        for (let i = 0; i < pendingActivities.length; i += BATCH_SIZE) {
+          const batch = pendingActivities.slice(i, i + BATCH_SIZE)
+
+          console.log(`🔄 Procesando lote ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(pendingActivities.length / BATCH_SIZE)} de página ${currentPage + 1} (${batch.length} actividades)`)
+
+          // Procesar actividades en paralelo dentro del lote
+          const batchPromises = batch.map(activity =>
+            this.analyzeActivity(activity).catch(error => {
+              const errorMsg = `Error analizando ${activity.type} ${activity.activityId} del curso ${activity.courseId}: ${error}`
+              console.error('❌', errorMsg)
+              result.errors.push(errorMsg)
+              return null
+            })
+          )
+
+          const batchResults = await Promise.allSettled(batchPromises)
+
+          batchResults.forEach((promiseResult, index) => {
+            result.processedActivities++
+            if (promiseResult.status === 'fulfilled' && promiseResult.value) {
+              result.generatedAnalyses++
+            }
+          })
+
+          // Pequeña pausa entre lotes para no saturar la API de OpenAI y MySQL
+          if (i + BATCH_SIZE < pendingActivities.length) {
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          }
+        }
+
+        // Si obtuvimos menos actividades que el PAGE_SIZE, ya no hay más páginas
+        if (pendingActivities.length < PAGE_SIZE) {
+          hasMoreActivities = false
+        } else {
+          currentPage++
+          // Pausa entre páginas para liberar memoria y conexiones MySQL
+          console.log(`⏸️ Pausa entre páginas para optimización de memoria...`)
+          await new Promise(resolve => setTimeout(resolve, 3000))
         }
       }
 
     } catch (error) {
-      console.error('❌ Error en procesamiento batch:', error)
+      console.error('❌ Error en procesamiento batch paginado:', error)
       result.errors.push(`Error general: ${error}`)
       result.success = false
     }
 
     result.duration = Date.now() - startTime
-    console.log(`✅ Análisis batch completado en ${result.duration}ms: ${result.generatedAnalyses}/${result.processedActivities} análisis generados`)
+    console.log(`✅ Análisis batch paginado completado en ${result.duration}ms: ${result.generatedAnalyses}/${result.processedActivities} análisis generados`)
 
     return result
   }
@@ -393,16 +419,19 @@ export class BatchAnalysisService {
     try {
       // Usar prompt unificado específico por tipo de actividad
       const unifiedPrompt = this.buildUnifiedPrompt(activity, analysisData)
-      
+
+      // Sanitizar contenido para evitar errores de Unicode
+      const sanitizedPrompt = this.sanitizeUnicodeForJSON(unifiedPrompt)
+
       const completion = await openai.chat.completions.create({
         model: "gpt-5-mini",
         messages: [
           {
-            role: "user", 
-            content: unifiedPrompt
+            role: "user",
+            content: sanitizedPrompt
           }
         ],
-        max_completion_tokens: 4000 // Solo parámetros soportados por GPT-5-mini
+        max_completion_tokens: 30000  // Aumentado a 10,000 tokens para análisis completos
       })
 
       return completion.choices[0]?.message?.content || null
@@ -441,70 +470,44 @@ ${JSON.stringify(optimizedAnalysisData, null, 2)}
   }
 
   /**
-   * Optimizar datos para evitar exceder límites de tokens
+   * Optimizar datos para evitar exceder límites de tokens - VERSIÓN COMPLETA SIN TRUNCAMIENTO
    */
   private optimizeDataForTokens(analysisData: any, activityType: string): any {
     const optimized = { ...analysisData }
-    
-    // Para foros, limitar el número de discusiones y posts
-    if (activityType === 'forum' && optimized.forumDetails) {
-      if (optimized.forumDetails.discussions && Array.isArray(optimized.forumDetails.discussions)) {
-        // Limitar a máximo 20 discusiones más activas
-        const discussions = optimized.forumDetails.discussions
-        if (discussions.length > 20) {
-          // Ordenar por número de replies y tomar las 20 más activas
-          const sortedDiscussions = discussions
-            .sort((a, b) => (b.replies || 0) - (a.replies || 0))
-            .slice(0, 20)
-          optimized.forumDetails.discussions = sortedDiscussions
-        }
-        
-        // Para cada discusión, limitar posts si hay muchos
-        optimized.forumDetails.discussions = optimized.forumDetails.discussions.map((discussion: any) => {
-          if (discussion.posts && Array.isArray(discussion.posts) && discussion.posts.length > 100) {
-            // Mantener los primeros 50 y últimos 50 posts para contexto
-            const posts = discussion.posts
-            const keepPosts = [
-              ...posts.slice(0, 50),
-              { message: `... [${posts.length - 100} posts intermedios omitidos para optimización] ...` },
-              ...posts.slice(-50)
-            ]
-            discussion.posts = keepPosts
+
+    // Verificar tamaño total
+    const totalSize = JSON.stringify(optimized).length
+    const MAX_SIZE = 500000 // Límite aumentado para análisis completo (500KB)
+
+    // Solo aplicar optimización mínima si es absolutamente necesario
+    if (totalSize > MAX_SIZE) {
+      console.warn(`⚠️ Datos muy grandes (${totalSize} bytes). Aplicando optimización mínima.`)
+
+      // Solo remover rawData si es extremadamente grande
+      if (optimized.rawData && typeof optimized.rawData === 'object') {
+        const rawDataStr = JSON.stringify(optimized.rawData)
+        if (rawDataStr.length > 100000) { // Solo si rawData es > 100KB
+          optimized.rawData = {
+            note: 'Datos raw omitidos por tamaño extremo',
+            originalSize: rawDataStr.length,
+            keys: Object.keys(optimized.rawData)
           }
-          return discussion
-        })
-      }
-    }
-    
-    // Para assignments, limitar submissions si hay muchas
-    if ((activityType === 'assign' || activityType === 'assignment') && optimized.assignmentDetails) {
-      if (optimized.assignmentDetails.submissions && Array.isArray(optimized.assignmentDetails.submissions)) {
-        const submissions = optimized.assignmentDetails.submissions
-        if (submissions.length > 100) {
-          // Mantener muestra representativa: primeras 50 y últimas 50
-          const keepSubmissions = [
-            ...submissions.slice(0, 50),
-            { status: 'MUESTRA_OMITIDA', note: `[${submissions.length - 100} entregas intermedias omitidas para optimización]` },
-            ...submissions.slice(-50)
-          ]
-          optimized.assignmentDetails.submissions = keepSubmissions
         }
       }
-    }
-    
-    // Limpiar rawData muy grande
-    if (optimized.rawData && typeof optimized.rawData === 'object') {
-      const rawDataStr = JSON.stringify(optimized.rawData)
-      if (rawDataStr.length > 50000) { // Si rawData es muy grande
-        optimized.rawData = {
-          note: 'Datos raw omitidos por tamaño',
-          originalSize: rawDataStr.length,
-          keys: Object.keys(optimized.rawData)
-        }
+
+      // Para actividades con más de 10,000 elementos, aplicar paginación suave
+      if (activityType === 'forum' && optimized.forumDetails?.discussions?.length > 1000) {
+        console.log(`📊 Forum con ${optimized.forumDetails.discussions.length} discusiones - manteniendo todas`)
+      }
+
+      if (activityType === 'assign' && optimized.assignmentDetails?.submissions?.length > 1000) {
+        console.log(`📊 Assignment con ${optimized.assignmentDetails.submissions.length} entregas - manteniendo todas`)
       }
     }
-    
-    return optimized
+
+    // POLÍTICA NUEVA: NO TRUNCAR NADA - Enviar contenido completo
+    console.log(`📊 Enviando datos completos para análisis detallado: ${JSON.stringify(analysisData).length} chars (${activityType})`)
+    return analysisData // Devolver datos originales completos SIN optimización
   }
 
   /**
@@ -532,10 +535,11 @@ FORMATO OBLIGATORIO - El análisis debe estructurarse EXACTAMENTE en estas 5 dim
 
 **[Nombre de la dimensión]**
 
-- **Hallazgo 1**: Descripción breve con **elementos relevantes** en negritas
-- **Hallazgo 2**: Descripción breve con **elementos relevantes** en negritas  
-- **Hallazgo 3**: Descripción breve con **elementos relevantes** en negritas
-**Acción sugerida:** Redactar UNA recomendación específica, breve y accionable para el docente.
+- **Hallazgo 1**: Descripción DETALLADA con **nombres específicos**, **fechas**, **cantidades** en negritas
+- **Hallazgo 2**: Descripción DETALLADA con **datos cuantitativos** específicos y ejemplos concretos
+- **Hallazgo 3**: Descripción DETALLADA con **citas textuales** y **patrones identificados**
+- **Hallazgo 4**: Descripción DETALLADA con **comparaciones** y **contexto educativo**
+**Acción sugerida:** Redactar recomendación ESPECÍFICA con pasos concretos y medibles.
 
 DIMENSIONES OBLIGATORIAS para foros (DEBEN aparecer todas en este orden):
 
@@ -545,13 +549,17 @@ DIMENSIONES OBLIGATORIAS para foros (DEBEN aparecer todas en este orden):
 4. **Temas y dudas emergentes** (análisis semántico del contenido)
 5. **Oportunidades de intervención** (momentos específicos para actuar)
 
-REGLAS ESTRICTAS:
-- EXACTAMENTE 5 dimensiones, ni más ni menos
-- Cada dimensión DEBE tener al menos 3 hallazgos específicos en viñetas
-- Cada dimensión DEBE terminar con "Acción sugerida:" 
-- NO agregar introducciones, conclusiones ni texto adicional
-- Usar SOLO las conversaciones reales disponibles en los datos
-- Si no hay conversaciones, mencionar explícitamente "Sin conversaciones para analizar"
+REGLAS ESTRICTAS AMPLIADAS:
+- EXACTAMENTE 5 dimensiones, con análisis EXTENSO en cada una
+- Cada dimensión DEBE tener MÍNIMO 4 hallazgos específicos y detallados
+- INCLUIR nombres específicos de estudiantes cuando sea relevante
+- INCLUIR datos cuantitativos: números de posts, fechas, horarios de participación
+- MENCIONAR contenido textual específico y citas cuando sea relevante para ilustrar puntos
+- ANALIZAR patrones temporales de participación
+- Cada dimensión DEBE terminar con "Acción sugerida:" con pasos específicos y medibles
+- El análisis completo debe tener MÍNIMO 1000 palabras
+- Usar TODO el contenido de conversaciones disponible, no resumir
+- Si hay pocas conversaciones, analizar en mayor profundidad las existentes
 
 IMPORTANTE: NO menciones nombres de variables, parámetros técnicos, campos de base de datos ni referencias a código. Usa lenguaje natural y enfocado en el contexto educativo. Por ejemplo, no digas "el campo 'posts' muestra" sino "las conversaciones de los estudiantes revelan". Analiza el CONTENIDO REAL de los mensajes, no solo metadatos.`
 
@@ -621,6 +629,114 @@ IMPORTANTE: NO menciones nombres de variables, parámetros técnicos, campos de 
     if (!text) return ''
     if (text.length <= maxLength) return text
     return text.substring(0, maxLength) + '...'
+  }
+
+  /**
+   * Extraer insights positivos del análisis
+   */
+  private extractPositiveInsights(analysisText: string): string[] {
+    if (!analysisText) return []
+
+    const insights: string[] = []
+
+    // Buscar patrones de insights positivos
+    const positivePatterns = [
+      /\*\*Hallazgo positivo[^:]*:\*\* (.+?)(?=\.|;|❌|⚠️|$)/gi,
+      /- \*\*Hallazgo \d+\*\*: Hay \*\*(.+?)\*\*/gi,
+      /- \*\*Hallazgo \d+\*\*: (.+?) \*\*funciona[^\*]*\*\*/gi,
+      /✅ (.+?)(?=\n|$)/gi,
+      /\*\*Fortaleza:\*\* (.+?)(?=\.|;|\n|$)/gi,
+      /\*\*Aspecto positivo:\*\* (.+?)(?=\.|;|\n|$)/gi,
+      /son \*\*(.+?)\*\*/gi,
+      /está \*\*(.+?)\*\*/gi,
+      /\*\*múltiples (.+?)\*\* con contenido académico/gi,
+      /\*\*(.+?)\*\* están documentando/gi
+    ]
+
+    positivePatterns.forEach(pattern => {
+      const matches = analysisText.match(pattern)
+      if (matches) {
+        matches.forEach(match => {
+          let cleaned = match.replace(/^[- ✅]*\*\*[^:]*:\*\*/, '').trim()
+          if (cleaned.includes('son **') || cleaned.includes('está **')) {
+            cleaned = cleaned.replace(/son \*\*/, '').replace(/está \*\*/, '').replace(/\*\*/g, '')
+          }
+          if (cleaned && cleaned.length > 10 && !cleaned.includes('❌') && !cleaned.includes('⚠️')) {
+            insights.push(cleaned.substring(0, 200)) // Limitar longitud
+          }
+        })
+      }
+    })
+
+    return insights.slice(0, 5) // Máximo 5 insights
+  }
+
+  /**
+   * Extraer alertas/problemas del análisis
+   */
+  private extractAlerts(analysisText: string): string[] {
+    if (!analysisText) return []
+
+    const alerts: string[] = []
+
+    // Buscar patrones de alertas/problemas
+    const alertPatterns = [
+      /❌ (.+?)(?=\.|⚠️|✅|$)/gi,
+      /⚠️ (.+?)(?=\.|❌|✅|$)/gi,
+      /\*\*Problema[^:]*:\*\* (.+?)(?=\.|;|\n|$)/gi,
+      /\*\*Riesgo[^:]*:\*\* (.+?)(?=\.|;|\n|$)/gi,
+      /\*\*no hay (.+?)\*\*/gi,
+      /\*\*0 (.+?)\*\* indica que/gi,
+      /No hay (.+?) registrado/gi,
+      /\*\*ausencia de (.+?)\*\*/gi,
+      /- \*\*Hallazgo \d+\*\*: (.+?) \*\*no hay (.+?)\*\*/gi,
+      /\*\*(.+?)\*\* no han cumplido/gi
+    ]
+
+    alertPatterns.forEach(pattern => {
+      const matches = analysisText.match(pattern)
+      if (matches) {
+        matches.forEach(match => {
+          let cleaned = match.replace(/^[- ❌⚠️]*(\*\*[^:]*:\*\*)?/, '').trim()
+
+          // Limpiar patrones específicos
+          if (cleaned.includes('**no hay ') || cleaned.includes('**0 ') || cleaned.includes('**ausencia de ')) {
+            cleaned = cleaned.replace(/\*\*/g, '')
+          }
+
+          if (cleaned && cleaned.length > 10 && !cleaned.includes('✅')) {
+            alerts.push(cleaned.substring(0, 200)) // Limitar longitud
+          }
+        })
+      }
+    })
+
+    return alerts.slice(0, 5) // Máximo 5 alertas
+  }
+
+  /**
+   * Sanitizar texto para evitar errores de Unicode en JSON
+   */
+  private sanitizeUnicodeForJSON(text: string): string {
+    if (!text) return ''
+
+    try {
+      // Reemplazar caracteres Unicode problemáticos
+      return text
+        // Eliminar caracteres de control Unicode que pueden causar problemas
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, ' ')
+        // Reemplazar caracteres surrogates mal formados
+        .replace(/[\uD800-\uDFFF]/g, '?')
+        // Limpiar espacios múltiples
+        .replace(/\s+/g, ' ')
+        // Asegurar que el texto sea UTF-8 válido
+        .normalize('NFKC')
+        .trim()
+    } catch (error) {
+      console.warn('⚠️ Error sanitizando Unicode, usando texto base:', error)
+      // Fallback: remover todos los caracteres no-ASCII problemáticos
+      return text.replace(/[^\x20-\x7E\u00A0-\uFFFF]/g, '?').trim()
+    }
   }
 
   /**
@@ -789,10 +905,10 @@ IMPORTANTE: NO menciones nombres de variables, parámetros técnicos, campos de 
       update: {
         // Actualizar datos existentes
         activityName: activity.name,
-        summary: processedAnalysis.analysisText || processedAnalysis.summary || 'Análisis generado',
-        positives: processedAnalysis.keyInsights || [],
-        alerts: processedAnalysis.recommendations || [],
-        insights: processedAnalysis.sections || [],
+        summary: processedAnalysis.summary || 'Análisis generado',
+        positives: this.extractPositiveInsights(processedAnalysis.analysisText),
+        alerts: this.extractAlerts(processedAnalysis.analysisText),
+        insights: processedAnalysis.recommendations || [],
         recommendation: this.truncateText(processedAnalysis.analysisText || 'Sin recomendación específica', 2000),
         fullAnalysis: processedAnalysis.analysisText,
         activityData: inputData,
@@ -811,10 +927,10 @@ IMPORTANTE: NO menciones nombres de variables, parámetros técnicos, campos de 
         activityType: activity.type,
         activityName: activity.name,
         
-        // Datos del análisis
-        summary: processedAnalysis.analysisText || processedAnalysis.summary || 'Análisis generado',
-        positives: processedAnalysis.keyInsights || [],
-        alerts: processedAnalysis.alerts || [],
+        // Datos del análisis (mapeo corregido)
+        summary: processedAnalysis.summary || 'Análisis generado',
+        positives: this.extractPositiveInsights(processedAnalysis.analysisText),
+        alerts: this.extractAlerts(processedAnalysis.analysisText),
         insights: processedAnalysis.recommendations || [],
         recommendation: processedAnalysis.summary || 'Sin recomendaciones específicas',
         fullAnalysis: processedAnalysis.analysisText,
@@ -831,6 +947,193 @@ IMPORTANTE: NO menciones nombres de variables, parámetros técnicos, campos de 
         llmResponse: processedAnalysis
       }
     })
+  }
+
+  /**
+   * NUEVO: Analizar actividades específicas ya guardadas en BD
+   */
+  async analyzeSpecificActivities(filters: {
+    aulaId?: string
+    courseId?: string
+    activityType?: string
+    activityIds?: string[]
+    forceReAnalysis?: boolean
+  }): Promise<{
+    success: boolean
+    processedActivities: number
+    generatedAnalyses: number
+    errors: string[]
+    duration: number
+  }> {
+    const startTime = Date.now()
+    console.log('🎯 Iniciando análisis selectivo de actividades específicas')
+
+    const result = {
+      success: true,
+      processedActivities: 0,
+      generatedAnalyses: 0,
+      errors: [],
+      duration: 0
+    }
+
+    try {
+      // Construir filtros para la consulta
+      const whereClause: any = {
+        visible: true
+      }
+
+      if (filters.aulaId) {
+        whereClause.aulaId = filters.aulaId
+      }
+
+      if (filters.courseId) {
+        whereClause.courseId = parseInt(filters.courseId)
+      }
+
+      if (filters.activityType) {
+        whereClause.type = filters.activityType
+      }
+
+      if (filters.activityIds && filters.activityIds.length > 0) {
+        whereClause.activityId = {
+          in: filters.activityIds.map(id => parseInt(id))
+        }
+      }
+
+      // Si no es re-análisis forzado, solo actividades que necesitan análisis
+      if (!filters.forceReAnalysis) {
+        whereClause.needsAnalysis = true
+      }
+
+      // Obtener actividades que coincidan con los filtros
+      const activities = await prisma.courseActivity.findMany({
+        where: whereClause,
+        include: {
+          course: true,
+          aula: true
+        },
+        orderBy: [
+          { dueDate: 'asc' },
+          { lastDataSync: 'desc' }
+        ]
+      })
+
+      console.log(`🎯 Encontradas ${activities.length} actividades para análisis selectivo`)
+
+      if (activities.length === 0) {
+        console.log('⚠️ No se encontraron actividades que coincidan con los filtros')
+        return result
+      }
+
+      // Procesar en lotes pequeños
+      const BATCH_SIZE = 3
+      for (let i = 0; i < activities.length; i += BATCH_SIZE) {
+        const batch = activities.slice(i, i + BATCH_SIZE)
+
+        console.log(`🔄 Procesando lote ${Math.floor(i / BATCH_SIZE) + 1}/${Math.ceil(activities.length / BATCH_SIZE)} (${batch.length} actividades)`)
+
+        // Procesar actividades en paralelo dentro del lote
+        const batchPromises = batch.map(activity =>
+          this.analyzeActivity(activity).catch(error => {
+            const errorMsg = `Error analizando ${activity.type} ${activity.activityId} del curso ${activity.courseId}: ${error}`
+            console.error('❌', errorMsg)
+            result.errors.push(errorMsg)
+            return null
+          })
+        )
+
+        const batchResults = await Promise.allSettled(batchPromises)
+
+        batchResults.forEach((promiseResult, index) => {
+          result.processedActivities++
+          if (promiseResult.status === 'fulfilled' && promiseResult.value) {
+            result.generatedAnalyses++
+          }
+        })
+
+        // Pausa entre lotes
+        if (i + BATCH_SIZE < activities.length) {
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+      }
+
+    } catch (error) {
+      console.error('❌ Error en análisis selectivo:', error)
+      result.errors.push(`Error general: ${error}`)
+      result.success = false
+    }
+
+    result.duration = Date.now() - startTime
+    console.log(`✅ Análisis selectivo completado en ${result.duration}ms: ${result.generatedAnalyses}/${result.processedActivities} análisis generados`)
+
+    return result
+  }
+
+  /**
+   * NUEVO: Obtener lista de actividades disponibles para análisis selectivo
+   */
+  async getAvailableActivitiesForAnalysis(filters?: {
+    aulaId?: string
+    courseId?: string
+    activityType?: string
+  }): Promise<Array<{
+    aulaId: string
+    courseId: string
+    activityId: string
+    activityType: string
+    activityName: string
+    needsAnalysis: boolean
+    lastAnalyzed?: Date
+    courseName?: string
+  }>> {
+    try {
+      const whereClause: any = {
+        visible: true
+      }
+
+      if (filters?.aulaId) {
+        whereClause.aulaId = filters.aulaId
+      }
+
+      if (filters?.courseId) {
+        whereClause.courseId = parseInt(filters.courseId)
+      }
+
+      if (filters?.activityType) {
+        whereClause.type = filters.activityType
+      }
+
+      const activities = await prisma.courseActivity.findMany({
+        where: whereClause,
+        include: {
+          course: {
+            select: {
+              courseName: true
+            }
+          }
+        },
+        orderBy: [
+          { aulaId: 'asc' },
+          { courseId: 'asc' },
+          { name: 'asc' }
+        ]
+      })
+
+      return activities.map(activity => ({
+        aulaId: activity.aulaId,
+        courseId: activity.courseId,
+        activityId: activity.activityId,
+        activityType: activity.type,
+        activityName: activity.name,
+        needsAnalysis: activity.needsAnalysis,
+        lastAnalyzed: activity.lastAnalysis,
+        courseName: activity.course?.courseName
+      }))
+
+    } catch (error) {
+      console.error('❌ Error obteniendo actividades disponibles:', error)
+      return []
+    }
   }
 
   /**
@@ -1109,10 +1412,10 @@ IMPORTANTE: NO menciones nombres de variables, parámetros técnicos, campos de 
         },
         update: {
           activityName: `${activity.name} (Grupo ${groupId})`,
-          summary: processedAnalysis.analysisText || 'Análisis de discusiones grupales',
-          positives: processedAnalysis.keyInsights || [],
-          alerts: processedAnalysis.recommendations || [],
-          insights: processedAnalysis.sections || [],
+          summary: processedAnalysis.summary || 'Análisis de discusiones grupales',
+          positives: this.extractPositiveInsights(processedAnalysis.analysisText),
+          alerts: this.extractAlerts(processedAnalysis.analysisText),
+          insights: processedAnalysis.recommendations || [],
           recommendation: this.truncateText(processedAnalysis.analysisText || 'Sin recomendación específica', 2000),
           fullAnalysis: processedAnalysis.analysisText,
           activityData: analysisData,
@@ -1143,10 +1446,10 @@ IMPORTANTE: NO menciones nombres de variables, parámetros técnicos, campos de 
           activityId: activity.activityId.toString(),
           activityType: activity.type,
           activityName: `${activity.name} (Grupo ${groupId})`,
-          summary: processedAnalysis.analysisText || 'Análisis de discusiones grupales',
-          positives: processedAnalysis.keyInsights || [],
-          alerts: processedAnalysis.recommendations || [],
-          insights: processedAnalysis.sections || [],
+          summary: processedAnalysis.summary || 'Análisis de discusiones grupales',
+          positives: this.extractPositiveInsights(processedAnalysis.analysisText),
+          alerts: this.extractAlerts(processedAnalysis.analysisText),
+          insights: processedAnalysis.recommendations || [],
           recommendation: this.truncateText(processedAnalysis.analysisText || 'Sin recomendación específica', 2000),
           fullAnalysis: processedAnalysis.analysisText,
           activityData: analysisData,
@@ -1192,11 +1495,11 @@ IMPORTANTE: NO menciones nombres de variables, parámetros técnicos, campos de 
         model: "gpt-5-mini",
         messages: [
           {
-            role: "user", 
+            role: "user",
             content: groupPrompt
           }
         ],
-        max_completion_tokens: 4000
+        max_completion_tokens: 30000
       })
 
       return completion.choices[0]?.message?.content || null
@@ -1349,11 +1652,11 @@ Siempre incluye insights accionables acerca de nivel de participación grupal y 
         model: "gpt-5-mini",
         messages: [
           {
-            role: "user", 
+            role: "user",
             content: feedbackPrompt
           }
         ],
-        max_completion_tokens: 4000
+        max_completion_tokens: 30000
       })
 
       return completion.choices[0]?.message?.content || null

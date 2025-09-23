@@ -30,7 +30,7 @@ export class CronScheduler {
 
     console.log('🕐 Inicializando programador de tareas automáticas...')
 
-    // Job matutino: 08:00 AM (limpieza → carga → análisis)
+    // Job principal: 8:00 AM (limpieza → carga → análisis)
     this.morningJob = cron.schedule('0 8 * * *', async () => {
       console.log('\n🌅 ===== PROCESO BATCH MATUTINO =====')
       await this.executeFullProcess('morning')
@@ -39,8 +39,8 @@ export class CronScheduler {
       timezone: "America/Mexico_City"
     })
 
-    // Job vespertino: 06:00 PM (limpieza → carga → análisis)
-    this.afternoonJob = cron.schedule('20 18 * * *', async () => {
+    // Job vespertino: 6:00 PM (limpieza → carga → análisis)
+    this.afternoonJob = cron.schedule('0 18 * * *', async () => {
       console.log('\n🌆 ===== PROCESO BATCH VESPERTINO =====')
       await this.executeFullProcess('afternoon')
     }, {
@@ -51,8 +51,8 @@ export class CronScheduler {
     this.isInitialized = true
 
     console.log('✅ Programador de tareas inicializado:')
-    console.log('   📅 Proceso matutino: 08:00 AM (México) - Limpieza → Carga → Análisis')
-    console.log('   📅 Proceso vespertino: 06:00 PM (México) - Limpieza → Carga → Análisis')
+    console.log('   📅 Proceso matutino: 8:00 AM (México) - Limpieza → Carga → Análisis [TODAS LAS AULAS]')
+    console.log('   📅 Proceso vespertino: 6:00 PM (México) - Limpieza → Carga → Análisis [TODAS LAS AULAS]')
   }
 
   /**
@@ -126,26 +126,42 @@ export class CronScheduler {
     try {
       const fs = require('fs').promises
       const path = require('path')
-      
+
       const cacheDir = path.join(process.cwd(), '.cache', 'analysis')
       const now = Date.now()
       const maxAge = 7 * 24 * 60 * 60 * 1000 // 7 días
 
-      const files = await fs.readdir(cacheDir)
-      
-      let deleted = 0
-      for (const file of files) {
-        const filePath = path.join(cacheDir, file)
-        const stats = await fs.stat(filePath)
-        
-        if (now - stats.mtime.getTime() > maxAge) {
-          await fs.unlink(filePath)
-          deleted++
-        }
+      // Crear directorio de caché si no existe
+      try {
+        await fs.mkdir(cacheDir, { recursive: true })
+        console.log(`📁 Directorio de caché creado: ${cacheDir}`)
+      } catch (mkdirError) {
+        // Ignorar si ya existe
       }
-      
-      console.log(`🧹 Limpieza completada: ${deleted} archivos de caché eliminados`)
-      
+
+      try {
+        const files = await fs.readdir(cacheDir)
+
+        let deleted = 0
+        for (const file of files) {
+          const filePath = path.join(cacheDir, file)
+          try {
+            const stats = await fs.stat(filePath)
+
+            if (now - stats.mtime.getTime() > maxAge) {
+              await fs.unlink(filePath)
+              deleted++
+            }
+          } catch (fileError) {
+            console.log(`⚠️ Error procesando archivo ${file}:`, fileError.message)
+          }
+        }
+
+        console.log(`🧹 Limpieza completada: ${deleted} archivos de caché eliminados`)
+      } catch (readdirError) {
+        console.log(`📁 Directorio de caché vacío o no accesible: ${cacheDir}`)
+      }
+
     } catch (error) {
       console.error('❌ Error limpiando caché:', error)
     }

@@ -7,7 +7,7 @@ generator client {
 // Configuración para desarrollo (PostgreSQL) y producción (MySQL)
 // Para cambiar a MySQL en producción, configurar DATABASE_PROVIDER=mysql en .env
 datasource db {
-  provider = "postgresql"  // Variable de entorno: "postgresql" o "mysql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -271,13 +271,12 @@ model AulaCourse {
   aula            Aula     @relation(fields: [aulaId], references: [aulaId], onDelete: Cascade)
   activities      CourseActivity[]
   analyses        BatchAnalysis[]
-  
+
   @@unique([aulaId, courseId])
   @@index([aulaId])
   @@index([courseId])
   @@index([isActive])
   @@index([lastSync])
-  @@index([teacherIds])
 }
 
 // Modelo para actividades (tareas, foros, etc.) de cada curso
@@ -326,6 +325,10 @@ model CourseActivity {
   @@index([dueDate])
   @@index([needsAnalysis])
   @@index([lastDataSync])
+  // Índices optimizados para batch analysis
+  @@index([needsAnalysis, visible])
+  @@index([needsAnalysis, dueDate])
+  @@index([visible, dueDate, lastDataSync])
 }
 
 // Modelo para análisis generados por el sistema batch
