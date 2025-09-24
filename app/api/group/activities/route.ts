@@ -550,6 +550,7 @@ async function getForumDetails(client: MoodleAPIClient, forumId: number, groupId
     try {
       const analysis = await prisma.activityAnalysis.findFirst({
         where: {
+          courseId: activityKey,
           activityId: forumId.toString(),
           activityType: 'forum'
         }
