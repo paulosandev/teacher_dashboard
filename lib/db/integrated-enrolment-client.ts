@@ -3,8 +3,8 @@
  * Conexión directa a la base de datos MySQL
  */
 
-import { createConnection } from 'mysql2/promise'
-import type { Connection } from 'mysql2/promise'
+import { createPool } from 'mysql2/promise'
+import type { Pool, Connection } from 'mysql2/promise'
 
 export interface EnrolmentRecord {
   id: number
@@ -63,7 +63,7 @@ class IntegratedEnrolmentClient {
   private readonly DB_PASSWORD = process.env.ENROLMENT_DB_PASSWORD || ''
   private readonly DB_NAME = process.env.ENROLMENT_DB_NAME || 'heroku_e6e033d354ff64c'
 
-  private connection: Connection | null = null
+  private pool: Pool | null = null
   private isConnected = false
 
   /**
@@ -106,76 +106,86 @@ class IntegratedEnrolmentClient {
 
 
   /**
-   * Establecer conexión MySQL directa
+   * Establecer pool de conexiones MySQL
    */
-  private async establishDatabaseConnection(): Promise<void> {
-    console.log(`💾 Conectando a MySQL ${this.USE_SSH_TUNNEL ? 'via SSH tunnel' : 'directamente'}...`)
+  private async establishDatabasePool(): Promise<void> {
+    console.log(`💾 Creando pool MySQL ${this.USE_SSH_TUNNEL ? 'via SSH tunnel' : 'directamente'}...`)
     console.log(`📍 Host: ${this.DB_HOST}:${this.DB_PORT}`)
 
-    const connectionConfig: any = {
+    const poolConfig: any = {
       host: this.DB_HOST,
       port: this.DB_PORT,
       user: this.DB_USER,
       database: this.DB_NAME,
-      connectTimeout: 30000, // 30 segundos
+      connectionLimit: 10, // Máximo 10 conexiones concurrentes
+      queueLimit: 0, // Sin límite de queue
+      acquireTimeout: 60000, // 60 segundos para obtener conexión
+      timeout: 60000, // 60 segundos timeout de query
+      reconnect: true, // Reconexión automática
       idleTimeout: 300000, // 5 minutos de inactividad
+      maxIdle: 5, // Máximo 5 conexiones idle
     }
 
     // Solo agregar password si no está vacío
     if (this.DB_PASSWORD) {
-      connectionConfig.password = this.DB_PASSWORD
+      poolConfig.password = this.DB_PASSWORD
     }
 
     // Solo usar SSL si no estamos usando el túnel
     if (!this.USE_SSH_TUNNEL) {
-      connectionConfig.ssl = { rejectUnauthorized: false }
+      poolConfig.ssl = { rejectUnauthorized: false }
     }
 
-    this.connection = await createConnection(connectionConfig)
+    this.pool = createPool(poolConfig)
 
-    console.log(`✅ Conexión MySQL ${this.USE_SSH_TUNNEL ? 'via túnel' : 'directa'} establecida`)
+    // Verificar conectividad inicial
+    const connection = await this.pool.getConnection()
+    await connection.ping()
+    connection.release()
+
+    console.log(`✅ Pool MySQL ${this.USE_SSH_TUNNEL ? 'via túnel' : 'directo'} establecido (${poolConfig.connectionLimit} conexiones)`)
   }
 
   /**
-   * Conectar a MySQL directamente
+   * Conectar pool MySQL
    */
   async connect(): Promise<void> {
     if (this.isConnected) {
-      console.log('🔗 Ya está conectado')
+      console.log('🔗 Pool ya está conectado')
       return
     }
 
     try {
-      // Establecer conexión MySQL directa
-      await this.establishDatabaseConnection()
-      
+      // Establecer pool MySQL
+      await this.establishDatabasePool()
+
       this.isConnected = true
-      console.log('🎉 Conexión directa a MySQL establecida')
-      
+      console.log('🎉 Pool MySQL establecido correctamente')
+
     } catch (error) {
-      console.error('❌ Error estableciendo conexión:', error)
+      console.error('❌ Error estableciendo pool:', error)
       await this.disconnect()
       throw error
     }
   }
 
   /**
-   * Desconectar
+   * Desconectar pool
    */
   async disconnect(): Promise<void> {
-    console.log('🔒 Desconectando...')
-    
-    if (this.connection) {
-      await this.connection.end()
-      this.connection = null
-      console.log('💾 Conexión MySQL cerrada')
+    console.log('🔒 Cerrando pool...')
+
+    if (this.pool) {
+      await this.pool.end()
+      this.pool = null
+      console.log('💾 Pool MySQL cerrado')
     }
 
     this.isConnected = false
   }
 
   /**
-   * Ejecutar consulta asegurando conexión
+   * Ejecutar consulta usando el pool
    */
   private async executeQuery(sql: string, params: any[] = []): Promise<any[]> {
     if (!this.isConnected) {
@@ -183,31 +193,33 @@ class IntegratedEnrolmentClient {
     }
 
     try {
-      if (!this.connection) {
-        throw new Error('No hay conexión a la base de datos')
+      if (!this.pool) {
+        throw new Error('No hay pool de conexiones disponible')
       }
 
-      const [results] = await this.connection.execute(sql, params)
+      const [results] = await this.pool.execute(sql, params)
       return results as any[]
-      
+
     } catch (error) {
       console.error('❌ Error ejecutando consulta:', error)
-      
-      // Si hay error de conexión, intentar reconectar
+
+      // Si hay error de conexión, intentar reconectar el pool
       if (error instanceof Error && (
         error.message.includes('Connection lost') ||
         error.message.includes('ECONNREFUSED') ||
-        error.message.includes('PROTOCOL_CONNECTION_LOST')
+        error.message.includes('PROTOCOL_CONNECTION_LOST') ||
+        error.message.includes('closed state') ||
+        error.message.includes('Pool is closed')
       )) {
-        console.log('🔄 Intentando reconectar...')
+        console.log('🔄 Reestableciendo pool de conexiones...')
         this.isConnected = false
         await this.connect()
-        
+
         // Reintentar la consulta
-        const [results] = await this.connection!.execute(sql, params)
+        const [results] = await this.pool!.execute(sql, params)
         return results as any[]
       }
-      
+
       throw error
     }
   }
