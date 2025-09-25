@@ -345,35 +345,14 @@ async function getOpenActivitiesForGroup(
             continue
           }
 
-          // Filtrar por fechas de entrega si es necesario
+          // Filtrar por fechas de entrega - solo mostrar actividades abiertas
           const isOpen = (!assignment.duedate || assignment.duedate === 0 || assignment.duedate > now) &&
                         (!assignment.cutoffdate || assignment.cutoffdate === 0 || assignment.cutoffdate > now)
 
-          // NUEVO: Verificar si tiene análisis pre-calculado (coherente con el backend)
-          const aulaIdFromUrl = moodleApiUrl.replace('/webservice/rest/server.php', '').replace('https://', '').split('.')[0]
-          const activityKey = `${aulaIdFromUrl}-${courseId}`
-          const hasAnalysis = await prisma.activityAnalysis.findFirst({
-            where: {
-              courseId: activityKey,
-              activityId: assignment.id.toString(),
-              activityType: 'assign'
-            }
-          })
-
-          const hasSubstantialContent = assignment.numsubmissions > 0 ||
-                                       (assignment.submissions && assignment.submissions.length > 0)
-
-          // NUEVO: Para aulas principales (101-110), mostrar TODAS las actividades
-          const isMainAula = /^aula10[1-9]$|^aula110$/.test(aulaIdFromUrl)
-          const shouldShow = isMainAula ? true : (isOpen || hasSubstantialContent || hasAnalysis)
-
-          if (!shouldShow) {
-            console.log(`⏭️ [SKIP] Asignación ${assignment.name} está cerrada, sin contenido y sin análisis`)
+          // Solo mostrar actividades que estén abiertas
+          if (!isOpen) {
+            console.log(`⏭️ [SKIP] Asignación ${assignment.name} está cerrada o expirada`)
             continue
-          }
-
-          if (!isOpen && (hasSubstantialContent || hasAnalysis)) {
-            console.log(`📊 [INCLUIR] Asignación ${assignment.name} está vencida pero tiene ${hasAnalysis ? 'análisis' : 'contenido'}`)
           }
 
           console.log(`📝 Procesando asignación adicional: ${assignment.name}`)
@@ -395,7 +374,7 @@ async function getOpenActivitiesForGroup(
             type: 'Tarea',
             courseId,
             groupId: groupId, // Las asignaciones generalmente no están filtradas por grupo
-            isOpen: isOpen,
+            isOpen: true, // Solo mostramos actividades abiertas
             dueDate: assignment.duedate || null,
             analysis: preCalculatedAnalysis,
             hasAnalysis: !!preCalculatedAnalysis,
@@ -540,45 +519,14 @@ async function getForumDetails(client: MoodleAPIClient, forumId: number, groupId
     const forum = forums.find((f: any) => f.id === forumId)
     if (!forum) return { isOpen: false }
 
-    // Verificar fechas de apertura y cierre
+    // Verificar fechas de apertura y cierre - solo mostrar foros abiertos
     const isOpen = (!forum.duedate || forum.duedate === 0 || forum.duedate > now) &&
                    (!forum.cutoffdate || forum.cutoffdate === 0 || forum.cutoffdate > now)
 
-    // NUEVO: Verificar si tiene análisis pre-calculado o contenido sustancial (coherente con el backend)
-    const activityKey = `${client.baseUrl.includes('aula') ? client.baseUrl.match(/aula(\d+)/)?.[1] || 'av141' : 'av141'}-${forum.course || 'unknown'}`
-    let hasAnalysis = false
-    try {
-      const analysis = await prisma.activityAnalysis.findFirst({
-        where: {
-          courseId: activityKey,
-          activityId: forumId.toString(),
-          activityType: 'forum'
-        }
-      })
-      hasAnalysis = !!analysis
-    } catch (error) {
-      console.log(`⚠️ No se pudo verificar análisis del foro ${forumId}`)
-      hasAnalysis = false
-    }
-
-    let hasSubstantialContent = false
-    try {
-      const discussions = await client.getForumDiscussions(forumId)
-      hasSubstantialContent = discussions && discussions.length > 0
-    } catch (error) {
-      console.log(`⚠️ No se pudo verificar contenido del foro ${forumId}`)
-      hasSubstantialContent = false
-    }
-
-    // NUEVO: Para aulas principales (101-110), mostrar TODOS los foros
-    const aulaId = client.baseUrl.includes('aula') ? client.baseUrl.match(/aula(\d+)/)?.[1] || 'av141' : 'av141'
-    const isMainAula = /^10[1-9]$|^110$/.test(aulaId)
-    const shouldShow = isMainAula ? true : (isOpen || hasSubstantialContent || hasAnalysis)
-
     return {
       isOpen,
-      shouldShow,
-      hasSubstantialContent,
+      shouldShow: isOpen, // Solo mostrar si está abierto
+      hasSubstantialContent: false,
       dueDate: forum.duedate || null,
       cutoffDate: forum.cutoffdate || null,
       description: forum.intro || '',

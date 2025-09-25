@@ -669,13 +669,6 @@ export function BatchDashboardContent({
                               </div>
 
 
-                              {/* Fecha de vencimiento si existe */}
-                              {activity.dueDate && (
-                                <div className="flex items-center text-sm text-orange-600 mb-4">
-                                  <FontAwesomeIcon icon={faCalendarAlt} className="w-4 h-4 mr-2" />
-                                  <span>Vence: {formatDate(new Date(activity.dueDate * 1000).toISOString())}</span>
-                                </div>
-                              )}
 
                               {/* Footer con botones - centrado en el card */}
                               <div className="flex justify-between items-center">
