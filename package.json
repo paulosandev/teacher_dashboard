@@ -23,6 +23,8 @@
     "batch:run": "node scripts/run-batch-manual.js",
     "batch:run:101": "node scripts/run-batch-manual.js --aula101-only",
     "batch:run:force": "node scripts/run-batch-manual.js --force",
+    "batch:mark": "node scripts/force-reanalysis.js",
+    "batch:mark:all": "node scripts/force-reanalysis.js --all",
     "prisma:postgresql": "node scripts/switch-db.js postgresql",
     "prisma:mysql": "node scripts/switch-db.js mysql",
     "check": "tsx scripts/check-setup.ts",
