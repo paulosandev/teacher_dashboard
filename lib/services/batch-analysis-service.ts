@@ -322,25 +322,62 @@ export class BatchAnalysisService {
     try {
       console.log(`🔍 Enriqueciendo datos de foro "${activity.name}" con conversaciones completas...`)
       
-      // Si ya tenemos discussions, enriquecerlas con hilos completos
-      if (forumData.discussions && Array.isArray(forumData.discussions)) {
-        const enrichedDiscussions = []
+      console.log(`🔍 Enriqueciendo foro "${activity.name}" con discusiones completas`)
+      console.log(`📊 Discusiones existentes en forumData: ${forumData.discussions ? forumData.discussions.length : 'NINGUNA'}`)
 
-        // Necesitamos un cliente Moodle para obtener los posts
-        const aulaConfig = aulaConfigService.getAulaConfig(activity.aulaId)
-        if (!aulaConfig) {
-          console.log(`❌ No se encontró configuración para aula ${activity.aulaId}`)
-          return forumData
+      // NUEVO: Si no hay discussions en forumData, obtenerlas directamente
+      const aulaConfig = aulaConfigService.getAulaConfig(activity.aulaId)
+      if (!aulaConfig) {
+        console.log(`❌ No se encontró configuración para aula ${activity.aulaId}`)
+        return forumData
+      }
+
+      let discussionsToProcess = forumData.discussions || []
+
+      // Si no hay discusiones almacenadas, obtenerlas directamente de Moodle
+      if (discussionsToProcess.length === 0) {
+        console.log(`🔧 No hay discusiones almacenadas, obteniendo directamente de Moodle para foro ${activity.activityId}`)
+
+        const discussionsUrl = `${aulaConfig.apiUrl}?wstoken=${aulaConfig.token}&wsfunction=mod_forum_get_forum_discussions&moodlewsrestformat=json&forumid=${activity.activityId}`
+
+        try {
+          const discussionsResponse = await fetch(discussionsUrl)
+          if (discussionsResponse.ok) {
+            const discussionsData = await discussionsResponse.json()
+            discussionsToProcess = discussionsData.discussions || []
+            console.log(`💬 Obtenidas ${discussionsToProcess.length} discusiones directamente de Moodle`)
+          } else {
+            console.error(`❌ Error HTTP ${discussionsResponse.status} obteniendo discusiones`)
+          }
+        } catch (error) {
+          console.error(`❌ Error obteniendo discusiones:`, error)
         }
+      }
+
+      if (discussionsToProcess.length > 0) {
+        const enrichedDiscussions = []
 
         const client = new MoodleAPIClient(aulaConfig.apiUrl, aulaConfig.token)
 
-        for (const discussion of forumData.discussions) {
+        for (const discussion of discussionsToProcess) {
           console.log(`🔍 Obteniendo posts completos para discusión ${discussion.discussion || discussion.id}`)
 
-          // CRÍTICO: Obtener TODOS los posts de esta discusión
-          const discussionPosts = await client.getDiscussionPosts(discussion.discussion || discussion.id)
-          console.log(`💬 Encontrados ${discussionPosts.length} posts en discusión ${discussion.name}`)
+          // CRÍTICO: Obtener TODOS los posts de esta discusión directamente con fetch
+          const discussionId = discussion.discussion || discussion.id
+          const postsUrl = `${aulaConfig.apiUrl}?wstoken=${aulaConfig.token}&wsfunction=mod_forum_get_discussion_posts&moodlewsrestformat=json&discussionid=${discussionId}`
+
+          console.log(`🔍 Obteniendo posts para discusión ${discussionId} directamente de ${postsUrl.replace(aulaConfig.token, 'TOKEN_HIDDEN')}`)
+
+          const postsResponse = await fetch(postsUrl)
+          let discussionPosts = []
+
+          if (postsResponse.ok) {
+            const postsData = await postsResponse.json()
+            discussionPosts = postsData.posts || []
+            console.log(`💬 Encontrados ${discussionPosts.length} posts en discusión ${discussion.name}`)
+          } else {
+            console.error(`❌ Error HTTP ${postsResponse.status} obteniendo posts`)
+          }
 
           const enrichedDiscussion = {
             // Datos básicos de la discusión
@@ -411,6 +448,8 @@ export class BatchAnalysisService {
             totalAttachments: enrichedDiscussions.reduce((sum, d) => sum + d.discussionStats.postsWithAttachments, 0)
           }
         }
+      } else {
+        console.log(`📊 No se encontraron discusiones para el foro "${activity.name}" (ID: ${activity.activityId})`)
       }
 
       return forumData
@@ -528,18 +567,23 @@ ${JSON.stringify(optimizedAnalysisData, null, 2)}
         }
       }
 
-      // Para foros: truncar posts largos y limitar número de posts
+      // Para foros: optimización inteligente manteniendo contenido relevante
       if (activityType === 'forum' && optimized.forumDetails?.discussions) {
         optimized.forumDetails.discussions = optimized.forumDetails.discussions.map((discussion: any) => {
-          if (discussion.posts && discussion.posts.length > 20) {
-            // Solo mantener los primeros 20 posts más relevantes
-            discussion.posts = discussion.posts.slice(0, 20)
+          if (discussion.posts && discussion.posts.length > 50) {
+            // MEJORA: Mantener más posts para análisis educativo completo
+            console.log(`📊 Foro con ${discussion.posts.length} posts - manteniendo los primeros 50 para análisis completo`)
+            discussion.posts = discussion.posts.slice(0, 50)
           }
-          // Truncar contenido de posts largos
+          // MEJORA: Truncar solo posts extremadamente largos (5000 chars)
           if (discussion.posts) {
             discussion.posts = discussion.posts.map((post: any) => ({
               ...post,
-              message: post.message ? post.message.substring(0, 1000) + (post.message.length > 1000 ? '...[truncado]' : '') : post.message
+              message: post.message ? (
+                post.message.length > 5000
+                  ? post.message.substring(0, 5000) + '...[contenido truncado para análisis]'
+                  : post.message
+              ) : post.message
             }))
           }
           return discussion
