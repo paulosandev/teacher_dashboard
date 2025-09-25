@@ -16,6 +16,12 @@ async function main() {
     let result
 
     switch (action) {
+      case '101':
+        // Si el primer argumento es 101, procesar solo aula 101
+        console.log('🎯 Procesando SOLO Aula 101' + (courseId ? ` curso ${courseId}` : ''))
+        result = await batchAnalysisService.processAula101Only(courseId)
+        break
+
       case 'test-101':
         console.log('🎯 Procesando SOLO Aula 101' + (courseId ? ` curso ${courseId}` : ''))
         result = await batchAnalysisService.processAula101Only(courseId)

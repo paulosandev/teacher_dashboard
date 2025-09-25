@@ -10,7 +10,11 @@ interface LogoutButtonProps {
 
 export default function LogoutButton({ compact = true }: LogoutButtonProps) {
   const handleLogout = () => {
-    signOut({ callbackUrl: '/auth/login' })
+    // Obtener la URL base actual del navegador
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+    const callbackUrl = `${baseUrl}/auth/login`
+    
+    signOut({ callbackUrl })
   }
 
   if (compact) {

@@ -328,6 +328,8 @@ export class MoodleSyncService {
                   if (['assign', 'forum'].includes(module.modname)) {
                     activities.push({
                       ...module,
+                      // CORRECCIÓN: Para foros, usar instance (forum ID) en lugar de id (module ID)
+                      id: module.modname === 'forum' ? module.instance : module.id,
                       sectionName: section.name,
                       detectionMethod: 'core_course_get_contents'
                     })
