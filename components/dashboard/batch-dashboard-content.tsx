@@ -116,11 +116,6 @@ export function BatchDashboardContent({
       return analysis
     }
 
-    // Si ya tiene datos estructurados, usarlos
-    if (analysis.positives?.length > 0 || analysis.alerts?.length > 0) {
-      return analysis
-    }
-
     // Parsear el fullAnalysis para extraer secciones
     const summary = fullAnalysisText
     const sections = []
@@ -129,34 +124,118 @@ export function BatchDashboardContent({
 
     // Dividir por líneas y buscar patrones
     const lines = summary.split('\n').filter(line => line.trim())
-    
+
     let currentSection = null
+    let sectionCounter = 0
+
     for (const line of lines) {
       const cleanLine = line.trim()
-      
-      // Detectar títulos de sección (incluyendo #### específicamente)
-      if (cleanLine.match(/^\[.*\]$/) || cleanLine.match(/^#{1,6}\s/) || cleanLine.startsWith('####')) {
-        if (currentSection) sections.push(currentSection)
+
+      // Detectar títulos de sección con patrones mejorados
+      const isSectionTitle = (
+        cleanLine.match(/^\[.*\]$/) || // [Título]
+        cleanLine.match(/^#{1,6}\s/) || // # ## ### etc.
+        cleanLine.startsWith('####') || // #### específicamente
+        cleanLine.match(/^\*\*.*\*\*$/) || // **Título**
+        cleanLine.match(/^\d+\.\s.*:$/) || // 1. Título:
+        cleanLine.match(/^[A-ZÁÉÍÓÚ][^.!?]*:$/) || // Título:
+        (cleanLine.length < 80 && cleanLine.match(/^[A-ZÁÉÍÓÚ]/) && !cleanLine.includes('.') && !cleanLine.includes(',') && cleanLine.length > 5)
+      )
+
+      if (isSectionTitle && cleanLine.length < 120) {
+        if (currentSection && currentSection.content.length > 0) {
+          sections.push(currentSection)
+        }
+        sectionCounter++
         currentSection = {
-          title: cleanLine.replace(/[\[\]#]/g, '').trim(),
+          title: cleanLine
+            .replace(/[\[\]#*]/g, '') // Remover marcadores
+            .replace(/^\d+\.\s*/, '') // Remover numeración
+            .replace(/:$/, '') // Remover : final
+            .trim(),
           content: []
         }
       }
       // Detectar elementos negativos/problemáticos
-      else if (cleanLine.includes('Riesgo') || cleanLine.includes('problema') || cleanLine.includes('baja participación') || cleanLine.includes('ausencia') || cleanLine.includes('falta') || cleanLine.includes('bloqueo') || cleanLine.includes('limitada') || cleanLine.includes('pasividad')) {
+      else if (cleanLine.includes('Riesgo') || cleanLine.includes('problema') || cleanLine.includes('baja participación') ||
+               cleanLine.includes('ausencia') || cleanLine.includes('falta') || cleanLine.includes('bloqueo') ||
+               cleanLine.includes('limitada') || cleanLine.includes('pasividad') || cleanLine.includes('deficiencia') ||
+               cleanLine.includes('insuficiente') || cleanLine.includes('débil') || cleanLine.includes('preocupante')) {
         alerts.push(processMarkdown(cleanLine))
+        if (currentSection) {
+          currentSection.content.push(processMarkdown(cleanLine))
+        }
       }
       // Detectar elementos positivos
-      else if (cleanLine.includes('participación activa') || cleanLine.includes('buenos') || cleanLine.includes('adecuado') || cleanLine.includes('correcto') || cleanLine.includes('positiva') || cleanLine.includes('bien argumentados') || cleanLine.includes('largos y bien')) {
+      else if (cleanLine.includes('participación activa') || cleanLine.includes('buenos') || cleanLine.includes('adecuado') ||
+               cleanLine.includes('correcto') || cleanLine.includes('positiva') || cleanLine.includes('bien argumentados') ||
+               cleanLine.includes('largos y bien') || cleanLine.includes('excelente') || cleanLine.includes('satisfactorio') ||
+               cleanLine.includes('fortaleza') || cleanLine.includes('destacable')) {
         positives.push(processMarkdown(cleanLine))
+        if (currentSection) {
+          currentSection.content.push(processMarkdown(cleanLine))
+        }
       }
       // Contenido general de la sección
-      else if (currentSection && cleanLine && cleanLine.length > 10) {
+      else if (cleanLine && cleanLine.length > 10) {
+        if (!currentSection) {
+          // Crear una sección por defecto si no existe
+          sectionCounter++
+          currentSection = {
+            title: `Análisis ${sectionCounter}`,
+            content: []
+          }
+        }
         currentSection.content.push(processMarkdown(cleanLine))
       }
     }
 
-    if (currentSection) sections.push(currentSection)
+    // Agregar la última sección si existe
+    if (currentSection && currentSection.content.length > 0) {
+      sections.push(currentSection)
+    }
+
+    // Si no se encontraron secciones, crear secciones por defecto dividiendo el contenido
+    if (sections.length === 0) {
+      const contentChunks = []
+      const words = fullAnalysisText.split(/\s+/)
+      const wordsPerChunk = Math.ceil(words.length / 4) // Dividir en 4 secciones aproximadamente
+
+      for (let i = 0; i < words.length; i += wordsPerChunk) {
+        const chunk = words.slice(i, i + wordsPerChunk).join(' ')
+        if (chunk.trim().length > 50) {
+          contentChunks.push(chunk.trim())
+        }
+      }
+
+      contentChunks.forEach((chunk, index) => {
+        sections.push({
+          title: `Dimensión ${index + 1}`,
+          content: [processMarkdown(chunk)]
+        })
+      })
+    }
+
+    // Asegurar que siempre tengamos al menos 2 secciones para el layout de 2 columnas
+    if (sections.length === 1) {
+      const originalContent = sections[0].content.join(' ')
+      const midPoint = Math.floor(originalContent.length / 2)
+      const splitPoint = originalContent.indexOf('.', midPoint)
+
+      if (splitPoint > 0 && splitPoint < originalContent.length - 50) {
+        const firstHalf = originalContent.substring(0, splitPoint + 1).trim()
+        const secondHalf = originalContent.substring(splitPoint + 1).trim()
+
+        sections[0] = {
+          title: sections[0].title + ' - Parte 1',
+          content: [firstHalf]
+        }
+        sections.push({
+          title: sections[0].title.replace(' - Parte 1', '') + ' - Parte 2',
+          content: [secondHalf]
+        })
+      }
+    }
 
     return {
       ...analysis,
@@ -405,11 +484,11 @@ export function BatchDashboardContent({
           </button>
         </section>
 
-        {/* Renderizar análisis en formato de 2 columnas */}
-        {analysis.parsedSections && analysis.parsedSections.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {analysis.parsedSections.map((section: any, index: number) => {
-              // Para 5 dimensiones: las primeras 4 en grid 2x2, la última sola con ancho completo
+        {/* Renderizar análisis en formato estructurado de 2 columnas */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {analysis.parsedSections && analysis.parsedSections.length > 0 ? (
+            analysis.parsedSections.map((section: any, index: number) => {
+              // Para números impares: la última sección ocupa todo el ancho
               const isLastOddSection = analysis.parsedSections.length % 2 === 1 && index === analysis.parsedSections.length - 1
 
               return (
@@ -435,11 +514,9 @@ export function BatchDashboardContent({
                   </div>
                 </div>
               )
-            })}
-          </div>
-        ) : (
-          /* Fallback: Mostrar análisis directo del fullAnalysis en grid de 2 columnas */
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            })
+          ) : (
+            /* Fallback extremo: si aún no hay secciones parseadas, crear una estructura básica */
             <div className="lg:col-span-2 bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Análisis Completo</h3>
               <div className="prose prose-sm max-w-none">
@@ -451,8 +528,8 @@ export function BatchDashboardContent({
                 }} />
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     )
   }
