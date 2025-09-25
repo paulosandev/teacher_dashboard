@@ -18,7 +18,7 @@ if (process.env.NODE_ENV !== 'production') globalThis.prisma = prisma
 
 // Horarios programados (en formato 24h)
 const SCHEDULED_TIMES = [
-  { hour: 12, minute: 50, name: '12:50 PM' },
+  { hour: 5, minute: 10, name: '5:10 AM' },
   { hour: 16, minute: 0, name: '4:00 PM' }
 ]
 
@@ -133,11 +133,11 @@ export async function GET(request: NextRequest) {
 
       const syncResult = await moodleSyncService.syncAllAulas()
       
-      // Paso 2: Análisis con IA
-      console.log('🧠 Generando análisis con IA...')
+      // Paso 2: Análisis con IA (prioridad ordenada)
+      console.log('🧠 Generando análisis con IA (prioridad ordenada: 101, 102, etc.)...')
       await prisma.batchJob.update({
         where: { id: batchJob.id },
-        data: { 
+        data: {
           currentStep: 2,
           processedAulas: syncResult.processedAulas,
           processedCourses: syncResult.totalCourses,
@@ -145,7 +145,7 @@ export async function GET(request: NextRequest) {
         }
       })
 
-      const analysisResult = await batchAnalysisService.processAllPendingAnalyses()
+      const analysisResult = await processAnalysesWithPriority(batchJob.id)
       
       // Paso 3: Limpieza
       console.log('🧹 Limpiando análisis expirados...')
@@ -267,6 +267,119 @@ function getScheduledTimeName(hour: number, minute: number): string {
     time.hour === hour && Math.abs(time.minute - minute) <= 2
   )
   return found?.name || `${hour}:${minute.toString().padStart(2, '0')}`
+}
+
+/**
+ * Procesar análisis con prioridad ordenada: Aula 101, 102, 103, etc.
+ */
+async function processAnalysesWithPriority(jobId: string) {
+  const startTime = Date.now()
+  console.log('🎯 Iniciando análisis con prioridad ordenada')
+
+  const result = {
+    success: true,
+    processedActivities: 0,
+    generatedAnalyses: 0,
+    errors: [],
+    duration: 0,
+    aulaResults: [] as any[]
+  }
+
+  try {
+    // 1. Obtener todas las aulas ordenadas por prioridad
+    const aulas = await prisma.aula.findMany({
+      where: { isActive: true },
+      orderBy: { aulaId: 'asc' } // Esto ordena: 101, 102, 103, av141, etc.
+    })
+
+    console.log(`🏫 Procesando ${aulas.length} aulas en orden: ${aulas.map(a => a.aulaId).join(', ')}`)
+
+    // 2. Procesar cada aula en orden secuencial
+    for (const aula of aulas) {
+      console.log(`\n🎯 PROCESANDO AULA ${aula.aulaId} (${aula.name})`)
+
+      try {
+        // Actualizar progreso del job
+        await prisma.batchJob.update({
+          where: { id: jobId },
+          data: {
+            summary: {
+              currentAula: aula.aulaId,
+              processedAulas: result.aulaResults.length,
+              totalAulas: aulas.length
+            }
+          }
+        })
+
+        // Procesar análisis específicos de esta aula
+        const aulaResult = await batchAnalysisService.analyzeSpecificActivities({
+          aulaId: aula.aulaId,
+          forceReAnalysis: false
+        })
+
+        // Agregar resultado de esta aula
+        result.aulaResults.push({
+          aulaId: aula.aulaId,
+          name: aula.name,
+          processedActivities: aulaResult.processedActivities,
+          generatedAnalyses: aulaResult.generatedAnalyses,
+          errors: aulaResult.errors.length,
+          duration: aulaResult.duration
+        })
+
+        // Acumular resultados globales
+        result.processedActivities += aulaResult.processedActivities
+        result.generatedAnalyses += aulaResult.generatedAnalyses
+        result.errors.push(...aulaResult.errors)
+
+        console.log(`✅ Aula ${aula.aulaId} completada: ${aulaResult.generatedAnalyses}/${aulaResult.processedActivities} análisis en ${Math.round(aulaResult.duration / 1000)}s`)
+
+        // Pausa entre aulas para evitar sobrecarga
+        if (aula.aulaId !== aulas[aulas.length - 1].aulaId) {
+          console.log('⏸️  Pausa de 3s antes de la siguiente aula...')
+          await new Promise(resolve => setTimeout(resolve, 3000))
+        }
+
+      } catch (aulaError) {
+        const errorMsg = `Error procesando aula ${aula.aulaId}: ${aulaError}`
+        console.error(`❌ ${errorMsg}`)
+        result.errors.push(errorMsg)
+
+        // Continuar con la siguiente aula aunque esta falle
+        result.aulaResults.push({
+          aulaId: aula.aulaId,
+          name: aula.name,
+          processedActivities: 0,
+          generatedAnalyses: 0,
+          errors: 1,
+          duration: 0
+        })
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ Error en procesamiento con prioridad:', error)
+    result.errors.push(`Error general: ${error}`)
+    result.success = false
+  }
+
+  result.duration = Date.now() - startTime
+
+  // Mostrar resumen final
+  console.log('\n📊 RESUMEN POR AULA:')
+  result.aulaResults.forEach(aula => {
+    const status = aula.errors > 0 ? '⚠️' : '✅'
+    console.log(`   ${status} Aula ${aula.aulaId}: ${aula.generatedAnalyses}/${aula.processedActivities} análisis (${Math.round(aula.duration / 1000)}s)`)
+  })
+
+  console.log(`\n✅ Análisis con prioridad completado en ${Math.round(result.duration / 1000)}s`)
+  console.log(`📈 Total: ${result.generatedAnalyses}/${result.processedActivities} análisis generados`)
+
+  if (result.errors.length > 0) {
+    console.log(`⚠️  ${result.errors.length} errores encontrados`)
+  }
+
+  return result
 }
 
 // También exponer como POST para testing manual

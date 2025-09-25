@@ -901,8 +901,11 @@ export class MoodleSyncService {
         // Importar dinámicamente el servicio de análisis
         const { batchAnalysisService } = await import('@/lib/services/batch-analysis-service')
         
-        // Ejecutar análisis solo para actividades de esta aula que necesiten análisis
-        const analysisResult = await batchAnalysisService.processAllPendingAnalyses()
+        // Ejecutar análisis solo para actividades de esta aula específica
+        const analysisResult = await batchAnalysisService.analyzeSpecificActivities({
+          aulaId: aulaId,
+          forceReAnalysis: false
+        })
         
         analysisGenerated = analysisResult.generatedAnalyses
         console.log(`✅ [UNIFIED] Análisis de IA completado: ${analysisGenerated} análisis generados`)

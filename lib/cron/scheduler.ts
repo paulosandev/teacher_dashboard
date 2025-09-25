@@ -30,19 +30,19 @@ export class CronScheduler {
 
     console.log('🕐 Inicializando programador de tareas automáticas...')
 
-    // Job principal: 8:00 AM (limpieza → carga → análisis)
-    this.morningJob = cron.schedule('0 8 * * *', async () => {
-      console.log('\n🌅 ===== PROCESO BATCH MATUTINO =====')
-      await this.executeFullProcess('morning')
+    // Job principal: 4:52 AM (limpieza → carga → análisis con prioridad)
+    this.morningJob = cron.schedule('10 5 * * *', async () => {
+      console.log('\n🌅 ===== PROCESO BATCH MATUTINO (PRIORIDAD 101) =====')
+      await this.executeFullProcessWithPriority('morning')
     }, {
       scheduled: true,
       timezone: "America/Mexico_City"
     })
 
-    // Job vespertino: 6:00 PM (limpieza → carga → análisis)
-    this.afternoonJob = cron.schedule('0 18 * * *', async () => {
-      console.log('\n🌆 ===== PROCESO BATCH VESPERTINO =====')
-      await this.executeFullProcess('afternoon')
+    // Job vespertino: 4:00 PM (limpieza → carga → análisis con prioridad)
+    this.afternoonJob = cron.schedule('0 16 * * *', async () => {
+      console.log('\n🌆 ===== PROCESO BATCH VESPERTINO (PRIORIDAD 101) =====')
+      await this.executeFullProcessWithPriority('afternoon')
     }, {
       scheduled: true,
       timezone: "America/Mexico_City"
@@ -51,8 +51,8 @@ export class CronScheduler {
     this.isInitialized = true
 
     console.log('✅ Programador de tareas inicializado:')
-    console.log('   📅 Proceso matutino: 8:00 AM (México) - Limpieza → Carga → Análisis [TODAS LAS AULAS]')
-    console.log('   📅 Proceso vespertino: 6:00 PM (México) - Limpieza → Carga → Análisis [TODAS LAS AULAS]')
+    console.log('   📅 Proceso matutino: 4:52 AM (México) - Limpieza → Carga → Análisis [PRIORIDAD: 101, 102, 103...]')
+    console.log('   📅 Proceso vespertino: 4:00 PM (México) - Limpieza → Carga → Análisis [PRIORIDAD: 101, 102, 103...]')
   }
 
   /**
@@ -101,12 +101,40 @@ export class CronScheduler {
 
       const totalTime = ((Date.now() - startTime) / 1000 / 60).toFixed(2)
       console.log(`\n✅ [${period.toUpperCase()}] Proceso completo finalizado en ${totalTime} minutos`)
-      
+
       return result
 
     } catch (error) {
       const totalTime = ((Date.now() - startTime) / 1000 / 60).toFixed(2)
       console.error(`\n❌ [${period.toUpperCase()}] Error en proceso completo (${totalTime} min):`, error)
+      throw error
+    }
+  }
+
+  /**
+   * Ejecutar proceso completo con prioridad ordenada: limpieza → carga → análisis
+   */
+  private async executeFullProcessWithPriority(period: 'morning' | 'afternoon') {
+    const startTime = Date.now()
+    console.log(`\n🚀 [${period.toUpperCase()}] Iniciando proceso completo con prioridad ordenada...`)
+
+    try {
+      // Paso 1: Limpieza de caché
+      console.log('\n🧹 PASO 1: Limpiando caché obsoleto...')
+      await this.cleanOldCache()
+
+      // Paso 2: Carga y análisis de actividades (el servicio ya procesa con prioridad)
+      console.log('\n📊 PASO 2: Ejecutando carga y análisis con prioridad (101, 102, 103...)...')
+      const result = await autoUpdateService.executeUpdate('scheduled')
+
+      const totalTime = ((Date.now() - startTime) / 1000 / 60).toFixed(2)
+      console.log(`\n✅ [${period.toUpperCase()}] Proceso completo con prioridad finalizado en ${totalTime} minutos`)
+
+      return result
+
+    } catch (error) {
+      const totalTime = ((Date.now() - startTime) / 1000 / 60).toFixed(2)
+      console.error(`\n❌ [${period.toUpperCase()}] Error en proceso completo con prioridad (${totalTime} min):`, error)
       throw error
     }
   }

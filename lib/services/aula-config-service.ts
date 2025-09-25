@@ -96,10 +96,20 @@ export class AulaConfigService {
   }
 
   /**
-   * Obtener solo aulas activas (que tienen token)
+   * Obtener solo aulas activas (que tienen token) ordenadas por prioridad
+   * Orden: 101, 102, 103, ..., av141, av142, ...
    */
   getActiveAulaConfigs(): AulaConfig[] {
-    return this.getAllAulaConfigs().filter(config => config.token && config.apiUrl)
+    return this.getAllAulaConfigs()
+      .filter(config => config.token && config.apiUrl)
+      .sort((a, b) => {
+        // Prioridad: aula 101 primero, luego orden numérico/alfabético
+        if (a.id === '101') return -1
+        if (b.id === '101') return 1
+
+        // Orden alfabético/numérico para el resto
+        return a.id.localeCompare(b.id, undefined, { numeric: true })
+      })
   }
 
   /**
