@@ -52,7 +52,7 @@ export class CronScheduler {
     })
 
     // Job de marcado vespertino: 7:59 PM (marcar actividades válidas)
-    this.afternoonMarkingJob = cron.schedule('59 19 * * *', async () => {
+    this.afternoonMarkingJob = cron.schedule('58 17 * * *', async () => {
       console.log('\n🔍 ===== MARCADO VESPERTINO DE ACTIVIDADES =====')
       await this.executeActivityMarking('afternoon')
     }, {
@@ -61,7 +61,7 @@ export class CronScheduler {
     })
 
     // Job principal vespertino: 8:00 PM (limpieza → carga → análisis con prioridad)
-    this.afternoonJob = cron.schedule('0 20 * * *', async () => {
+    this.afternoonJob = cron.schedule('0 18 * * *', async () => {
       console.log('\n🌆 ===== PROCESO BATCH VESPERTINO (PRIORIDAD 101) =====')
       await this.executeFullProcessWithPriority('afternoon')
     }, {

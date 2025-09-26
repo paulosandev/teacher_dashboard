@@ -117,3 +117,9 @@ scripts/check-analysis-data.ts
 scripts/clean-database.ts
 scripts/regenerate-aula101-analysis.ts
 *.sql.bak
+
+# Carpeta de archivos obsoletos para limpiar
+_OLD_FILES_TO_DELETE/
+
+# Scripts - solo para uso estrictamente necesario
+scripts/

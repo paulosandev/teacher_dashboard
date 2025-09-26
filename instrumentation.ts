@@ -11,6 +11,6 @@ export async function register() {
     const { initializeCronJobs } = await import('@/lib/cron/initialize')
     initializeCronJobs()
     
-    console.log('✅ Instrumentación completada')
+    console.log('Instrumentación completada')
   }
 }
