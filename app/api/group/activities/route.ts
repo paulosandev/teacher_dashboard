@@ -239,7 +239,7 @@ async function getOpenActivitiesForGroup(
               // NUEVA FUNCIONALIDAD: Consultar análisis pre-calculado del foro
               const preCalculatedForumAnalysis = await getPreCalculatedAnalysis(
                 moodleApiUrl.replace('/webservice/rest/server.php', '').replace('https://', ''),
-                courseId,
+                courseId.toString(),
                 activity.id,
                 'forum'
               )
@@ -288,7 +288,7 @@ async function getOpenActivitiesForGroup(
           // NUEVA FUNCIONALIDAD: Consultar análisis pre-calculado del sistema batch
           const preCalculatedAnalysis = await getPreCalculatedAnalysis(
             moodleApiUrl.replace('/webservice/rest/server.php', '').replace('https://', ''),
-            courseId,
+            courseId.toString(),
             activity.id,
             'assign'
           )
@@ -356,12 +356,12 @@ async function getOpenActivitiesForGroup(
           }
 
           console.log(`📝 Procesando asignación adicional: ${assignment.name}`)
-
+          
           // Consultar análisis pre-calculado
           const preCalculatedAnalysis = await getPreCalculatedAnalysis(
             moodleApiUrl.replace('/webservice/rest/server.php', '').replace('https://', ''),
-            courseId,
-            assignment.id,
+            courseId.toString(),
+            assignment.cmid || assignment.id,  // Preferir cmid, fallback a id
             'assign'
           )
 
@@ -452,7 +452,7 @@ async function getOpenActivitiesForGroup(
                 // Consultar análisis pre-calculado del foro
                 const preCalculatedForumAnalysis = await getPreCalculatedAnalysis(
                   moodleApiUrl.replace('/webservice/rest/server.php', '').replace('https://', ''),
-                  courseId,
+                  courseId.toString(),
                   forum.id,
                   'forum'
                 )
@@ -595,7 +595,7 @@ function getActivityType(modname: string): string {
  */
 async function getPreCalculatedAnalysis(
   aulaId: string,
-  courseId: string,
+  courseId: string | number,
   activityId: number,
   activityType: string
 ): Promise<any | null> {
